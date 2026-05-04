@@ -62,3 +62,28 @@ export const requireRestaurantAccess = cache(async (restaurantId: string) => {
   if (rows.length === 0) redirect('/dashboard')
   return { session, organizationId, restaurantId }
 })
+
+export const requireRestaurantBySlug = cache(async (slug: string) => {
+  const { session, organizationId } = await requireActiveOrganization()
+
+  const rows = await db
+    .select({
+      id: restaurant.id,
+      name: restaurant.name,
+      slug: restaurant.slug,
+      published: restaurant.published,
+    })
+    .from(restaurant)
+    .innerJoin(member, eq(member.organizationId, restaurant.organizationId))
+    .where(
+      and(
+        eq(restaurant.slug, slug),
+        eq(restaurant.organizationId, organizationId),
+        eq(member.userId, session.user.id),
+      ),
+    )
+    .limit(1)
+
+  if (rows.length === 0) redirect('/dashboard')
+  return { session, organizationId, restaurant: rows[0] }
+})

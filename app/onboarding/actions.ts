@@ -6,7 +6,7 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { restaurant } from '@/lib/db/schema'
+import { menu, restaurant } from '@/lib/db/schema'
 
 const slugRegex = /^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/
 
@@ -66,11 +66,21 @@ export async function completeOnboarding(
     body: { organizationId: orgResult.id },
   })
 
-  // 3. Create the first restaurant inside that organization
-  await db.insert(restaurant).values({
-    organizationId: orgResult.id,
-    name: restaurantName,
-    slug,
+  // 3. Create the first restaurant inside that organization, plus a default
+  // menu so the builder has something to open into immediately.
+  const [createdRestaurant] = await db
+    .insert(restaurant)
+    .values({
+      organizationId: orgResult.id,
+      name: restaurantName,
+      slug,
+    })
+    .returning({ id: restaurant.id })
+
+  await db.insert(menu).values({
+    restaurantId: createdRestaurant.id,
+    name: 'Main menu',
+    position: 0,
   })
 
   revalidatePath('/dashboard')

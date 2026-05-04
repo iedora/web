@@ -44,7 +44,7 @@ export default async function DashboardPage() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {restaurants.map((r) => (
-            <Link key={r.id} href={`/r/${r.slug}`}>
+            <Link key={r.id} href={`/dashboard/r/${r.slug}`}>
               <Card className="transition-colors hover:bg-accent">
                 <CardHeader>
                   <CardTitle>{r.name}</CardTitle>
