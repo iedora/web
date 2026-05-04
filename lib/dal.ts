@@ -13,9 +13,32 @@ export const verifySession = cache(async () => {
   return session
 })
 
+/**
+ * Resolves the user's effective organizationId.
+ *
+ * Better Auth doesn't restore `activeOrganizationId` after re-login, so on a
+ * fresh session we fall back to the user's earliest membership. Returns null
+ * only when the user truly has no organizations yet (onboarding case).
+ */
+export const getEffectiveOrganizationId = cache(
+  async (userId: string, sessionActive: string | null | undefined): Promise<string | null> => {
+    if (sessionActive) return sessionActive
+    const rows = await db
+      .select({ organizationId: member.organizationId })
+      .from(member)
+      .where(eq(member.userId, userId))
+      .orderBy(member.createdAt)
+      .limit(1)
+    return rows[0]?.organizationId ?? null
+  },
+)
+
 export const requireActiveOrganization = cache(async () => {
   const session = await verifySession()
-  const organizationId = session.session.activeOrganizationId
+  const organizationId = await getEffectiveOrganizationId(
+    session.user.id,
+    session.session.activeOrganizationId,
+  )
   if (!organizationId) redirect('/onboarding')
   return { session, organizationId }
 })

@@ -8,10 +8,10 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
-    "db:push": "drizzle-kit push",
-    "db:studio": "drizzle-kit studio",
+    "db:generate": "bun --bun drizzle-kit generate",
+    "db:migrate": "bun --bun drizzle-kit migrate",
+    "db:push": "bun --bun drizzle-kit push",
+    "db:studio": "bun --bun drizzle-kit studio",
     "auth:generate": "better-auth generate"
   },
   "dependencies": {

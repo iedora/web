@@ -1,6 +1,6 @@
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
-import { organization } from 'better-auth/plugins'
+import { organization } from 'better-auth/plugins/organization'
 import { db } from './db'
 import * as schema from './db/schema'
 
