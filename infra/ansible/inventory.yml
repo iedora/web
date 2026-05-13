@@ -1,0 +1,16 @@
+---
+# Inventory dinâmico via collection cloud.terraform.
+# Lê o state file de cada ambiente Tofu e produz os hosts declarados
+# via `ansible_host` resources (provider ansible/ansible).
+#
+# Usa o binário `tofu` (não terraform). Para target um ambiente específico:
+#   ansible-playbook -i inventory.yml --limit local setup.yml
+#   ansible-playbook -i inventory.yml --limit prod  setup.yml
+#
+# Se um state file não existir (env não provisionado), é silenciosamente skipped.
+
+plugin: cloud.terraform.terraform_provider
+project_path:
+  - ../tofu/environments/local
+  - ../tofu/environments/prod
+binary_path: tofu

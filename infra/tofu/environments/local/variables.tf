@@ -18,6 +18,11 @@ variable "ssh_port" {
   default = 2222
 }
 
+variable "app_port" {
+  type    = number
+  default = 8080
+}
+
 variable "memory_gb" {
   type    = number
   default = 2

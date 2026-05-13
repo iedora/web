@@ -1,0 +1,12 @@
+# Fonte única para variáveis partilhadas entre Tofu e Ansible.
+# - Tofu lê via `yamldecode(file(.../shared/vars.yml))`
+# - Ansible lê via `vars_files: [../shared/vars.yml]` em cada play
+
+deploy_user: deploy
+timezone: Europe/Lisbon
+vm_name: meta-menu-server
+
+firewall_allowed_ports:
+  - 22
+  - 80
+  - 443

@@ -1,6 +1,6 @@
 .terraform/
-.terraform.lock.hcl
 terraform.tfstate
 terraform.tfstate.backup
 terraform.tfvars
 !*.tfvars.example
+# .terraform.lock.hcl SHOULD be committed — pins provider versions

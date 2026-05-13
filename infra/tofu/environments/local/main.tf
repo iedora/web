@@ -1,17 +1,10 @@
-terraform {
-  required_providers {
-    docker = {
-      source  = "kreuzwerker/docker"
-      version = "~> 3.0"
-    }
-  }
-}
-
 provider "docker" {}
+provider "ansible" {}
 
 locals {
-  ssh_public_key = trimspace(file(pathexpand(var.ssh_public_key_path)))
-  docker_context = "${path.module}/../../../docker"
+  shared          = yamldecode(file("${path.module}/../../../shared/vars.yml"))
+  ssh_public_key  = trimspace(file(pathexpand(var.ssh_public_key_path)))
+  docker_context  = "${path.module}/../../../docker"
 }
 
 resource "docker_image" "server" {
@@ -22,17 +15,17 @@ resource "docker_image" "server" {
     context    = local.docker_context
     dockerfile = "Dockerfile.server"
     build_args = {
-      DEPLOY_USER = var.deploy_user
+      DEPLOY_USER = local.shared.deploy_user
     }
   }
 }
 
 resource "docker_container" "server" {
-  name    = var.vm_name
+  name    = local.shared.vm_name
   image   = docker_image.server.image_id
   restart = "unless-stopped"
 
-  # Privileged necessário para Docker-in-Docker (Kamal instala Docker no servidor)
+  # Privileged necessário para Docker-in-Docker (Kamal corre dockerd dentro)
   privileged = true
 
   ports {
@@ -40,10 +33,32 @@ resource "docker_container" "server" {
     external = var.ssh_port
   }
 
+  # kamal-proxy (80 dentro do container) → 8080 no host
+  ports {
+    internal = 80
+    external = var.app_port
+  }
+
   memory = var.memory_gb * 1024
 
   upload {
     content = "${local.ssh_public_key}\n"
-    file    = "/home/${var.deploy_user}/.ssh/authorized_keys"
+    file    = "/home/${local.shared.deploy_user}/.ssh/authorized_keys"
   }
+}
+
+# Declara o host para o inventory dinâmico do Ansible (collection cloud.terraform)
+resource "ansible_host" "server" {
+  name   = local.shared.vm_name
+  groups = ["servers", "containers", "local"]
+
+  variables = {
+    ansible_host                 = "localhost"
+    ansible_port                 = tostring(var.ssh_port)
+    ansible_user                 = local.shared.deploy_user
+    ansible_ssh_private_key_file = "~/.ssh/id_ed25519"
+    ansible_ssh_common_args      = "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+  }
+
+  depends_on = [docker_container.server]
 }

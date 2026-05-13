@@ -1,38 +1,41 @@
-.PHONY: up down recreate tofu ansible ssh ssh-key help \
+.PHONY: up down recreate tofu ansible ansible-deps ssh ssh-key help \
         kamal-setup kamal-deploy kamal-redeploy kamal-rollback kamal-logs kamal-app \
         migrate
 
-TOFU_DIR    := infra/tofu/environments/local
+# Ambiente alvo: local (Docker) ou prod (Hetzner). Override:  make up ENV=prod
+ENV         ?= local
+TOFU_DIR    := infra/tofu/environments/$(ENV)
 ANSIBLE_DIR := infra/ansible
 SSH_KEY     := $(HOME)/.ssh/id_ed25519
 
 help:  ## Mostra esta ajuda
 	@echo "Infra (servidor):"
-	@echo "  make up             - Provisiona servidor local (SSH key + Tofu + Ansible)"
-	@echo "  make down           - Destrói servidor local"
-	@echo "  make recreate       - Destrói e recria do zero"
-	@echo "  make tofu           - Apenas Tofu apply"
-	@echo "  make ansible        - Apenas Ansible playbook"
-	@echo "  make ssh-key        - Gera SSH key (idempotente)"
-	@echo "  make ssh            - SSH para o servidor"
+	@echo "  make up [ENV=...]     - Provisiona servidor (SSH key + Tofu + Ansible)"
+	@echo "  make down [ENV=...]   - Destrói servidor"
+	@echo "  make recreate         - Destrói e recria do zero (local)"
+	@echo "  make tofu [ENV=...]   - Apenas Tofu apply"
+	@echo "  make ansible          - Apenas Ansible playbook (limit ao ENV)"
+	@echo "  make ansible-deps     - Instala collections Ansible (cloud.terraform)"
+	@echo "  make ssh-key          - Gera SSH key (idempotente)"
+	@echo "  make ssh              - SSH para o servidor local"
 	@echo ""
 	@echo "App (Kamal):"
-	@echo "  make kamal-setup    - 1.ª vez: instala Docker no servidor + prepara accessories"
-	@echo "  make kamal-deploy   - Build + push + migrate (pre-deploy hook) + roll"
-	@echo "  make kamal-redeploy - Deploy sem rebuild (re-puxar imagem actual)"
-	@echo "  make kamal-rollback - Rollback para a versão anterior"
-	@echo "  make kamal-logs     - Tail dos logs da app"
-	@echo "  make kamal-app      - Shell no container da app"
-	@echo "  make migrate        - Aplica migrations Drizzle (executa node scripts/migrate.mjs)"
+	@echo "  make kamal-setup      - 1.ª vez: bootstrap servidor + accessories"
+	@echo "  make kamal-deploy     - Build + push + migrate (pre-deploy hook) + roll"
+	@echo "  make kamal-redeploy   - Deploy sem rebuild"
+	@echo "  make kamal-rollback   - Rollback"
+	@echo "  make kamal-logs       - Tail logs"
+	@echo "  make kamal-app        - Shell no container"
+	@echo "  make migrate          - Escape hatch: migrations manuais"
 
-up: tofu ansible  ## Provisiona servidor local completo
+up: tofu ansible  ## Provisiona servidor completo
 
-down: ssh-key  ## Destrói servidor local
+down: ssh-key  ## Destrói servidor
 	cd $(TOFU_DIR) && tofu destroy -auto-approve
 
 recreate: down up  ## Destrói e recria do zero
 
-ssh-key: $(SSH_KEY)  ## Gera SSH key se não existir (idempotente)
+ssh-key: $(SSH_KEY)  ## Gera SSH key se não existir
 
 $(SSH_KEY):
 	@mkdir -p $(HOME)/.ssh
@@ -40,32 +43,44 @@ $(SSH_KEY):
 	@echo "Gerando SSH key em $(SSH_KEY)..."
 	@ssh-keygen -t ed25519 -f $(SSH_KEY) -N "" -C "meta-menu-deploy"
 
-tofu: ssh-key  ## Aplica configuração Tofu
+tofu: ssh-key  ## Tofu apply
 	cd $(TOFU_DIR) && tofu init -upgrade && tofu apply -auto-approve
 
-ansible: ssh-key  ## Corre playbook Ansible
-	cd $(ANSIBLE_DIR) && ANSIBLE_HOST_KEY_CHECKING=false ansible-playbook setup.yml -i inventory/local.ini
+ansible-deps:  ## Instala collections Ansible
+	@cd $(ANSIBLE_DIR) && ansible-galaxy collection install -r requirements.yml >/dev/null
+
+# Env vars em vez de ansible.cfg porque /mnt/c (WSL) é world-writable e
+# Ansible ignora cfg nessas condições. Inventory plugin precisa de
+# ser whitelisted aqui também.
+ANSIBLE_ENV := \
+  ANSIBLE_HOST_KEY_CHECKING=false \
+  ANSIBLE_INVENTORY_ENABLED=cloud.terraform.terraform_provider,host_list,script,auto,yaml,ini,toml \
+  ANSIBLE_INVENTORY=./inventory.yml \
+  ANSIBLE_PIPELINING=true
+
+ansible: ssh-key ansible-deps  ## Ansible playbook (limit ao $(ENV))
+	cd $(ANSIBLE_DIR) && $(ANSIBLE_ENV) ansible-playbook --limit $(ENV) setup.yml
 
 ssh:  ## SSH para o servidor local
 	ssh -p 2222 -i ~/.ssh/id_ed25519 deploy@localhost
 
 # ── Kamal ─────────────────────────────────────────────────────────────────────
-kamal-setup:     ## Primeiro deploy: bootstrap do servidor + accessories
+kamal-setup:     ## Primeiro deploy: bootstrap + accessories
 	kamal setup
 
-kamal-deploy:    ## Deploy zero-downtime (build + push + pre-deploy hook corre migrations + roll)
+kamal-deploy:    ## Deploy zero-downtime (pre-deploy hook corre migrations)
 	kamal deploy
 
-migrate:         ## Escape hatch: corre migrations manualmente contra a imagem actual
+migrate:         ## Escape hatch: migrations manuais contra imagem actual
 	kamal app exec --reuse "node scripts/migrate.mjs"
 
-kamal-redeploy:  ## Redeploy sem rebuild (re-pull da imagem actual)
+kamal-redeploy:  ## Redeploy sem rebuild
 	kamal redeploy
 
-kamal-rollback:  ## Rollback para a versão anterior
+kamal-rollback:  ## Rollback
 	kamal rollback
 
-kamal-logs:      ## Tail dos logs da app
+kamal-logs:      ## Tail dos logs
 	kamal app logs -f
 
 kamal-app:       ## Shell no container da app

@@ -56,11 +56,11 @@ next-env.d.ts
 # Infra — artefactos locais não versionados
 infra/**/*.iso
 infra/tofu/**/.terraform/
-infra/tofu/**/.terraform.lock.hcl
 infra/tofu/**/terraform.tfstate
 infra/tofu/**/terraform.tfstate.backup
 infra/tofu/**/terraform.tfvars
 !infra/tofu/**/terraform.tfvars.example
+# .terraform.lock.hcl SHOULD be committed — pins provider versions
 
 # Kamal — secrets reais nunca vão para o repo (só o .example)
 .kamal/secrets

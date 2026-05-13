@@ -1,15 +1,15 @@
 ---
-- name: Configurar servidor meta-menu
+# ════════════════════════════════════════════════════════════════════════
+#  Base — pacotes, Docker, deploy user, regras UFW (sem activar)
+#  Corre em todos os hosts (containers e metal).
+# ════════════════════════════════════════════════════════════════════════
+- name: Base — pacotes e Docker
   hosts: servers
   become: true
+  vars_files:
+    - ../shared/vars.yml
 
   tasks:
-    - name: Detectar ambiente container
-      stat:
-        path: /.dockerenv
-      register: dockerenv
-
-    # ── Base ──────────────────────────────────────────────────────────────────
     - name: Actualizar cache apt
       apt:
         update_cache: true
@@ -26,13 +26,12 @@
           - unattended-upgrades
         state: present
 
-    - name: Configurar timezone
+    - name: Configurar timezone (sem hwclock para correr em container)
       shell: |
         ln -sf /usr/share/zoneinfo/{{ timezone }} /etc/localtime
         echo "{{ timezone }}" > /etc/timezone
       changed_when: false
 
-    # ── Docker ────────────────────────────────────────────────────────────────
     - name: Adicionar chave GPG do Docker
       apt_key:
         url: https://download.docker.com/linux/ubuntu/gpg
@@ -43,7 +42,7 @@
         repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
         state: present
 
-    - name: Instalar Docker
+    - name: Instalar Docker CE
       apt:
         name:
           - docker-ce
@@ -54,16 +53,76 @@
         state: present
         update_cache: true
 
-    - name: Iniciar e activar Docker (servidor real)
+    - name: Adicionar deploy user ao grupo docker
+      user:
+        name: "{{ deploy_user }}"
+        groups: docker
+        append: true
+
+    - name: Configurar regras UFW (allow apenas, activação por play específico)
+      ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+      loop: "{{ firewall_allowed_ports }}"
+
+    - name: Hardening SSH — desactivar root login
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "^#?PermitRootLogin"
+        line: "PermitRootLogin no"
+        state: present
+      notify: Reload SSH
+
+    - name: Hardening SSH — desactivar password auth
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "^#?PasswordAuthentication"
+        line: "PasswordAuthentication no"
+        state: present
+      notify: Reload SSH
+
+  handlers:
+    # Handler único cross-environment: tenta systemd, fallback para HUP no PID.
+    - name: Reload SSH
+      shell: |
+        systemctl restart ssh 2>/dev/null \
+          || kill -HUP $(cat /var/run/sshd.pid 2>/dev/null \
+                         || pgrep -f '/usr/sbin/sshd -D' | head -1)
+      failed_when: false
+
+# ════════════════════════════════════════════════════════════════════════
+#  Metal — servidores reais (Hetzner, bare metal). Tem systemd, kernel
+#  com netfilter, UFW que apanha tráfego.
+# ════════════════════════════════════════════════════════════════════════
+- name: Metal — systemd + UFW activo
+  hosts: metal
+  become: true
+
+  tasks:
+    - name: Iniciar e activar Docker via systemd
       systemd:
         name: docker
         enabled: true
         state: started
-      when: not dockerenv.stat.exists
 
-    # Em container, overlay-on-overlay falha — forçar vfs driver
-    # (mais lento mas funciona). Tem de existir antes do dockerd arrancar.
-    - name: Configurar dockerd para vfs em container
+    - name: Activar UFW (incoming = deny, regras da base play já carregadas)
+      ufw:
+        state: enabled
+        policy: deny
+        direction: incoming
+
+# ════════════════════════════════════════════════════════════════════════
+#  Containers — Docker container a fazer-se passar por servidor.
+#  Sem systemd, sem netfilter eficaz. Storage driver vfs para evitar
+#  overlay-on-overlay (Docker-in-Docker).
+# ════════════════════════════════════════════════════════════════════════
+- name: Containers — dockerd em foreground + vfs storage
+  hosts: containers
+  become: true
+
+  tasks:
+    - name: Configurar dockerd para vfs (overlay-on-overlay falha)
       copy:
         dest: /etc/docker/daemon.json
         content: |
@@ -71,9 +130,8 @@
             "storage-driver": "vfs"
           }
         mode: "0644"
-      when: dockerenv.stat.exists
 
-    - name: Garantir que dockerd está a correr em container
+    - name: Garantir que dockerd está a correr
       shell: |
         if ! pgrep -x dockerd >/dev/null; then
           nohup dockerd > /var/log/dockerd.log 2>&1 &
@@ -81,56 +139,4 @@
         fi
       args:
         executable: /bin/bash
-      when: dockerenv.stat.exists
       changed_when: false
-
-    - name: Adicionar deploy user ao grupo docker
-      user:
-        name: "{{ deploy_user }}"
-        groups: docker
-        append: true
-
-    # ── Firewall ──────────────────────────────────────────────────────────────
-    - name: Permitir portas no UFW
-      ufw:
-        rule: allow
-        port: "{{ item }}"
-        proto: tcp
-      loop: "{{ firewall_allowed_ports }}"
-
-    - name: Activar UFW (servidor real — containers não têm kernel netfilter)
-      ufw:
-        state: enabled
-        policy: deny
-        direction: incoming
-      when: not dockerenv.stat.exists
-
-    # ── Segurança ─────────────────────────────────────────────────────────────
-    - name: Desactivar login root via SSH
-      lineinfile:
-        path: /etc/ssh/sshd_config
-        regexp: "^#?PermitRootLogin"
-        line: "PermitRootLogin no"
-        state: present
-      notify: Reiniciar SSH
-
-    - name: Desactivar autenticação por password
-      lineinfile:
-        path: /etc/ssh/sshd_config
-        regexp: "^#?PasswordAuthentication"
-        line: "PasswordAuthentication no"
-        state: present
-      notify: Reiniciar SSH
-
-  handlers:
-    - name: Reiniciar SSH (servidor real)
-      systemd:
-        name: ssh
-        state: restarted
-      listen: Reiniciar SSH
-      when: not dockerenv.stat.exists
-
-    - name: Reiniciar SSH (container)
-      shell: "kill -HUP $(cat /var/run/sshd.pid 2>/dev/null || pgrep -f '/usr/sbin/sshd -D' | head -1)"
-      listen: Reiniciar SSH
-      when: dockerenv.stat.exists
