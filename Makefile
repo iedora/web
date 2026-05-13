@@ -18,7 +18,7 @@ help:  ## Mostra esta ajuda
 	@echo ""
 	@echo "App (Kamal):"
 	@echo "  make kamal-setup    - 1.ª vez: instala Docker no servidor + prepara accessories"
-	@echo "  make kamal-deploy   - Build + push + deploy zero-downtime + migrate"
+	@echo "  make kamal-deploy   - Build + push + migrate (pre-deploy hook) + roll"
 	@echo "  make kamal-redeploy - Deploy sem rebuild (re-puxar imagem actual)"
 	@echo "  make kamal-rollback - Rollback para a versão anterior"
 	@echo "  make kamal-logs     - Tail dos logs da app"
@@ -53,11 +53,10 @@ ssh:  ## SSH para o servidor local
 kamal-setup:     ## Primeiro deploy: bootstrap do servidor + accessories
 	kamal setup
 
-kamal-deploy:    ## Deploy zero-downtime (build + push + roll) + migrate
+kamal-deploy:    ## Deploy zero-downtime (build + push + pre-deploy hook corre migrations + roll)
 	kamal deploy
-	$(MAKE) migrate
 
-migrate:         ## Aplica migrations Drizzle no container actual
+migrate:         ## Escape hatch: corre migrations manualmente contra a imagem actual
 	kamal app exec --reuse "node scripts/migrate.mjs"
 
 kamal-redeploy:  ## Redeploy sem rebuild (re-pull da imagem actual)

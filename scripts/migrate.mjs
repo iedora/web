@@ -14,10 +14,17 @@ if (!url) {
   process.exit(1)
 }
 
+// pg advisory lock garante que dois deploys paralelos não migram em duplicado.
+// O valor é arbitrário mas tem de ser estável e único — crc32 de "meta-menu-migrate".
+const LOCK_KEY = 727072073
+
 const sql = postgres(url, { max: 1 })
 const db = drizzle(sql)
 
 try {
+  console.log(`Acquiring advisory lock (${LOCK_KEY})...`)
+  await sql`SELECT pg_advisory_lock(${LOCK_KEY})`
+
   console.log('Applying migrations from ./drizzle ...')
   await migrate(db, { migrationsFolder: './drizzle' })
   console.log('Migrations applied successfully.')
@@ -25,5 +32,6 @@ try {
   console.error('Migration failed:', err)
   process.exitCode = 1
 } finally {
+  try { await sql`SELECT pg_advisory_unlock(${LOCK_KEY})` } catch {}
   await sql.end()
 }

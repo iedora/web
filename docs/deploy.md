@@ -40,10 +40,30 @@ O `kamal setup` é idempotente — corre só na primeira vez ou quando os access
 ## Deploys subsequentes
 
 ```bash
-make kamal-deploy    # build + push + roll
+make kamal-deploy    # build + push + migrate (pre-deploy hook) + roll
 ```
 
-Zero-downtime: o Kamal arranca o novo container, espera o healthcheck (`GET /` por defeito), e só depois desliga o antigo. Se o healthcheck falhar, o deploy aborta.
+Sequência:
+
+1. **Build + push** da nova imagem para a registry (GHCR).
+2. **`.kamal/hooks/pre-deploy`** corre — lança um container one-shot **com a imagem nova** (`kamal app exec --primary --version $KAMAL_VERSION "node scripts/migrate.mjs"`). O script de migrate adquire um `pg_advisory_lock` (deploys paralelos não migram em duplicado), aplica os SQL files de `drizzle/` que ainda não estão no `__drizzle_migrations` table, e termina. Se falhar, exit não-zero **aborta o deploy** — a app antiga continua a servir com a schema antiga.
+3. **Rolling deploy** zero-downtime: novo container arranca, espera o healthcheck (`GET /` por defeito), só depois desliga o antigo.
+
+Em rollback (`make kamal-rollback`), o hook **skipa migrations** — a imagem antiga corre com a schema antiga, que já está lá.
+
+> **Limitação importante** — este pipeline só dá zero-downtime para mudanças **aditivas** (add column nullable, add table, add index `CONCURRENTLY`). Renames e drops exigem o pattern *expand-contract* em múltiplos deploys (add new col → write both → backfill → read new → drop old). Se um deploy tem uma migration destrutiva, há sempre janela onde a app a serve uma versão e a schema é da outra.
+
+### Escape hatch — `make migrate`
+
+```bash
+make migrate    # kamal app exec --reuse "node scripts/migrate.mjs"
+```
+
+Corre migrations **contra a imagem actual** (a que está a servir tráfego). Útil para:
+- Aplicar migrations sem fazer redeploy (ex: hot-fix manual da schema).
+- Re-correr depois de uma falha resolvida fora do pipeline.
+
+No deploy normal nunca é necessário — o hook trata disso.
 
 ## Comandos úteis
 

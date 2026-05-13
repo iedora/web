@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Pre-deploy hook: corre Drizzle migrations contra a *nova* imagem antes de
+# qualquer container novo entrar em traffic. Se falhar, exit não-zero aborta
+# o deploy inteiro — a app velha continua a servir com a schema velha.
+#
+# Recebe (de Kamal):
+#   KAMAL_VERSION  — tag da nova imagem (já pushed para a registry)
+#   KAMAL_COMMAND  — "deploy", "rollback", etc.
+
+# Rollback usa imagem antiga; a schema antiga já está correcta. Skip.
+if [[ "${KAMAL_COMMAND:-}" == "rollback" ]]; then
+  echo "[pre-deploy] rollback detected, skipping migrations"
+  exit 0
+fi
+
+echo "[pre-deploy] running Drizzle migrations against ${KAMAL_VERSION}"
+
+# --primary  → corre só no host primary (no-op até escalarmos para vários)
+# --version  → pin no one-shot container à imagem nova (não à actual)
+# sem --reuse → container fresh, não o que está a servir tráfego agora
+kamal app exec \
+  --primary \
+  --version "$KAMAL_VERSION" \
+  "node scripts/migrate.mjs"
