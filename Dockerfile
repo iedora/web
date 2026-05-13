@@ -49,9 +49,13 @@ COPY --from=builder --chown=nextjs:nextjs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nextjs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nextjs /app/public ./public
 
-# Migrations: script standalone + ficheiros SQL gerados pelo drizzle-kit
+# Migrations: script standalone + ficheiros SQL gerados pelo drizzle-kit.
+# O Next inlina drizzle-orm/postgres dentro do server.js, mas o migrate.mjs é um
+# executável separado, por isso copiamos os pacotes explicitamente.
 COPY --from=builder --chown=nextjs:nextjs /app/scripts/migrate.mjs ./scripts/migrate.mjs
 COPY --from=builder --chown=nextjs:nextjs /app/drizzle ./drizzle
+COPY --from=builder --chown=nextjs:nextjs /app/node_modules/drizzle-orm ./node_modules/drizzle-orm
+COPY --from=builder --chown=nextjs:nextjs /app/node_modules/postgres ./node_modules/postgres
 
 USER nextjs
 EXPOSE 3000
