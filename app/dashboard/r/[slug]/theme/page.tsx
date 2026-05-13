@@ -8,7 +8,7 @@ import { resolveTheme } from '@/features/menu-publishing/rsc/theme'
 import type { LanguageCode, LocalizedText } from '@/features/i18n'
 import { loadMenuTree, localizeTree } from '@/features/menu-publishing'
 import type { PublicMenu, PublicMenuData } from '@/features/menu-publishing/rsc/types'
-import { ThemeEditor } from './theme-editor'
+import { ThemeEditor } from '@/features/restaurant-identity/ui/theme-editor'
 
 type EditorData = PublicMenuData & {
   rawTheme: RestaurantTheme | null

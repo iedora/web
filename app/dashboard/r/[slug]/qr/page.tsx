@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { headers } from 'next/headers'
 import { getTranslations } from 'next-intl/server'
 import { requireRestaurantBySlug } from '@/features/auth'
-import { QrViewer } from './qr-viewer'
+import { QrViewer } from '@/features/restaurant-identity/ui/qr-viewer'
 
 export default async function QrPage({
   params,

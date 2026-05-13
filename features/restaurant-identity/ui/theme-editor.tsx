@@ -25,7 +25,7 @@ import {
   updateIdentity,
   updateLanguageSettings,
   updateTheme,
-} from './actions'
+} from '@/features/restaurant-identity/actions'
 
 export type LanguageSettings = {
   defaultLanguage: LanguageCode
