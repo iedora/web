@@ -19,9 +19,13 @@ test.describe('Onboarding gating', () => {
     await expect(page.getByText('Create your first restaurant')).toBeVisible()
   })
 
-  test('logged-in user with an active org is sent to /dashboard from /onboarding', async ({
+  test('logged-in user with an active org stays on /onboarding so they can add another restaurant', async ({
     page,
   }) => {
+    // /onboarding doubles as the "add another restaurant" form once the
+    // multi-restaurant-per-org flow shipped — the page no longer redirects
+    // org-holders. The action gates on plan limits; the dashboard's
+    // `+ new restaurant` link points here for the second-restaurant flow.
     await apiSignup(page.request, uniqueUser('with-org'))
     await apiCreateAndActivateOrg(
       page.request,
@@ -30,10 +34,8 @@ test.describe('Onboarding gating', () => {
     )
 
     await page.goto('/onboarding')
-    await expect(page).toHaveURL(/\/dashboard$/)
-    await expect(
-      page.getByRole('heading', { level: 1, name: 'A carta da casa.' }),
-    ).toBeVisible()
+    await expect(page).toHaveURL(/\/onboarding$/)
+    await expect(page.getByText('Create your first restaurant')).toBeVisible()
   })
 
   test('GET / for a logged-in user with an org goes to /dashboard', async ({
