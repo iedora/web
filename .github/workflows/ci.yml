@@ -80,15 +80,19 @@ jobs:
           --health-timeout 5s
           --health-retries 10
 
-      # The official `minio/minio` image takes its boot command as `command`
-      # in docker-compose, but GH service containers don't accept command
-      # overrides. We use the default boot (server /data) — `mc mb` below
-      # provisions the bucket the tests expect.
+      # Bitnami's MinIO image has an entrypoint that boots `minio server`
+      # automatically — service containers on GitHub Actions don't accept a
+      # `command:` override (the official `minio/minio` image needs one to
+      # start). It also takes `MINIO_DEFAULT_BUCKETS` so the bucket the tests
+      # need exists by the time Playwright fires. The `mc` step below stays
+      # as a belt-and-braces guard in case the image's bootstrap silently
+      # changes.
       minio:
-        image: minio/minio:latest
+        image: bitnami/minio:latest
         env:
           MINIO_ROOT_USER: minioadmin
           MINIO_ROOT_PASSWORD: minioadmin
+          MINIO_DEFAULT_BUCKETS: 'metamenu-test:download'
         ports:
           - '9000:9000'
           - '9001:9001'
