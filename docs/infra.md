@@ -118,7 +118,11 @@ If `CLOUDFLARED_TUNNEL_TOKEN` is empty, the cloudflared play is skipped (`meta: 
 
 ### Adding another on-prem box
 
-Edit `infra/ansible/inventory.yml`, copy a host block, change `ansible_host`. Re-run `host-bootstrap` then `host-setup` against the new host. Each host gets its own Cloudflare Tunnel (one Tofu workspace = one tunnel = one token).
+Edit `infra/ansible/inventory.yml`, copy a host block, change `ansible_host` (use a different env var lookup, e.g. `{{ lookup('env', 'ONPREM_HOST_STAGING') }}`). Re-run `host-bootstrap` then `host-setup` against the new host. Each host gets its own Cloudflare Tunnel (one Tofu workspace = one tunnel = one token).
+
+### No IP, please — use mDNS
+
+`setup.yml` enables `MulticastDNS=yes` in `systemd-resolved` and opens UFW 5353/udp. After the first setup, the box advertises as `<hostname>.local` on the LAN. Set `ONPREM_HOST=<hostname>.local` in `.envrc` and you never type an IP again. For off-LAN access, add Tailscale (`meta-menu.<tailnet>.ts.net` works anywhere).
 
 ## Design choices
 

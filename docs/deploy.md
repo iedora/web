@@ -40,9 +40,20 @@ export TF_VAR_state_passphrase='...'           # ≥ 16 chars, encrypts Tofu sta
 export TF_VAR_cloudflare_api_token='...'       # see "Cloudflare API token" below
 export TF_VAR_account_id='...'                 # 32-char hex
 export TF_VAR_zone_id='...'                    # 32-char hex
+
+# Server identity — used by Ansible inventory + Kamal config.
+# Use the box's mDNS hostname (set up by `make host-setup`); on the very
+# first bootstrap before mDNS is up, fall back to the LAN IP.
+export ONPREM_HOST='pwuserver.local'           # or 192.168.x.y for first bootstrap
 ```
 
 The `make onprem-up` step below appends the Cloudflare outputs (PUBLIC_HOSTNAME, S3_ENDPOINT, CLOUDFLARED_TUNNEL_TOKEN, etc.) — those refresh on every apply; your TF_VAR_* values are preserved across syncs.
+
+### About `ONPREM_HOST`
+
+The `setup.yml` Ansible play enables mDNS on the box (`MulticastDNS=yes` in `systemd-resolved`) and opens UFW 5353/udp. After the first `make host-setup` run, the box advertises itself as `<hostname>.local` on the LAN — find the hostname with `hostname` on the box (or read it off any SSH prompt). Switch `.envrc` from the IP to that name and you never need to touch an IP again.
+
+**Works from outside the LAN?** mDNS is LAN-only. For "deploy from a coffee shop", add **Tailscale** to the box + your laptop — `ONPREM_HOST=meta-menu.<tailnet>.ts.net` works from anywhere with no port-forward. Not implemented here; add as a follow-up if needed.
 
 ### Cloudflare API token
 

@@ -69,12 +69,28 @@
         groups: docker
         append: true
 
-    - name: Configure UFW allow rules
+    - name: Configure UFW allow rules (TCP)
       community.general.ufw:
         rule: allow
         port: "{{ item }}"
         proto: tcp
       loop: "{{ firewall_allowed_ports }}"
+
+    # mDNS so the host advertises as <hostname>.local on the LAN — lets
+    # Ansible/Kamal target the box by name instead of a hardcoded IP.
+    - name: Enable MulticastDNS in systemd-resolved
+      ansible.builtin.lineinfile:
+        path: /etc/systemd/resolved.conf
+        regexp: "^#?MulticastDNS="
+        line: "MulticastDNS=yes"
+        state: present
+      notify: restart systemd-resolved
+
+    - name: Allow mDNS on UFW (5353/udp)
+      community.general.ufw:
+        rule: allow
+        port: "5353"
+        proto: udp
 
     - name: Activate UFW (deny incoming by default)
       community.general.ufw:
@@ -103,6 +119,11 @@
       ansible.builtin.service:
         name: ssh
         state: reloaded
+
+    - name: restart systemd-resolved
+      ansible.builtin.systemd_service:
+        name: systemd-resolved
+        state: restarted
 
 # ════════════════════════════════════════════════════════════════════════
 #  Cloudflare Tunnel — cloudflared via apt + hardened systemd unit
