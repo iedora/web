@@ -37,10 +37,11 @@ else
   ENVRC="${REPO_ROOT}/.envrc.${ENV_NAME}"
 fi
 
-# Preserve the state passphrase line (it's not a Tofu output).
-EXISTING_PASSPHRASE=""
+# Preserve any TF_VAR_* lines the user keeps in the file (token, passphrase,
+# account ID, zone ID, etc). cf-sync only owns the Tofu-output exports below.
+EXISTING_TF_VARS=""
 if [ -f "${ENVRC}" ]; then
-  EXISTING_PASSPHRASE="$(grep -E '^export TF_VAR_state_passphrase=' "${ENVRC}" || true)"
+  EXISTING_TF_VARS="$(grep -E '^export TF_VAR_' "${ENVRC}" || true)"
 fi
 
 PUBLIC_HOSTNAME="$(tofu output -raw public_hostname)"
@@ -52,9 +53,9 @@ umask 077
   echo "# Auto-managed by scripts/cf-sync.sh — re-run after a Cloudflare apply."
   echo "# Env: ${ENV_NAME}. Gitignored. Source manually or via direnv."
   echo
-  if [ -n "${EXISTING_PASSPHRASE}" ]; then
-    echo "# Preserved across syncs:"
-    echo "${EXISTING_PASSPHRASE}"
+  if [ -n "${EXISTING_TF_VARS}" ]; then
+    echo "# TF_VAR_* — preserved across syncs (you fill these once):"
+    echo "${EXISTING_TF_VARS}"
     echo
   fi
   echo "# Cloudflare-managed (Tofu outputs):"
