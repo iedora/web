@@ -58,11 +58,11 @@ builder:
   arch: amd64
   remote: ssh://root@<%= ENV.fetch("ONPREM_HOST") %>
   local: false
-  # Kamal runs from infra/kamal/; the app's Dockerfile is at the repo root.
-  # Dockerfile is resolved via File.expand_path against PWD (not context),
-  # so we must use a path that's correct from kamal's cwd.
+  # Kamal runs from infra/kamal/; the app's Dockerfile lives in infra/.
+  # Build context is the repo root (Dockerfile COPYs source from `.`).
+  # Both paths resolved via File.expand_path against Kamal's cwd.
   context: ../..
-  dockerfile: ../../Dockerfile
+  dockerfile: ../Dockerfile
 
 env:
   clear:

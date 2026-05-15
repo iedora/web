@@ -18,7 +18,7 @@ COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 
-# SKIP_ENV_VALIDATION=1 makes lib/env.ts return a build-time stub Proxy,
+# SKIP_ENV_VALIDATION=1 makes src/shared/env.ts return a build-time stub Proxy,
 # letting Next collect page data without real env values. Runtime env is
 # injected by Kamal and validated on first import then.
 ENV SKIP_ENV_VALIDATION=1

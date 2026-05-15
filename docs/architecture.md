@@ -8,18 +8,18 @@
 
 Meta Menu is organised as **vertical slices** on the outside and **light
 hexagonal** on the inside. Each business capability lives in
-`features/<slice>/` and owns everything it needs: a port (the interface to
+`src/features/<slice>/` and owns everything it needs: a port (the interface to
 the outside world), one or more adapters (production + tests), pure-ish
 use-cases that take the port as their first argument, an `actions.ts` shell
 for Next.js Server Actions, slice-owned UI, and a single `index.ts` barrel
-that exposes the public API. `shared/` holds primitives with no domain
+that exposes the public API. `src/shared/` holds primitives with no domain
 knowledge. `app/` is the delivery layer — routes compose use-cases and UI.
 **Next.js is a delivery detail**, not the architecture.
 
-## Slice anatomy — `features/auth/`
+## Slice anatomy — `src/features/auth/`
 
 ```
-features/auth/
+src/features/auth/
 ├── README.md                     short doc — public API + the why
 ├── index.ts                      public API: cached page guards + AuthGateway type
 ├── client.ts                     Better Auth React client (browser-side)
@@ -40,7 +40,7 @@ Every slice keeps the same shape. Larger slices (e.g. `menu-builder`,
 `menu-publishing`, `upload`) also add an `actions.ts` for `'use server'`
 shells, a `ui/` folder for slice-owned components, and sometimes
 `types.ts` / `format.ts` / `range.ts` for domain helpers. Smaller slices
-collapse the boilerplate (`features/i18n/` has no adapter layer because the
+collapse the boilerplate (`src/features/i18n/` has no adapter layer because the
 language registry is pure data).
 
 ## Why this shape
@@ -66,7 +66,7 @@ container. The port is the only seam.
   Better Auth's own type re-exported via the adapter).
 - **`adapters/`** — implementations. The production adapter is marked
   `'server-only'`. Tests build their own adapter against PGLite (see
-  `features/auth/auth.test.ts`).
+  `src/features/auth/auth.test.ts`).
 - **`use-cases/<verb>.ts`** — `async function verb(port: Port, input): Promise<Result>`.
   Pure-ish: takes inputs, returns outputs, calls port methods. The only
   Next API allowed inline is `redirect()` / `notFound()` — and tests mock
@@ -86,7 +86,7 @@ container. The port is the only seam.
   (`@/features/auth`, `@/features/menu-publishing`). Reaching into
   `@/features/auth/use-cases/...` from another slice is a boundary
   violation flagged by `eslint-plugin-boundaries`.
-- `shared/*` is freely importable from anywhere — it's the only horizontal
+- `src/shared/*` is freely importable from anywhere — it's the only horizontal
   layer.
 - Use-cases inside a slice do not call into other slices. If two slices
   need to coordinate, the coordination happens in the action shell or in
@@ -100,7 +100,7 @@ container. The port is the only seam.
 - **`'server-only'`** lives at the top of adapters, use-cases, and slice
   barrels that touch the DB. It crashes at import if anything pulls the
   module into a Client Component, which is the protection we want.
-- **Slice-owned UI** lives at `features/<slice>/ui/*`. Client components
+- **Slice-owned UI** lives at `src/features/<slice>/ui/*`. Client components
   declare `'use client'` themselves; Server Components do not need a
   marker.
 - **Route files** in `app/` are composition shells: page → call slice
@@ -109,7 +109,7 @@ container. The port is the only seam.
 
 ## How to add a new feature
 
-1. `mkdir features/<slice>/{adapters,use-cases,ui}` — `ui/` only if needed.
+1. `mkdir src/features/<slice>/{adapters,use-cases,ui}` — `ui/` only if needed.
 2. Sketch **`ports.ts`** first. Write the interface as if the rest of the
    world doesn't exist; one method per atomic effect.
 3. Implement **`adapters/drizzle.ts`** (or the relevant production
@@ -124,7 +124,7 @@ container. The port is the only seam.
    `revalidateRestaurant(slug)` (hard rule #12).
 7. Add **`<slice>.test.ts`** alongside the source. Use `makeTestDb()` from
    `@/shared/testing/pglite`, hand-roll a port adapter against the test
-   DB, and exercise the use-cases. See `features/auth/auth.test.ts`.
+   DB, and exercise the use-cases. See `src/features/auth/auth.test.ts`.
 8. Write a short **`README.md`** at the slice root: public API, port
    summary, one-line rationale.
 9. Compose the slice from `app/` (one route imports the loader + UI, the
@@ -134,19 +134,19 @@ Registry-shaped features (asset targets, languages, plans, templates) have
 dedicated skills under `.claude/skills/`. Use those instead of inventing a
 new pattern.
 
-## What goes in `shared/`
+## What goes in `src/shared/`
 
-- `shared/db/client.ts` — singleton `postgres-js` client (HMR-safe via `globalThis`).
-- `shared/db/schema.ts` — the single canonical schema. Auth tables, domain
+- `src/shared/db/client.ts` — singleton `postgres-js` client (HMR-safe via `globalThis`).
+- `src/shared/db/schema.ts` — the single canonical schema. Auth tables, domain
   tables, everything.
-- `shared/env.ts` — Zod-validated runtime env. Returns a build-time stub
+- `src/shared/env.ts` — Zod-validated runtime env. Returns a build-time stub
   Proxy when `SKIP_ENV_VALIDATION=1` so `next build` can collect page data
   without secrets.
-- `shared/ui/` — shadcn primitives (`button`, `card`, `dialog`, …) and
+- `src/shared/ui/` — shadcn primitives (`button`, `card`, `dialog`, …) and
   generic cross-slice components like the editorial list. Nothing
   domain-shaped.
-- `shared/utils.ts` — `cn()` and other framework-agnostic helpers.
-- `shared/testing/pglite.ts` — the `makeTestDb()` fixture used by every
+- `src/shared/utils.ts` — `cn()` and other framework-agnostic helpers.
+- `src/shared/testing/pglite.ts` — the `makeTestDb()` fixture used by every
   unit test.
 
 If it knows about menus, restaurants, plans, languages, uploads, or
@@ -172,7 +172,7 @@ analytics, it does NOT belong here. Put it in the slice.
   domain-enough. Add helpers in `<slice>/types.ts` if you really need a
   named alias.
 - **A `lib/` folder for new code.** That was the structure we migrated
-  away from. New code goes in `features/<slice>/` or `shared/`.
+  away from. New code goes in `src/features/<slice>/` or `src/shared/`.
 - **A barrel inside a slice.** Only the slice root `index.ts` is a barrel;
   inner folders import each other directly so the dependency graph stays
   legible.

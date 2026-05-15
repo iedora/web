@@ -225,7 +225,7 @@ infra/kamal/config/deploy.yml                    Kamal config — app + 4 access
 infra/kamal/.kamal/secrets           shell-evaluated references; committed, no values
 infra/tofu/                          Cloudflare tunnel + DNS + ingress (encrypted state)
 Makefile                             the only entry point (calls tofu + kamal directly)
-Dockerfile                           multi-stage build (Bun install, Node build, standalone)
+infra/Dockerfile                     multi-stage build for the Next app (Bun install, Node build, standalone)
 scripts/migrate.mjs                  Drizzle migrator with pg_advisory_lock
 ```
 
@@ -249,4 +249,4 @@ scripts/migrate.mjs                  Drizzle migrator with pg_advisory_lock
 
 **`unable to find image` on the server** — registry push failed. `gh auth status` must show `write:packages`; if the smoketest `echo $(gh auth token) | docker login ghcr.io -u <user> --password-stdin` fails, the token is wrong.
 
-**Build-time warnings about `BETTER_AUTH_SECRET`** — Better Auth reads `process.env` during `next build`. The Dockerfile sets placeholder values for build-only; runtime values from Kamal's `--env-file` override them. If the warnings come back after a Dockerfile change, the placeholders got removed — re-add the `ENV BETTER_AUTH_SECRET=…` / `ENV BETTER_AUTH_URL=…` lines before `RUN node --run build`.
+**Build-time warnings about `BETTER_AUTH_SECRET`** — Better Auth reads `process.env` during `next build`. `infra/Dockerfile` sets placeholder values for build-only; runtime values from Kamal's `--env-file` override them. If the warnings come back after a Dockerfile change, the placeholders got removed — re-add the `ENV BETTER_AUTH_SECRET=…` / `ENV BETTER_AUTH_URL=…` lines before `RUN node --run build`.

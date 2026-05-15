@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 export default defineConfig({
   test: {
     // Unit tests live next to the code they test (co-located).
-    include: ['features/**/*.test.ts', 'shared/**/*.test.ts'],
+    include: ['src/features/**/*.test.ts', 'src/shared/**/*.test.ts'],
     // Playwright owns e2e — keep them out of Vitest.
     exclude: ['node_modules', 'tests/e2e/**', '.next', 'dist'],
     environment: 'node',
@@ -16,7 +16,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@': fileURLToPath(new URL('./', import.meta.url)),
+      '@': fileURLToPath(new URL('./src/', import.meta.url)),
     },
   },
 })

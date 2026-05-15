@@ -9,7 +9,7 @@
 - **Unit (Vitest + PGLite, co-located).** Per use-case; runs in Node;
   hits a real Postgres-compatible database. Fast (<100 ms per test once
   WASM is warm). Live next to the code they test:
-  `features/<slice>/<slice>.test.ts`.
+  `src/features/<slice>/<slice>.test.ts`.
 - **End-to-end (Playwright).** Browser-driven journeys through the real
   Next.js server. Specs in `tests/e2e/specs/<module>/`. ~50 specs across
   12 modules.
@@ -20,7 +20,7 @@ a separate integration tier would duplicate them with worse ergonomics.
 
 ## The PGLite fixture
 
-`shared/testing/pglite.ts` exposes `makeTestDb()`:
+`src/shared/testing/pglite.ts` exposes `makeTestDb()`:
 
 ```ts
 export async function makeTestDb(): Promise<TestDb> {
@@ -41,7 +41,7 @@ worker owns its PGLite instance; tests can't see each other's data.
 
 ## How to write a slice unit test
 
-Template: `features/auth/auth.test.ts`. The shape is the same every time.
+Template: `src/features/auth/auth.test.ts`. The shape is the same every time.
 
 **1. Mock the Next request-scoped APIs that use-cases call.** `redirect()`
 and `notFound()` only work inside a Next request scope, and `server-only`

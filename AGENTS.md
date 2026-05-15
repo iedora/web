@@ -73,96 +73,101 @@ Each slice follows a hexagonal-ish layout: `ports.ts` (interfaces) +
 `index.ts` (the slice's public API).
 
 ```
-app/                       Next.js App Router routes only
-  (auth)/                  public auth pages (signup, login)
-  _components/             page-local components (Next-private folder)
-    landing/               landing-page.tsx + landing.css (public home)
-  dashboard/               admin pages — protected
-    analytics/             Casa-only KPIs + scan chart; redirects free → billing
-    billing/               current plan + invoice ledger (year filter)
-    r/[slug]/              restaurant home
-      m/[menuId]/          dnd-kit menu builder route
-      theme/               settings: identity + theme editor
-      qr/                  QR code generator
+src/                       all Next.js source under here (Next's "src dir" convention)
+  app/                     Next.js App Router routes only
+    (auth)/                  public auth pages (signup, login)
+    _components/             page-local components (Next-private folder)
+      landing/               landing-page.tsx + landing.css (public home)
+    dashboard/               admin pages — protected
+      analytics/             Casa-only KPIs + scan chart; redirects free → billing
+      billing/               current plan + invoice ledger (year filter)
+      r/[slug]/              restaurant home
+        m/[menuId]/          dnd-kit menu builder route
+        theme/               settings: identity + theme editor
+        qr/                  QR code generator
+      layout.tsx
+      page.tsx
+    r/[slug]/                public menu page per restaurant — cached snapshot
+    onboarding/              first-time org creation AND add-another-restaurant flow
+    api/
+      auth/[...all]/         Better Auth handler
+      track/[slug]/          pixel-beacon view tracking endpoint (cookie dedup + bot filter)
+    up/                      health-check route
+    page.tsx                 landing redirect / public home
     layout.tsx
-    page.tsx
-  r/[slug]/                public menu page per restaurant — cached snapshot
-  onboarding/              first-time org creation AND add-another-restaurant flow
-  api/
-    auth/[...all]/         Better Auth handler
-    track/[slug]/          pixel-beacon view tracking endpoint (cookie dedup + bot filter)
-  up/                      health-check route
-  page.tsx                 landing redirect / public home
-  layout.tsx
-  globals.css
-features/
-  auth/                    session + tenant-scoping guards
-    adapters/              better-auth-instance.ts (was lib/auth.ts) + better-auth-gateway.ts
-    client.ts              Better Auth React client (was lib/auth-client.ts)
-    use-cases/             verifySession, requireActiveOrganization, requireRestaurantAccess, requireRestaurantBySlug
-    ports.ts, index.ts
-  billing/                 invoice ledger
-    adapters/, use-cases/, types.ts, ports.ts, index.ts
-  dashboard-home/          restaurants-with-counts aggregate query
-    adapters/, use-cases/, ui/, actions.ts, ports.ts, index.ts
-  i18n/                    per-language registry (en, pt, es, fr) + format helpers
-    languages/             one folder per language with `language: Language` export
-    registry.ts            REGISTRY + getLanguage + LANGUAGE_CODES
-    format.ts, server.ts, types.ts
-    ui/                    localized-fields.tsx (tabbed name+description editor)
-    index.ts
-  menu-builder/            dnd-kit admin builder
-    adapters/drizzle.ts    MenuWritePort + MenuReadPort impls
-    use-cases/             create-menu, delete-menu, seed-sample-menu, category/item CRUD, reorder, load-builder-data
-    ui/                    builder.tsx + sortable-* + create-menu-dialog/delete-menu-button/seed-sample-button
-    actions.ts             'use server' shells: auth guard → use-case → revalidate
-    ports.ts, index.ts
-  menu-publishing/         public menu cache + renderer + sample seed payload
-    cache.ts               loadRestaurantSnapshot/loadRestaurantAdminMenus wrappers (unstable_cache + per-slug tag) + revalidateRestaurant
-    use-cases/             load-tree, load-restaurant-snapshot, load-restaurant-admin-menus, sample-data
-    rsc/                   public-render components (RSC-only)
-      menu-renderer.tsx    consumes template registry; injects theme as CSS vars
-      templates/
-        classic/           template module: classic-menu.tsx + meta.ts + index.ts
-        minimal/           template module
-        registry.ts        REGISTRY + getTemplate + TEMPLATE_META
-      theme.ts             ResolvedTheme defaults, FONTS; LAYOUTS derived from templates registry
-      format.ts            price/i18n helpers used by templates
-      types.ts             PublicMenuData / RenderProps shared by all templates
-    index.ts
-  metrics/                 daily-view + analytics range helpers
-    adapters/, use-cases/, range.ts, types.ts, ports.ts, index.ts
-  plans/                   plan registry (free, casa) — same pattern as i18n/templates
-    free/index.ts          plan: Plan
-    casa/index.ts          plan: Plan
-    registry.ts            REGISTRY + getPlan + PLAN_CODES
-    adapters/, use-cases/  canAddRestaurant, planHas, getOrganizationPlan
-    actions.ts             setOrganizationPlan (Stripe-free placeholder)
-    types.ts, ports.ts, index.ts
-  restaurant-identity/     restaurant CRUD + theme/identity settings
-    adapters/, use-cases/, ui/, actions.ts, ports.ts, index.ts
-  upload/                  S3-compatible uploads + presign/commit/clear
-    adapters/              s3-storage.ts (AWS SDK v3) + bootstrap.ts (ensureBucket/CORS)
-    targets.ts             constraints + tenant-prefixed key builder
-    use-cases/             presign + commit + clear
-    actions.ts             DAL-guarded server actions
-    ui/                    image-upload.tsx generic <ImageUpload target=...>
-    types.ts, index.ts
-shared/                    cross-slice infrastructure
-  db/
-    client.ts              drizzle client
-    schema.ts              all tables — single source of truth
-  env.ts                   validated environment variables
-  ui/                      shadcn primitives + editorial-list (cross-slice generic UI)
-    editorial-list/        EditorialList + EditorialRow + StatusPill + ActionChip
-    button.tsx, card.tsx, dialog.tsx, dropdown-menu.tsx, input.tsx, label.tsx, separator.tsx, textarea.tsx
-  utils.ts                 shadcn cn() helper
-  testing/                 shared test fixtures
-proxy.ts                   Next 16 proxy (was middleware)
-drizzle.config.ts
+    globals.css
+  features/
+    auth/                    session + tenant-scoping guards
+      adapters/              better-auth-instance.ts (was lib/auth.ts) + better-auth-gateway.ts
+      client.ts              Better Auth React client (was lib/auth-client.ts)
+      use-cases/             verifySession, requireActiveOrganization, requireRestaurantAccess, requireRestaurantBySlug
+      ports.ts, index.ts
+    billing/                 invoice ledger
+      adapters/, use-cases/, types.ts, ports.ts, index.ts
+    dashboard-home/          restaurants-with-counts aggregate query
+      adapters/, use-cases/, ui/, actions.ts, ports.ts, index.ts
+    i18n/                    per-language registry (en, pt, es, fr) + format helpers
+      languages/             one folder per language with `language: Language` export
+      registry.ts            REGISTRY + getLanguage + LANGUAGE_CODES
+      format.ts, server.ts, types.ts
+      ui/                    localized-fields.tsx (tabbed name+description editor)
+      index.ts
+    menu-builder/            dnd-kit admin builder
+      adapters/drizzle.ts    MenuWritePort + MenuReadPort impls
+      use-cases/             create-menu, delete-menu, seed-sample-menu, category/item CRUD, reorder, load-builder-data
+      ui/                    builder.tsx + sortable-* + create-menu-dialog/delete-menu-button/seed-sample-button
+      actions.ts             'use server' shells: auth guard → use-case → revalidate
+      ports.ts, index.ts
+    menu-publishing/         public menu cache + renderer + sample seed payload
+      cache.ts               loadRestaurantSnapshot/loadRestaurantAdminMenus wrappers (unstable_cache + per-slug tag) + revalidateRestaurant
+      use-cases/             load-tree, load-restaurant-snapshot, load-restaurant-admin-menus, sample-data
+      rsc/                   public-render components (RSC-only)
+        menu-renderer.tsx    consumes template registry; injects theme as CSS vars
+        templates/
+          classic/           template module: classic-menu.tsx + meta.ts + index.ts
+          minimal/           template module
+          registry.ts        REGISTRY + getTemplate + TEMPLATE_META
+        theme.ts             ResolvedTheme defaults, FONTS; LAYOUTS derived from templates registry
+        format.ts            price/i18n helpers used by templates
+        types.ts             PublicMenuData / RenderProps shared by all templates
+      index.ts
+    metrics/                 daily-view + analytics range helpers
+      adapters/, use-cases/, range.ts, types.ts, ports.ts, index.ts
+    plans/                   plan registry (free, casa) — same pattern as i18n/templates
+      free/index.ts          plan: Plan
+      casa/index.ts          plan: Plan
+      registry.ts            REGISTRY + getPlan + PLAN_CODES
+      adapters/, use-cases/  canAddRestaurant, planHas, getOrganizationPlan
+      actions.ts             setOrganizationPlan (Stripe-free placeholder)
+      types.ts, ports.ts, index.ts
+    restaurant-identity/     restaurant CRUD + theme/identity settings
+      adapters/, use-cases/, ui/, actions.ts, ports.ts, index.ts
+    upload/                  S3-compatible uploads + presign/commit/clear
+      adapters/              s3-storage.ts (AWS SDK v3) + bootstrap.ts (ensureBucket/CORS)
+      targets.ts             constraints + tenant-prefixed key builder
+      use-cases/             presign + commit + clear
+      actions.ts             DAL-guarded server actions
+      ui/                    image-upload.tsx generic <ImageUpload target=...>
+      types.ts, index.ts
+  shared/                    cross-slice infrastructure
+    db/
+      client.ts              drizzle client
+      schema.ts              all tables — single source of truth
+    env.ts                   validated environment variables
+    ui/                      shadcn primitives + editorial-list (cross-slice generic UI)
+      editorial-list/        EditorialList + EditorialRow + StatusPill + ActionChip
+      button.tsx, card.tsx, dialog.tsx, dropdown-menu.tsx, input.tsx, label.tsx, separator.tsx, textarea.tsx
+    utils.ts                 shadcn cn() helper
+    testing/                 shared test fixtures
+  proxy.ts                 Next 16 proxy (was middleware) — at src/ root (App Router convention)
+  i18n/                    next-intl request config + message catalogues
+next.config.ts             Next-required root file
+drizzle.config.ts          schema path → ./src/shared/db/schema.ts
+tsconfig.json              "@/*": ["./src/*"]
 docker-compose.yml         postgres + redis + localstack
 .env.example               dev template — copy to .env.local (Next.js dev)
 infra/                     ALL infra lives here — Make forwarder at root delegates `make X` → `make -C infra X`
+  Dockerfile               app build (multi-stage Bun-install + Node-build + standalone)
   Makefile                 deploy/destroy/rotate/logs/etc. targets; loads infra/.env
   .env.example             infra template — copy to infra/.env (gitignored, NOT loaded by Next, so creds never reach process.env)
   tofu/                    Cloudflare tunnel + DNS + ingress + R2 bucket (state encrypted, public_hostname from TF_VAR_)
