@@ -1,5 +1,4 @@
 import 'server-only'
-import { revalidatePath } from 'next/cache'
 import { and, eq } from 'drizzle-orm'
 import { z } from 'zod'
 import { revalidateRestaurant } from '@/features/menu-publishing'
@@ -144,7 +143,10 @@ export async function writeAssetUrl(
 }
 
 export async function bustPaths(target: AssetTarget): Promise<void> {
-  // Slug isn't on the target — read it once so we can revalidate /r/[slug].
+  // Tag-only invalidation per AGENTS.md hard rule #12 — the per-slug cache
+  // tag (`restaurant:<slug>`) is the single chokepoint for the public + admin
+  // snapshot, and `revalidatePath` would just tear up Next's full router
+  // cache for marginal benefit. One slug lookup, one tag revalidate.
   const rows = await db
     .select({ slug: restaurant.slug })
     .from(restaurant)
@@ -152,7 +154,5 @@ export async function bustPaths(target: AssetTarget): Promise<void> {
     .limit(1)
   const slug = rows[0]?.slug
   if (!slug) return
-  revalidatePath(`/dashboard/r/${slug}`)
-  revalidatePath(`/dashboard/r/${slug}/theme`)
   revalidateRestaurant(slug)
 }

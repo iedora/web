@@ -65,15 +65,35 @@ export async function loadMenuTree(opts: {
     ? and(eq(menu.restaurantId, restaurantId), eq(menu.active, true))
     : eq(menu.restaurantId, restaurantId)
 
+  // Project explicitly. Skipping `createdAt`/`updatedAt`/`restaurantId` (~30
+  // bytes/row × N rows) trims the payload that gets serialised into Next's
+  // per-slug `unstable_cache` entry. The i18n JSONB blobs stay — they're
+  // load-bearing for `localizeTree` below.
   const menus = await db
-    .select()
+    .select({
+      id: menu.id,
+      name: menu.name,
+      description: menu.description,
+      nameI18n: menu.nameI18n,
+      descriptionI18n: menu.descriptionI18n,
+      active: menu.active,
+      position: menu.position,
+    })
     .from(menu)
     .where(menuFilter)
     .orderBy(asc(menu.position))
   if (menus.length === 0) return []
 
   const categories = await db
-    .select()
+    .select({
+      id: category.id,
+      menuId: category.menuId,
+      name: category.name,
+      description: category.description,
+      nameI18n: category.nameI18n,
+      descriptionI18n: category.descriptionI18n,
+      position: category.position,
+    })
     .from(category)
     .where(
       inArray(
@@ -87,7 +107,20 @@ export async function loadMenuTree(opts: {
     categories.length === 0
       ? []
       : await db
-          .select()
+          .select({
+            id: item.id,
+            categoryId: item.categoryId,
+            name: item.name,
+            description: item.description,
+            nameI18n: item.nameI18n,
+            descriptionI18n: item.descriptionI18n,
+            priceCents: item.priceCents,
+            currency: item.currency,
+            available: item.available,
+            position: item.position,
+            imageUrl: item.imageUrl,
+            tags: item.tags,
+          })
           .from(item)
           .where(
             inArray(
@@ -110,7 +143,7 @@ export async function loadMenuTree(opts: {
       priceCents: it.priceCents,
       currency: it.currency,
       available: it.available,
-      position: it.position,
+      position: it.position ?? 0,
       imageUrl: it.imageUrl,
       tags: (it.tags as string[] | null) ?? [],
     })
@@ -126,7 +159,7 @@ export async function loadMenuTree(opts: {
       nameI18n: c.nameI18n as LocalizedText | null,
       description: c.description,
       descriptionI18n: c.descriptionI18n as LocalizedText | null,
-      position: c.position,
+      position: c.position ?? 0,
       items: itemsByCategory.get(c.id) ?? [],
     })
   }
@@ -138,7 +171,7 @@ export async function loadMenuTree(opts: {
     description: m.description,
     descriptionI18n: m.descriptionI18n as LocalizedText | null,
     active: m.active,
-    position: m.position,
+    position: m.position ?? 0,
     categories: categoriesByMenu.get(m.id) ?? [],
   }))
 }

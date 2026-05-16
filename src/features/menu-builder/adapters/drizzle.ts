@@ -1,17 +1,26 @@
 import 'server-only'
-import { and, asc, eq, inArray, max } from 'drizzle-orm'
+import { and, asc, eq, inArray, max, sql } from 'drizzle-orm'
+import type { PgDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core'
 import { db } from '@/shared/db/client'
+import * as schema from '@/shared/db/schema'
 import { category, item, menu, restaurant } from '@/shared/db/schema'
 import type { LanguageCode, LocalizedText } from '@/features/i18n'
 import type { MenuReadPort, MenuWritePort } from '../ports'
+
+// Generic over the driver — accepts both postgres-js (prod) and PGLite (tests).
+type AdapterDb = PgDatabase<PgQueryResultHKT, typeof schema>
 
 /**
  * Production MenuWritePort. Wraps the Drizzle mutations that previously
  * lived inline in `app/dashboard/r/[slug]/m/[menuId]/actions.ts`. Single-
  * transaction reorder + position renumber stay in the adapter — they are
  * I/O-shaped, not business logic (AGENTS.md hard rule #7).
+ *
+ * Tests use `makeDrizzleMenuWrite(testDb)` to bind to a PGLite instance;
+ * production uses the singleton bind below.
  */
-export const drizzleMenuWrite: MenuWritePort = {
+export function makeDrizzleMenuWrite(db: AdapterDb): MenuWritePort {
+  return {
   async findMenuInRestaurant(menuId, restaurantId) {
     const rows = await db
       .select({ id: menu.id })
@@ -80,24 +89,28 @@ export const drizzleMenuWrite: MenuWritePort = {
   },
 
   async reorderCategories(menuId, restaurantId, orderedIds) {
-    // Single transaction: renumber positions 0..n-1 over the supplied order.
-    // Filtering by menuId AND restaurantId is defence-in-depth — the action
-    // shell already verified ownership, but we keep the WHERE tight so a
-    // stale client id can't slip across tenants. AGENTS.md hard rule #7.
-    await db.transaction(async (tx) => {
-      for (let i = 0; i < orderedIds.length; i++) {
-        await tx
-          .update(category)
-          .set({ position: i })
-          .where(
-            and(
-              eq(category.id, orderedIds[i]),
-              eq(category.menuId, menuId),
-              eq(category.restaurantId, restaurantId),
-            ),
-          )
-      }
-    })
+    // Renumber positions 0..n-1 over the supplied order in ONE UPDATE.
+    // Per-row UPDATE in a loop = N round-trips holding N row locks; this
+    // collapses to a single statement using UPDATE … FROM (VALUES …).
+    // Defence-in-depth: filter by menuId AND restaurantId (the action shell
+    // already verified ownership, but tight WHERE protects against a stale
+    // client id slipping across tenants). AGENTS.md hard rule #7.
+    if (orderedIds.length === 0) return
+    const values = sql.join(
+      orderedIds.map((id, i) => sql`(${id}, ${i})`),
+      sql`, `,
+    )
+    // Casts: VALUES columns come back as text by default; position is int.
+    // Without the casts, Postgres returns 42804 "column "position" is of
+    // type integer but expression is of type text".
+    await db.execute(sql`
+      UPDATE ${category}
+      SET position = v.position::int
+      FROM (VALUES ${values}) AS v(id, position)
+      WHERE ${category.id} = v.id::text
+        AND ${category.menuId} = ${menuId}
+        AND ${category.restaurantId} = ${restaurantId}
+    `)
   },
 
   async updateMenu(menuId, fields) {
@@ -150,22 +163,20 @@ export const drizzleMenuWrite: MenuWritePort = {
   },
 
   async reorderItems(categoryId, restaurantId, orderedIds) {
-    // Same shape as reorderCategories — single transaction, renumber 0..n-1.
-    // AGENTS.md hard rule #7.
-    await db.transaction(async (tx) => {
-      for (let i = 0; i < orderedIds.length; i++) {
-        await tx
-          .update(item)
-          .set({ position: i })
-          .where(
-            and(
-              eq(item.id, orderedIds[i]),
-              eq(item.categoryId, categoryId),
-              eq(item.restaurantId, restaurantId),
-            ),
-          )
-      }
-    })
+    // Same shape as reorderCategories — single UPDATE FROM VALUES with casts.
+    if (orderedIds.length === 0) return
+    const values = sql.join(
+      orderedIds.map((id, i) => sql`(${id}, ${i})`),
+      sql`, `,
+    )
+    await db.execute(sql`
+      UPDATE ${item}
+      SET position = v.position::int
+      FROM (VALUES ${values}) AS v(id, position)
+      WHERE ${item.id} = v.id::text
+        AND ${item.categoryId} = ${categoryId}
+        AND ${item.restaurantId} = ${restaurantId}
+    `)
   },
 
   async getRestaurantLanguageConfig(restaurantId) {
@@ -207,7 +218,7 @@ export const drizzleMenuWrite: MenuWritePort = {
       .where(and(eq(menu.id, menuId), eq(menu.restaurantId, restaurantId)))
   },
 
-  async seedSampleMenu(restaurantId, seed) {
+  async seedSampleMenu(restaurantId: string, seed: Parameters<MenuWritePort['seedSampleMenu']>[1]): Promise<string> {
     // Append after any existing menus so we never reuse a position. The whole
     // seed runs in a transaction (AGENTS.md hard rule #7) so a half-created
     // menu can't leak if anything along the way fails. The caller has
@@ -258,14 +269,21 @@ export const drizzleMenuWrite: MenuWritePort = {
       return insertedMenu.id
     })
   },
+  }
 }
+
+// Production singleton, bound to the postgres-js db.
+export const drizzleMenuWrite = makeDrizzleMenuWrite(db)
 
 /**
  * Production MenuReadPort. Pulls the menu + i18n config + categories with
  * their items in three queries (same shape the page used to issue inline).
  * Returns BuilderCategory[] — the shape the UI consumes directly.
+ *
+ * `makeDrizzleMenuRead(testDb)` for tests; singleton below for prod.
  */
-export const drizzleMenuRead: MenuReadPort = {
+export function makeDrizzleMenuRead(db: AdapterDb): MenuReadPort {
+  return {
   async loadBuilderData(restaurantId, menuId) {
     const menuRows = await db
       .select({ id: menu.id, name: menu.name })
@@ -292,8 +310,17 @@ export const drizzleMenuRead: MenuReadPort = {
       .limit(1)
     const langs = langRows[0]!
 
+    // Project explicitly — the table has `createdAt`/`updatedAt`/`restaurantId`
+    // that the builder UI never reads. Smaller payloads = smaller cache
+    // entries when this gets wrapped by Next's cache layers downstream.
     const categoryRows = await db
-      .select()
+      .select({
+        id: category.id,
+        name: category.name,
+        description: category.description,
+        nameI18n: category.nameI18n,
+        descriptionI18n: category.descriptionI18n,
+      })
       .from(category)
       .where(eq(category.menuId, menuId))
       .orderBy(asc(category.position))
@@ -302,7 +329,19 @@ export const drizzleMenuRead: MenuReadPort = {
       categoryRows.length === 0
         ? []
         : await db
-            .select()
+            .select({
+              id: item.id,
+              categoryId: item.categoryId,
+              name: item.name,
+              description: item.description,
+              nameI18n: item.nameI18n,
+              descriptionI18n: item.descriptionI18n,
+              priceCents: item.priceCents,
+              currency: item.currency,
+              available: item.available,
+              position: item.position,
+              imageUrl: item.imageUrl,
+            })
             .from(item)
             .where(
               inArray(
@@ -336,10 +375,13 @@ export const drizzleMenuRead: MenuReadPort = {
           priceCents: it.priceCents,
           currency: it.currency,
           available: it.available,
-          position: it.position,
+          position: it.position ?? 0,
           imageUrl: it.imageUrl,
         })),
       })),
     }
   },
+  }
 }
+
+export const drizzleMenuRead = makeDrizzleMenuRead(db)
