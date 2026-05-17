@@ -36,7 +36,7 @@ Ranked by severity for the iedora stack specifically.
 | 26 | Audit log on identity events | 🟧 medium | 🟡 in flight | dispatched implementation: real `audit_log` table + writes from every admin action + `/admin/audit` rewrite |
 | 27 | Webhook secret encryption at rest | 🟨 low | ⏳ deferred | plaintext in DB. Acceptable while DB + app share a trust boundary; revisit when first external customer |
 | 28 | Admin impersonation audit trail | 🟨 low | ⏳ part of #26 | Better Auth marks `session.impersonatedBy`; will be captured as a `user.impersonate` row in audit_log |
-| 29 | Public JWKS rotation cadence | 🟨 low | ⏳ defaults | Better Auth's JWT plugin manages keys. Verify rotation interval (default may be long); old keys must stay in JWKS for token TTL window |
+| 29 | Public JWKS rotation cadence | 🟨 low | 🟩 mitigated | 90-day automatic rotation via `src/features/auth/cron.ts` (started from `src/instrumentation.ts`) calling `rotateJwks()`. Multi-replica-safe via `pg_advisory_xact_lock(JWKS_ROTATION_LOCK_KEY=3828642905)` — CRC32 of `"jwks_rotation"`, same pattern as `audit_log_chain`. Manual emergency trigger at /admin/applications → "Rotate now" (step-up gated via `requireFreshSession`). Old keys retained indefinitely (`expiresAt = NULL`) so previously-signed tokens stay verifiable until their own `exp` claim |
 | 30 | `/.well-known/*` cache poisoning | 🟨 low | 🟩 verified | Next route caches for 5 min; Cloudflare cache also 5 min — both below JWT lifetime |
 
 ## Quick-win verifies (run these after every Better Auth upgrade)
@@ -74,7 +74,6 @@ curl -si https://genkan.iedora.com/api/auth/session | grep -i 'set-cookie'
 
 - **MFA**: TOTP first (Better Auth has `two-factor` plugin), then passkeys (`passkey` plugin). Required for `user.role==='admin'`; optional otherwise.
 - **Suspicious-activity webhook events**: `auth.brute_force_detected`, `auth.unusual_login_location`, etc. emitted from rate-limit hooks.
-- **JWKS rotation cadence**: cron-driven, 90-day rotation, old keys stay until TTL expires.
 - **SOC2-ready audit retention**: append-only ship to S3/R2 monthly; cryptographically chained entries.
 
 ## References

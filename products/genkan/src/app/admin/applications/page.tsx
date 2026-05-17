@@ -9,9 +9,13 @@ import {
 } from '@iedora/design-system'
 import { requireAdmin } from '@/features/admin'
 import { listApplications } from '@/features/admin/use-cases/list-applications'
-import { PageHead, Mono } from '../_lib/editorial'
+import { getLatestJwksKeyInfo } from '@/features/auth/use-cases/rotate-jwks'
+import { PageHead, Mono, SectionRule } from '../_lib/editorial'
 import { SearchBox } from '../_lib/search-box'
-import { RegisterApplicationDialog } from './applications-actions.client'
+import {
+  RegisterApplicationDialog,
+  RotateJwksDialog,
+} from './applications-actions.client'
 
 export const metadata = { title: 'Applications · Admin' }
 
@@ -22,6 +26,14 @@ function fmtDate(d: Date | null) {
   return new Intl.DateTimeFormat('en-CA').format(d)
 }
 
+function fmtDateTime(d: Date | null) {
+  if (!d) return '—'
+  return new Intl.DateTimeFormat('en-CA', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+  }).format(d)
+}
+
 export default async function AdminApplicationsPage({
   searchParams,
 }: {
@@ -29,7 +41,10 @@ export default async function AdminApplicationsPage({
 }) {
   await requireAdmin('/admin/applications')
   const { q } = await searchParams
-  const apps = await listApplications({ search: q })
+  const [apps, jwksInfo] = await Promise.all([
+    listApplications({ search: q }),
+    getLatestJwksKeyInfo(),
+  ])
 
   return (
     <>
@@ -51,7 +66,7 @@ export default async function AdminApplicationsPage({
           note={q ? `Nothing matches “${q}”.` : 'No clients registered yet.'}
         />
       ) : (
-        <Table>
+        <div className="admin-table-scroll"><Table>
           <thead>
             <tr>
               <Th style={{ width: '4ch' }}>N</Th>
@@ -106,8 +121,87 @@ export default async function AdminApplicationsPage({
               </tr>
             ))}
           </tbody>
-        </Table>
+        </Table></div>
       )}
+
+      <SectionRule>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'flex-end',
+            justifyContent: 'space-between',
+            gap: 24,
+          }}
+        >
+          <div>
+            <span
+              style={{
+                fontFamily: 'var(--mono)',
+                fontSize: 10.5,
+                letterSpacing: '0.18em',
+                textTransform: 'uppercase',
+                color: 'var(--ink-55)',
+              }}
+            >
+              / JWKS
+            </span>
+            <p
+              style={{
+                fontFamily: 'var(--serif)',
+                fontStyle: 'italic',
+                fontSize: 17,
+                color: 'var(--ink-70)',
+                margin: '8px 0 0',
+                maxWidth: '64ch',
+              }}
+            >
+              Signing keys for OIDC tokens. The active key rotates automatically every 90 days; old keys stay published until any token they signed has expired.
+            </p>
+            <div
+              style={{
+                marginTop: 14,
+                display: 'flex',
+                gap: 28,
+                alignItems: 'baseline',
+              }}
+            >
+              <div>
+                <span
+                  style={{
+                    fontFamily: 'var(--mono)',
+                    fontSize: 10,
+                    letterSpacing: '0.12em',
+                    textTransform: 'uppercase',
+                    color: 'var(--ink-55)',
+                    display: 'block',
+                  }}
+                >
+                  Active kid
+                </span>
+                <Mono style={{ fontSize: 12 }}>{jwksInfo?.id ?? '—'}</Mono>
+              </div>
+              <div>
+                <span
+                  style={{
+                    fontFamily: 'var(--mono)',
+                    fontSize: 10,
+                    letterSpacing: '0.12em',
+                    textTransform: 'uppercase',
+                    color: 'var(--ink-55)',
+                    display: 'block',
+                  }}
+                >
+                  Last rotated
+                </span>
+                <Mono style={{ fontSize: 12 }}>
+                  {fmtDateTime(jwksInfo?.createdAt ?? null)}
+                </Mono>
+              </div>
+            </div>
+          </div>
+          <RotateJwksDialog />
+        </div>
+      </SectionRule>
     </>
   )
 }

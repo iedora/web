@@ -7,6 +7,7 @@ import { eq } from 'drizzle-orm'
 import { requireAdmin } from '@/features/admin'
 import { requireFreshSession } from '@/features/auth'
 import { auth } from '@/features/auth/adapters/better-auth-instance'
+import { rotateJwks } from '@/features/auth/use-cases/rotate-jwks'
 import { db } from '@/shared/db/client'
 import { oauthClient } from '@/shared/db/schema'
 import { recordAdminEvent } from '../_lib/audit'
@@ -109,6 +110,32 @@ export async function registerApplicationAction(
       error: toMessage(e, 'Could not register application.'),
     }
   }
+}
+
+/**
+ * Manually rotate the JWKS active signing key. Used for compromised-key
+ * emergencies — the 90-day automatic cadence runs from
+ * `@/features/auth/cron`.
+ *
+ * Step-up gated (`requireFreshSession`) because key rotation is a
+ * destructive op even though existing tokens still validate against the
+ * retained old key. A leaked-key scenario is the very situation where you
+ * want the actor to reauthenticate before pressing the button.
+ */
+export async function rotateJwksAction(): Promise<
+  { ok: true; newKeyId: string } | { ok: false; error: string }
+> {
+  await requireAdmin()
+  await requireFreshSession({ returnTo: '/admin/applications' })
+  const result = await rotateJwks({ force: true })
+  if (!result.ok) return { ok: false, error: result.error }
+  if (!result.rotated) {
+    // Shouldn't happen — `force: true` skips the recency guard. Surface
+    // as an error so the UI shows it instead of silently claiming success.
+    return { ok: false, error: 'Rotation skipped unexpectedly.' }
+  }
+  revalidatePath('/admin/applications')
+  return { ok: true, newKeyId: result.newKeyId }
 }
 
 export async function deleteApplicationAction(

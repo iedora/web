@@ -18,8 +18,110 @@ import {
   FieldLabel,
   FieldTextarea,
 } from '@iedora/design-system'
-import { registerApplicationAction } from './actions'
+import { registerApplicationAction, rotateJwksAction } from './actions'
 import { KNOWN_SCOPES } from './_scopes'
+
+/**
+ * "Rotate now" trigger for the JWKS active signing key. Wrapped in a
+ * confirm dialog because:
+ *   - it's a destructive-ish lever (forces new tokens to be signed with
+ *     a new key) and the admin should be intentional about hitting it;
+ *   - the server action is step-up gated, so an admin with a stale
+ *     session is bounced to /reauth before the rotation runs.
+ *
+ * On success the page revalidates and the JWKS section re-renders with
+ * the new active key id + timestamp. The dialog stays open just long
+ * enough to confirm the new kid so an operator can copy it.
+ */
+export function RotateJwksDialog() {
+  const router = useRouter()
+  const [open, setOpen] = useState(false)
+  const [pending, startTransition] = useTransition()
+  const [error, setError] = useState<string | null>(null)
+  const [newKeyId, setNewKeyId] = useState<string | null>(null)
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next)
+        if (!next) {
+          setError(null)
+          setNewKeyId(null)
+        }
+      }}
+    >
+      <DialogTrigger asChild>
+        <Button variant="ghost">Rotate now</Button>
+      </DialogTrigger>
+      <DialogContent eyebrow="/ Dialog · Rotate JWKS key">
+        <DialogHeader>
+          <DialogTitle>Rotate the JWKS signing key?</DialogTitle>
+          <DialogDescription>
+            Mints a new RSA/EdDSA key pair and makes it the active signer
+            for all new tokens. The previous key stays in the published
+            JWKS so existing tokens still validate against their{' '}
+            <code>kid</code>. Use this for compromised-key emergencies —
+            the automatic 90-day rotation runs in the background.
+          </DialogDescription>
+        </DialogHeader>
+        {newKeyId ? (
+          <p
+            style={{
+              fontFamily: 'var(--mono)',
+              fontSize: 12,
+              color: 'var(--ink-70)',
+              margin: '12px 0',
+            }}
+            role="status"
+          >
+            Rotated. New active <code>kid</code>: <code>{newKeyId}</code>
+          </p>
+        ) : null}
+        {error ? (
+          <p
+            style={{
+              fontFamily: 'var(--mono)',
+              fontSize: 12,
+              color: 'var(--danger, #b00)',
+              margin: '12px 0',
+            }}
+            role="alert"
+          >
+            {error}
+          </p>
+        ) : null}
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button variant="ghost">{newKeyId ? 'Close' : 'Cancel'}</Button>
+          </DialogClose>
+          {newKeyId ? null : (
+            <Button
+              type="button"
+              variant="accent"
+              arrow
+              disabled={pending}
+              onClick={() => {
+                setError(null)
+                startTransition(async () => {
+                  const res = await rotateJwksAction()
+                  if (res.ok) {
+                    setNewKeyId(res.newKeyId)
+                    router.refresh()
+                  } else {
+                    setError(res.error)
+                  }
+                })
+              }}
+            >
+              {pending ? 'Rotating…' : 'Rotate'}
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
 
 export function RegisterApplicationDialog() {
   const router = useRouter()
