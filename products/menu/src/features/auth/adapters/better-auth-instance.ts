@@ -65,6 +65,11 @@ export function makeAuth(database: AuthDb) {
     emailAndPassword: {
       enabled: false,
     },
+    // Better Auth 1.6.x ships an opt-out telemetry collector. Explicit
+    // opt-out for both apps — we don't want third-party observation of
+    // identity-adjacent surfaces, and pinning the value makes the posture
+    // resilient to a future default flip.
+    telemetry: { enabled: false },
     rateLimit: {
       enabled: process.env.DISABLE_AUTH_RATE_LIMIT !== 'true',
       storage: 'database',

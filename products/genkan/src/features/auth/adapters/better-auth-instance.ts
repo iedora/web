@@ -131,7 +131,17 @@ export function makeAuth(database: AuthDb) {
     },
     emailAndPassword: {
       enabled: true,
+      // Better Auth's default is 8. NIST SP 800-63B says ≥8 with no special
+      // characters, but a 12-char minimum is the modern baseline (1Password,
+      // Auth0, Clerk all default ≥10–12) and pinning it makes the policy
+      // diff-visible at review.
+      minPasswordLength: 12,
     },
+    // Better Auth 1.6.x ships an opt-out telemetry collector that reports
+    // anonymous version + feature usage. Explicit opt-out for an IdP — we
+    // don't want any third-party observation of our identity surface, and
+    // an explicit value is resilient to a future default flip.
+    telemetry: { enabled: false },
     rateLimit: {
       enabled: process.env.DISABLE_AUTH_RATE_LIMIT !== 'true',
       storage: 'database',
