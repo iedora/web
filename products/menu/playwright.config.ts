@@ -85,6 +85,13 @@ export default defineConfig({
         GENKAN_OAUTH_CLIENT_ID: 'menu',
         GENKAN_OAUTH_CLIENT_SECRET: 'menu-secret',
         GENKAN_ISSUER_URL: SHIM_URL,
+        // `src/shared/brand.ts::GENKAN_URL` is imported by client components
+        // (landing-page.tsx, logout-button.tsx). NEXT_PUBLIC_* is inlined at
+        // BUILD time into the client bundle. Setting it here covers the
+        // local dev path (`bun run build && bun run start` runs from this
+        // env block). CI's build step has the same value pinned in ci.yml
+        // because the build runs in a separate step from `bun run start`.
+        NEXT_PUBLIC_GENKAN_URL: SHIM_URL,
         // Storage — LocalStack via docker-compose. Separate bucket so tests
         // don't collide with dev assets.
         S3_ENDPOINT: 'http://localhost:4566',

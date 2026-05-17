@@ -41,3 +41,18 @@ export function getTestkitUrl(): string {
 export function getMenuClientId(): string {
   return read().clientId
 }
+
+/**
+ * Returns the UNDERLYING testkit URL (random port), NOT the shim. The
+ * testkit listens on 127.0.0.1 but advertises itself as `http://localhost:<port>`,
+ * which is what the shim's proxy forwards Location headers to. The browser
+ * follows those redirects directly to the testkit, so any cookies set for
+ * the shim origin (127.0.0.1:4444) don't accompany the request.
+ *
+ * Test code that needs to seed a Better Auth session for the OAuth flow
+ * has to set the cookie for BOTH origins (shim + testkit) because Set-Cookie
+ * domain rules treat `localhost` and `127.0.0.1` as different hosts.
+ */
+export function getUnderlyingTestkitUrl(): string {
+  return read().testkitUrl
+}

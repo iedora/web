@@ -5,7 +5,8 @@
   "type": "module",
   "description": "In-process Better Auth + OAuth-provider test fixture, backed by PGLite. Used by iedora services that consume genkan via OIDC.",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./schema": "./src/schema.ts"
   },
   "scripts": {
     "test": "vitest run",

@@ -211,6 +211,13 @@ jobs:
       S3_ACCESS_KEY: test
       S3_SECRET_KEY: test
       S3_BUCKET: metamenu-test
+      # `src/shared/brand.ts::GENKAN_URL` is imported by client components,
+      # so its value gets inlined into the client bundle at BUILD time. The
+      # build step runs separately from `bun run start` in CI, so we pin
+      # the testkit URL here (job-level env) — same value playwright.config.ts
+      # sets at webServer runtime. SHIM_PORT in playwright.config.ts must
+      # match the port suffix here.
+      NEXT_PUBLIC_GENKAN_URL: http://127.0.0.1:4444
       NEXT_TELEMETRY_DISABLED: '1'
       CI: 'true'
 
