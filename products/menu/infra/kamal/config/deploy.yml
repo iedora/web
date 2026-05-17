@@ -65,7 +65,11 @@ builder:
   # at /bun.lock + /packages/design-system are visible to the build.
   # The Dockerfile is referenced by its repo-relative path.
   context: ../../../..
-  dockerfile: products/menu/infra/Dockerfile
+  # `dockerfile:` is resolved from Kamal's cwd (products/menu/infra/kamal/),
+  # NOT from the build context. Kamal converts it to an absolute path before
+  # invoking docker, so docker can read a Dockerfile that sits outside the
+  # build context root.
+  dockerfile: ../Dockerfile
 
 env:
   clear:

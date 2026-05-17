@@ -24,12 +24,11 @@ servers:
     # so concurrent boots (genkan + menu running their own migrations) don't
     # collide.
     cmd: sh -c "node scripts/migrate.mjs && node server.js"
-    # Join the meta-menu app network so genkan can reach
-    # `meta-menu-postgres:5432` by container name. The network is created
-    # by Kamal when menu is first deployed; this directive is no-op if it
-    # already exists.
-    options:
-      network: kamal
+    # Kamal auto-attaches every app container to the shared `kamal` Docker
+    # network (same one kamal-proxy + meta-menu-postgres live on). No extra
+    # network: directive needed — adding `options.network: kamal` would
+    # cause `--network kamal` to appear twice in `docker run` and fail.
+    # Genkan reaches Postgres at `meta-menu-postgres:5432` automatically.
 
 proxy:
   ssl: false                              # Cloudflare Tunnel terminates TLS
@@ -62,7 +61,9 @@ builder:
   # ROOT (../../../..) so the Bun workspace lockfile + linked packages are
   # visible to the build.
   context: ../../../..
-  dockerfile: products/genkan/infra/Dockerfile
+  # See products/menu/infra/kamal/config/deploy.yml for the rationale —
+  # `dockerfile:` is resolved from Kamal's cwd, not the build context.
+  dockerfile: ../Dockerfile
 
 env:
   clear:
