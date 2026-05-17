@@ -495,9 +495,10 @@ nx, and turborepo's own repos).
 **The jobs:**
 
 - **`changes`** — dorny/paths-filter; emits `outputs.<workspace>`.
-- **`typecheck-menu`, `lint-menu`** — menu-only for now (genkan
-  typecheck is covered by Vitest's `--typecheck`; a dedicated
-  `typecheck-genkan` is a known TODO).
+- **`typecheck-menu`, `typecheck-genkan`** — `tsc --noEmit` per product.
+- **`lint-menu`** — menu-only (eslint-plugin-boundaries lives in the
+  menu config). Genkan has a thin `eslint.config.mjs` but no
+  dedicated lint job yet.
 - **`unit-menu`, `unit-genkan`, `unit-identity`, `unit-authtestkit`** —
   all delegate to `_unit.yml`.
 - **`e2e`** — delegates to `_e2e.yml`; gated on `!failure() && !cancelled()`

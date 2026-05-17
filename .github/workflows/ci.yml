@@ -76,7 +76,7 @@ jobs:
               - '.github/**'
 
   # -------------------------------------------------------------------------
-  # 2. Per-concern jobs (menu only — genkan typecheck/lint not wired yet)
+  # 2. Per-concern jobs
   # -------------------------------------------------------------------------
   typecheck-menu:
     name: Typecheck · menu
@@ -87,6 +87,20 @@ jobs:
     defaults:
       run:
         working-directory: products/menu
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup
+      - run: bun run typecheck
+
+  typecheck-genkan:
+    name: Typecheck · genkan
+    needs: changes
+    if: needs.changes.outputs.genkan == 'true' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.design-system == 'true' || needs.changes.outputs.identity == 'true' || needs.changes.outputs.authtestkit == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: products/genkan
     steps:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/setup
@@ -156,7 +170,7 @@ jobs:
   # menu, where typecheck/lint/unit-menu run but the others don't.
   e2e:
     name: E2E (Playwright)
-    needs: [changes, typecheck-menu, lint-menu, unit-menu, unit-genkan, unit-identity, unit-authtestkit]
+    needs: [changes, typecheck-menu, typecheck-genkan, lint-menu, unit-menu, unit-genkan, unit-identity, unit-authtestkit]
     if: |
       always() && !failure() && !cancelled() &&
       (needs.changes.outputs.menu == 'true' ||

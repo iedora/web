@@ -330,6 +330,7 @@ the full breakdown). The pieces:
 changes skip):
 
 - **Typecheck · menu** — `bun run typecheck`. ~2 min.
+- **Typecheck · genkan** — `bun run typecheck`. ~2 min.
 - **Lint · menu** — `bun run lint`. ~2 min.
 - **Unit · menu** — `bun run test`. Docker available so testcontainers can boot real Redis for the rate-limit suite. ~3 min.
 - **Unit · genkan** — `bun run test`. PGLite + auth-testkit suites. ~3 min.
