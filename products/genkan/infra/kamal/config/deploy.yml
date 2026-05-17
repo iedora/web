@@ -1,14 +1,14 @@
 # Genkan (genkan.iedora.com) — Kamal 2 deploy onto the same homelab box menu
 # uses. Genkan owns ALL identity primitives (users, orgs, sessions, OAuth
-# clients, grants, audit log) in its OWN Postgres instance — no shared DB
-# with menu. Products federate via OIDC, not via SQL.
+# clients, grants) in a DEDICATED Postgres DATABASE (`genkan`) on the SHARED
+# Postgres INSTANCE menu also uses. One server process, two independent
+# databases — no cross-database queries possible (Postgres enforces this).
+# Federation between products happens via OIDC, not via SQL.
 
 <%
   public_hostname = ENV.fetch("PUBLIC_HOSTNAME")
-  # Cookie domain = the apex zone (everything after the first dot).
-  # genkan.iedora.com → .iedora.com
-  cookie_domain = ".#{public_hostname.split('.', 2)[1]}"
-  # The trusted origin pattern matches menu's hostname under the same zone.
+  # Trusted-origin pattern: menu.<apex>. Add more first-party products here
+  # as they come online (or expose this via env if it gets crowded).
   menu_origin = "https://menu.#{public_hostname.split('.', 2)[1]}"
 %>
 
@@ -70,17 +70,15 @@ env:
   clear:
     NEXT_TELEMETRY_DISABLED: "1"
     BETTER_AUTH_URL: https://<%= public_hostname %>
-    # Cross-subdomain SSO: cookies scoped to `.iedora.com` so menu picks up
-    # the session genkan issues without a separate sign-in.
-    COOKIE_DOMAIN: <%= cookie_domain %>
-    # Comma-separated list of every product origin allowed to sign-in
-    # against this Genkan instance. Add a new product here when it joins.
+    # No COOKIE_DOMAIN — products federate via OIDC now, not cross-subdomain
+    # cookies. Each app gets a host-scoped cookie on its own domain.
     TRUSTED_ORIGINS: <%= menu_origin %>,https://<%= public_hostname %>
     # Where to land users when sign-in completes without a ?return_to.
     DEFAULT_RETURN_TO: <%= menu_origin %>/dashboard
   secret:
     - BETTER_AUTH_SECRET
     - DATABASE_URL
+    - TRUSTED_CLIENTS
 
 aliases:
   console: app exec --interactive --reuse bash
@@ -88,20 +86,11 @@ aliases:
   migrate: app exec --reuse "node scripts/migrate.mjs"
 
 accessories:
-  # Genkan-owned Postgres. Completely separate from menu's instance — different
-  # container name, different volume, different password. Reachable from the
-  # genkan-web app over the shared `kamal` docker network as `genkan-postgres:5432`.
-  postgres:
-    image: postgres:18.4-alpine
-    host: <%= ENV.fetch("ONPREM_HOST") %>
-    env:
-      clear:
-        POSTGRES_USER: postgres
-        POSTGRES_DB: genkan
-      secret:
-        - POSTGRES_PASSWORD
-    directories:
-      - data:/var/lib/postgresql
+  # No postgres accessory here — genkan reuses the `meta-menu-postgres`
+  # accessory owned by menu's Kamal config. They share the same Postgres
+  # SERVER but each app uses a separate DATABASE (`metamenu` vs `genkan`).
+  # genkan's scripts/migrate.mjs runs `CREATE DATABASE IF NOT EXISTS` style
+  # bootstrap before applying its own migrations.
 
   # Cloudflare Tunnel — outbound only, terminates TLS at the edge.
   # Ingress (set via tofu apply): PUBLIC_HOSTNAME → http://kamal-proxy
