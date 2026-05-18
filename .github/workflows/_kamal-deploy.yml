@@ -249,7 +249,7 @@ jobs:
       # `kamal rollback`; the SARIF upload below makes the findings visible
       # in the Security tab regardless of the gate's verdict.
       - name: Trivy image scan
-        uses: aquasecurity/trivy-action@0.36.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ghcr.io/${{ inputs.ghcr_user }}/${{ inputs.product }}:${{ inputs.sha }}
           severity: HIGH,CRITICAL
@@ -302,7 +302,7 @@ jobs:
 
       - name: Generate image SBOM
         if: success()
-        uses: aquasecurity/trivy-action@0.36.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ghcr.io/${{ inputs.ghcr_user }}/${{ inputs.product }}:${{ inputs.sha }}
           format: spdx-json
