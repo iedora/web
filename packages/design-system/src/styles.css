@@ -976,11 +976,15 @@
 }
 
 .ds-v-stage {
+  /* Same horizontal rhythm as .ds-v-head + .ds-v-foot — capped at the
+     container width and centered, so the title block, the head bar and
+     the foot bar all share one left edge on wide screens. (A duplicate
+     `width: 100%` used to clobber this and let stage content sprawl to
+     the viewport edges.) */
   width: min(var(--container), 100%);
   margin: 0 auto;
   padding: 0 var(--margin);
   align-self: center;
-  width: 100%;
   min-height: 0;
   overflow: hidden;
 }

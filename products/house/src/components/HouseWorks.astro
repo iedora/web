@@ -98,8 +98,7 @@ const cells = Array.from({ length: 49 }, (_, i) => {
 
         <div class="ds-v-stage work-stage">
           <div class="work-visual">
-            <!-- Cinnabar seal: circle draws in by stroke; centered serif "g"
-                 (Fraunces' double-storey form, matches the `genkan.` title)
+            <!-- Cinnabar seal: circle draws in by stroke; centered serif "i"
                  fades in once the stroke completes. Pathlength="100" so the
                  host JS can compute stroke-dashoffset as a 0-100 percentage
                  of completion without knowing the geometry. -->
@@ -112,7 +111,7 @@ const cells = Array.from({ length: 49 }, (_, i) => {
                   r="86"
                   pathLength="100"
                 />
-                <text class="seal-glyph" x="100" y="100">g</text>
+                <text class="seal-i" x="100" y="124">i</text>
                 <text class="seal-tick seal-tick--n" x="100" y="14">·</text>
                 <text class="seal-tick seal-tick--e" x="190" y="104">·</text>
                 <text class="seal-tick seal-tick--s" x="100" y="194">·</text>
@@ -258,13 +257,12 @@ const cells = Array.from({ length: 49 }, (_, i) => {
     transform-origin: 100px 100px;
     transform: rotate(-90deg); /* start the draw from 12 o'clock */
   }
-  .seal-big .seal-glyph {
+  .seal-big .seal-i {
     font-family: var(--serif);
     font-weight: 300;
     font-variation-settings: "opsz" 144;
-    font-size: 96px;
+    font-size: 78px;
     text-anchor: middle;
-    dominant-baseline: central;
     fill: var(--cinnabar);
     opacity: clamp(0, calc((var(--seal-p, 0) - 0.6) * 3), 1);
   }
@@ -342,7 +340,7 @@ const cells = Array.from({ length: 49 }, (_, i) => {
     .analytics-big .ana-area,
     .analytics-big .ana-dot { opacity: 1 !important; }
     .seal-big .seal-ring { stroke-dashoffset: 0 !important; }
-    .seal-big .seal-glyph,
+    .seal-big .seal-i,
     .seal-big .seal-tick { opacity: 1 !important; }
     .sessions-big li { opacity: 1 !important; transform: none !important; }
   }
