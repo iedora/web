@@ -28,19 +28,20 @@ _default:
 # Kamal deploys the app. They meet at kamal/.kamal/secrets (which reads
 # `tofu output`).
 #
-# Steps, in order:
-#   1. tofu apply             — reconcile tunnel + DNS
-#   2. kamal accessory boot   — boot genkan's cloudflared accessory
-#                               (idempotent; no-op if it already exists)
-#   3. kamal setup OR deploy  — full setup on first run; `deploy` after that
-#                               (a 1-second SSH probe picks which)
-#
-# Booting the accessory BEFORE the app deploy is the fix for: when kamal-proxy
-# already exists (because menu deployed first), the SSH probe picks `kamal
-# deploy` which silently skips accessory boot, leaving genkan unreachable.
+# Steps:
+#   1. bun install --frozen-lockfile  — fail fast on stale workspace lock
+#   2. tofu apply                     — reconcile tunnel + DNS
+#   3. kamal accessory boot all       — ensure cloudflared exists EVEN when
+#                                       step 4 picks `kamal deploy` (which
+#                                       silently skips accessory boot). This
+#                                       is the fix for the 2nd-product 530
+#                                       bug — see docs/deploy.md.
+#   4. kamal setup OR deploy          — full setup on first run; deploy after
+#   5. curl /up                       — smoke-test the public endpoint
 deploy:
     #!/usr/bin/env bash
     set -euo pipefail
+    (cd ../../.. && bun install --frozen-lockfile)
     {{tofu}} init -upgrade -input=false >/dev/null
     {{tofu}} apply -auto-approve
     bin/with-secrets bash -c \
@@ -53,10 +54,32 @@ deploy:
     fi
     KAMAL_CMD="$KAMAL_CMD" bin/with-secrets bash -c \
       'cd kamal && PATH="{{kamal-bin}}$PATH" exec kamal "$KAMAL_CMD"'
+    echo "[deploy] smoke-checking https://${PUBLIC_HOSTNAME}/up …"
+    for i in 1 2 3 4 5 6; do
+      CODE=$(curl -s -o /dev/null -w '%{http_code}' "https://${PUBLIC_HOSTNAME}/up" || echo 000)
+      if [ "$CODE" = "200" ]; then echo "[deploy] ✓ /up returned 200"; exit 0; fi
+      echo "[deploy] /up returned ${CODE}; retry $i/6 in 5s"
+      sleep 5
+    done
+    echo "[deploy] ✗ /up never returned 200 after 30s. Check 'just genkan::logs' and 'kamal accessory logs cloudflared'." >&2
+    exit 1
 
-# Tear down genkan's Cloudflare resources (does NOT touch the box, the
-# postgres accessory belongs to menu).
+# Tear down genkan's Cloudflare resources. Stops the local cloudflared
+# accessory + flushes Cloudflare's connection registry first — both make
+# `tofu destroy` race-free against Cloudflare's ~30-60s connection-slot TTL.
 destroy:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    bin/with-secrets bash -c \
+      'cd kamal && PATH="{{kamal-bin}}$PATH" kamal accessory stop cloudflared 2>/dev/null || true'
+    TUNNEL_ID=$({{tofu}} output -raw tunnel_id 2>/dev/null || true)
+    if [ -n "$TUNNEL_ID" ]; then
+      bin/with-secrets bash -c '
+        curl -s -X DELETE \
+          -H "Authorization: Bearer $INFRA_CLOUDFLARE_API_TOKEN" \
+          "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/cfd_tunnel/'"$TUNNEL_ID"'/connections" >/dev/null
+      '
+    fi
     {{tofu}} destroy -auto-approve
 
 # Tail app logs.

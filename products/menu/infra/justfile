@@ -45,13 +45,21 @@ _default:
 
 # Build + push + deploy menu — idempotent first-time and every-time.
 #
-# `kamal accessory boot all` runs unconditionally before the app deploy.
-# That ensures menu's cloudflared accessory is up even when the deploy path
-# is `kamal deploy` (which doesn't boot accessories) — important when this
-# isn't the FIRST product to deploy.
+# Steps:
+#   1. bun install --frozen-lockfile  — fail fast if bun.lock is stale
+#                                       (workspace renames break the lock
+#                                       silently; surfaced here, not at build)
+#   2. tofu apply                     — reconcile Cloudflare tunnel/DNS/R2
+#   3. kamal accessory boot all       — ensure cloudflared exists EVEN when
+#                                       step 4 is `kamal deploy` (which
+#                                       silently skips accessory boot)
+#   4. kamal setup OR deploy          — full setup on first run; deploy after
+#   5. curl /up                       — smoke-test the public endpoint; fail
+#                                       loudly if the tunnel isn't routing
 deploy:
     #!/usr/bin/env bash
     set -euo pipefail
+    (cd ../../.. && bun install --frozen-lockfile)
     {{tofu}} init -upgrade -input=false >/dev/null
     {{tofu}} apply -auto-approve
     bin/with-secrets bash -c \
@@ -64,9 +72,36 @@ deploy:
     fi
     KAMAL_CMD="$KAMAL_CMD" bin/with-secrets bash -c \
       'cd kamal && PATH="{{kamal-bin}}$PATH" exec kamal "$KAMAL_CMD"'
+    # Post-deploy smoke. Retry up to 6 × 5s — Cloudflare needs ~10-30s to
+    # register the cloudflared connection after a cold start.
+    echo "[deploy] smoke-checking https://${PUBLIC_HOSTNAME}/up …"
+    for i in 1 2 3 4 5 6; do
+      CODE=$(curl -s -o /dev/null -w '%{http_code}' "https://${PUBLIC_HOSTNAME}/up" || echo 000)
+      if [ "$CODE" = "200" ]; then echo "[deploy] ✓ /up returned 200"; exit 0; fi
+      echo "[deploy] /up returned ${CODE}; retry $i/6 in 5s"
+      sleep 5
+    done
+    echo "[deploy] ✗ /up never returned 200 after 30s. Check 'just menu::logs' and 'kamal accessory logs cloudflared'." >&2
+    exit 1
 
 # Tear down menu's Cloudflare resources (does NOT touch the box).
+# Stops the local cloudflared accessory first + force-flushes Cloudflare's
+# active-connection registry, both of which can otherwise make `tofu destroy`
+# fail with "This tunnel has active connections" — even after the local
+# container is gone, Cloudflare keeps the connection slot for ~30-60s.
 destroy:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    bin/with-secrets bash -c \
+      'cd kamal && PATH="{{kamal-bin}}$PATH" kamal accessory stop cloudflared 2>/dev/null || true'
+    TUNNEL_ID=$({{tofu}} output -raw tunnel_id 2>/dev/null || true)
+    if [ -n "$TUNNEL_ID" ]; then
+      bin/with-secrets bash -c '
+        curl -s -X DELETE \
+          -H "Authorization: Bearer $INFRA_CLOUDFLARE_API_TOKEN" \
+          "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/cfd_tunnel/'"$TUNNEL_ID"'/connections" >/dev/null
+      '
+    fi
     {{tofu}} destroy -auto-approve
 
 # Tail app logs.

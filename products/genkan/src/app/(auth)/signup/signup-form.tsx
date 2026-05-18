@@ -41,6 +41,12 @@ export function SignupForm({ returnTo }: { returnTo: string }) {
     const email = String(formData.get('email'))
     const password = String(formData.get('password'))
 
+    // Mid-OAuth-authorize? The `oauthProviderClient` plugin attaches the
+    // signed `oauth_query` to this request automatically; the server's
+    // after-hook will fire on session-cookie set, resume the authorize
+    // step, and return `{ redirect, url }`. Better Auth's built-in
+    // `redirectPlugin` follows it via `window.location.href = url`, so
+    // we just hand control over and stop here.
     const { error: signUpError } = await authClient.signUp.email({
       name,
       email,
@@ -53,16 +59,7 @@ export function SignupForm({ returnTo }: { returnTo: string }) {
       return
     }
 
-    // Mid-OAuth-authorize? Resume the flow on Better Auth's continue
-    // endpoint with the original signed query string. It will validate,
-    // see the now-signed-in session, issue a code, and redirect back to
-    // the client app's callback.
-    if (isOAuthResume) {
-      window.location.assign(
-        `/api/auth/oauth2/continue${window.location.search}`,
-      )
-      return
-    }
+    if (isOAuthResume) return
 
     // Genkan owns no /onboarding route — that's a menu concept. Hand off
     // straight to the resolved return_to (or the default).

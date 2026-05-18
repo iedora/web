@@ -2,9 +2,10 @@
 // without drizzle-kit at runtime. Runs inside the container via:
 //   node scripts/migrate.mjs
 //
-// The `genkan` database is created on first boot of the shared infra-postgres
-// accessory by infra/postgres/init.sql; this script just applies migrations
-// and seeds OAuth client rows.
+// Database bootstrap is two-layered (matches menu's pattern — see
+// products/menu/scripts/migrate.mjs for the full rationale):
+//   1. infra/postgres/init.sql creates every known product DB on cold boot.
+//   2. The CREATE-IF-NOT-EXISTS block below covers products added later.
 //
 // pg_advisory_lock guards against two replicas racing on `migrate()` —
 // Drizzle still has no built-in migration lock (see drizzle-orm#874).
@@ -21,6 +22,32 @@ if (!url) {
 }
 
 const LOCK_KEY = 411073872 // crc32 of "genkan-migrate"
+
+function adminUrlFor(connStr) {
+  const u = new URL(connStr)
+  u.pathname = '/postgres'
+  return u.toString()
+}
+
+function dbNameFromUrl(connStr) {
+  const u = new URL(connStr)
+  return decodeURIComponent(u.pathname.replace(/^\//, '')) || 'postgres'
+}
+
+// Ensure the target DB exists. Idempotent on every deploy after the first.
+{
+  const targetDb = dbNameFromUrl(url)
+  const adminSql = postgres(adminUrlFor(url), { max: 1, onnotice: () => {} })
+  try {
+    const rows = await adminSql`SELECT 1 FROM pg_database WHERE datname = ${targetDb}`
+    if (rows.length === 0) {
+      await adminSql.unsafe(`CREATE DATABASE "${targetDb.replace(/"/g, '""')}"`)
+      console.log(`Created database "${targetDb}".`)
+    }
+  } finally {
+    await adminSql.end()
+  }
+}
 
 const sql = postgres(url, { max: 1 })
 const db = drizzle(sql)
