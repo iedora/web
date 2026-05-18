@@ -1,0 +1,147 @@
+/*
+ * Genkan landing — page-local CSS for the editorial composition on `/`.
+ * Tokens, primitives and motion vars all come from @iedora/design-system;
+ * this file only places things in space.
+ */
+
+.genkan-landing {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.genkan-landing__shell {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding-block: clamp(20px, 3vw, 36px) clamp(28px, 4vw, 56px);
+  gap: clamp(40px, 6vw, 72px);
+}
+
+.genkan-landing__nav-cta {
+  font-family: var(--mono);
+  font-size: var(--t-2xs);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink);
+  text-decoration: none;
+  padding-bottom: 2px;
+  border-bottom: 1px solid var(--ink-22);
+  transition: border-color var(--d-2) var(--ease);
+}
+.genkan-landing__nav-cta:hover,
+.genkan-landing__nav-cta:focus-visible {
+  border-color: var(--ink);
+}
+
+.genkan-landing__head {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 24px;
+  padding-top: clamp(16px, 4vw, 48px);
+}
+
+.genkan-landing__mark {
+  margin: 0;
+  display: inline-flex;
+}
+
+.genkan-landing__cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 12px;
+}
+
+.genkan-landing__rule {
+  /* Honour the design-system's hairline language — full-width within the
+     shell, ink-14 tone. Separator already renders 1px high; just make
+     sure it sits with breathing room before the rooms list. */
+  margin: 0;
+}
+
+.genkan-landing__inside-label {
+  margin: 0 0 28px;
+  font-family: var(--mono);
+  font-size: var(--t-2xs);
+  letter-spacing: 0.20em;
+  text-transform: uppercase;
+  color: var(--ink-55);
+}
+
+.genkan-landing__rooms {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 32px 64px;
+  max-width: var(--container, 1320px);
+}
+
+.genkan-landing__rooms li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 18px;
+  row-gap: 8px;
+  align-items: baseline;
+  padding-top: 20px;
+  border-top: 1px solid var(--ink-14);
+}
+
+.genkan-landing__room-num {
+  font-family: var(--mono);
+  font-size: var(--t-2xs);
+  letter-spacing: 0.18em;
+  color: var(--cinnabar);
+}
+.genkan-landing__room-name {
+  font-family: var(--mono);
+  font-size: var(--t-2xs);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+.genkan-landing__room-body {
+  grid-column: 1 / -1;
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 17px;
+  line-height: 1.55;
+  color: var(--ink-70);
+  max-width: 36ch;
+  text-wrap: pretty;
+}
+
+.genkan-landing__foot {
+  margin-top: auto;
+  padding-top: 28px;
+  border-top: 1px solid var(--ink-14);
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: baseline;
+  font-family: var(--mono);
+  font-size: var(--t-2xs);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-55);
+}
+.genkan-landing__foot > :nth-child(1) { justify-self: start; }
+.genkan-landing__foot > :nth-child(2) { justify-self: center; }
+.genkan-landing__foot > :nth-child(3) { justify-self: end; }
+.genkan-landing__dot { color: var(--cinnabar); }
+
+@media (max-width: 760px) {
+  .genkan-landing__rooms {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+  .genkan-landing__foot {
+    grid-template-columns: 1fr;
+    justify-items: start;
+    gap: 8px;
+  }
+  .genkan-landing__foot > :nth-child(2),
+  .genkan-landing__foot > :nth-child(3) { justify-self: start; }
+}
