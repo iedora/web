@@ -40,9 +40,20 @@
       "minimumReleaseAge": "3 days"
     },
     {
-      "matchDepNames": ["bun", "oven/bun"],
+      "description": "Docker base images: major bumps require manual review (toolchain changes).",
+      "matchDatasources": ["docker"],
+      "matchDepNames": ["oven/bun", "node"],
+      "matchUpdateTypes": ["major"],
       "automerge": false,
       "labels": ["renovate-toolchain"]
+    },
+    {
+      "description": "Docker base image digest refreshes (security patches in oven/bun + node): auto-merge after 1-day grace to catch any post-release issue.",
+      "matchDatasources": ["docker"],
+      "matchDepNames": ["oven/bun", "node"],
+      "matchUpdateTypes": ["digest", "pinDigest"],
+      "automerge": true,
+      "minimumReleaseAge": "1 day"
     },
     {
       "matchDepNames": ["next", "react", "react-dom"],
