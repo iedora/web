@@ -34,57 +34,24 @@ data "cloudflare_zone" "this" {
   }
 }
 
-# ── Cloudflare Tunnel ─────────────────────────────────────────────────────────
+# ── Cloudflare Tunnel + ingress + DNS ─────────────────────────────────────────
+# Delegated to the shared cloudflare-tunnel-app module — every iedora product
+# that fronts an HTTP app on the homelab uses the same shape (menu + genkan).
+# Adding a 4th product = a `module "tunnel" { source = ... }` block in five
+# lines.
+#
+# Asset traffic skips the tunnel entirely — R2 is served via its custom domain
+# on Cloudflare's edge (see the R2 resources below). The module's ingress
+# catch-all (`http_status:404`) covers anything that isn't `kamal-proxy`.
 
-resource "cloudflare_zero_trust_tunnel_cloudflared" "menu" {
-  account_id = var.account_id
-  name       = var.tunnel_name
-  config_src = "cloudflare" # remotely-managed config → ingress block below applies
+module "tunnel" {
+  source = "../../../../infra/modules/cloudflare-tunnel-app"
+
+  account_id      = var.account_id
+  zone_id         = data.cloudflare_zone.this.id
+  tunnel_name     = var.tunnel_name
+  public_hostname = var.public_hostname
 }
-
-# Token used by the cloudflared accessory. Surfaced via a data source
-# (provider >= 5.8.2 dropped the attribute on the resource).
-data "cloudflare_zero_trust_tunnel_cloudflared_token" "menu" {
-  account_id = var.account_id
-  tunnel_id  = cloudflare_zero_trust_tunnel_cloudflared.menu.id
-}
-
-resource "cloudflare_zero_trust_tunnel_cloudflared_config" "menu" {
-  account_id = var.account_id
-  tunnel_id  = cloudflare_zero_trust_tunnel_cloudflared.menu.id
-
-  config = {
-    ingress = [
-      # App — kamal-proxy is the singleton proxy container on the host.
-      {
-        hostname = var.public_hostname
-        service  = "http://kamal-proxy"
-      },
-      # Catch-all required by cloudflared. Asset traffic goes directly to
-      # R2 via the cloudflare_r2_custom_domain resource below, not through
-      # the tunnel.
-      {
-        service = "http_status:404"
-      },
-    ]
-  }
-}
-
-# ── DNS — proxied CNAMEs pointing each hostname at the tunnel ─────────────────
-
-resource "cloudflare_dns_record" "menu" {
-  zone_id = data.cloudflare_zone.this.id
-  name    = var.public_hostname
-  type    = "CNAME"
-  content = "${cloudflare_zero_trust_tunnel_cloudflared.menu.id}.cfargotunnel.com"
-  ttl     = 1 # auto (required when proxied)
-  proxied = true
-}
-
-# `cloudflare_dns_record.assets` was here historically (CNAME → tunnel for
-# MinIO). Now removed: the R2 custom domain resource below creates its own
-# CNAME for the same hostname, pointing at R2's edge instead. Tofu will
-# delete the old record before the new one is provisioned.
 
 # ── R2 buckets ────────────────────────────────────────────────────────────────
 # Cloudflare's R2 S3 API accepts a regular Cloudflare API token as credentials:

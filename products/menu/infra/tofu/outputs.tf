@@ -36,12 +36,12 @@ output "assets_r2_secret_access_key" {
 
 output "tunnel_id" {
   description = "Cloudflare Tunnel UUID."
-  value       = cloudflare_zero_trust_tunnel_cloudflared.menu.id
+  value       = module.tunnel.id
 }
 
 output "tunnel_token" {
   description = "Connector token for the cloudflared accessory. Read at deploy time by .kamal/secrets via `tofu output -raw tunnel_token`."
-  value       = data.cloudflare_zero_trust_tunnel_cloudflared_token.menu.token
+  value       = module.tunnel.token
   sensitive   = true
 }
 

@@ -24,46 +24,15 @@ data "cloudflare_zone" "this" {
   }
 }
 
-# ── Cloudflare Tunnel ─────────────────────────────────────────────────────────
+# ── Cloudflare Tunnel + ingress + DNS ─────────────────────────────────────────
+# Delegated to the shared cloudflare-tunnel-app module. See products/menu/
+# infra/tofu/menu.tf for the same pattern.
 
-resource "cloudflare_zero_trust_tunnel_cloudflared" "genkan" {
-  account_id = var.account_id
-  name       = var.tunnel_name
-  config_src = "cloudflare" # remotely-managed config → ingress below applies
-}
+module "tunnel" {
+  source = "../../../../infra/modules/cloudflare-tunnel-app"
 
-# Token used by the cloudflared accessory. Surfaced via a data source
-# (provider >= 5.8.2 dropped the attribute on the resource).
-data "cloudflare_zero_trust_tunnel_cloudflared_token" "genkan" {
-  account_id = var.account_id
-  tunnel_id  = cloudflare_zero_trust_tunnel_cloudflared.genkan.id
-}
-
-resource "cloudflare_zero_trust_tunnel_cloudflared_config" "genkan" {
-  account_id = var.account_id
-  tunnel_id  = cloudflare_zero_trust_tunnel_cloudflared.genkan.id
-
-  config = {
-    ingress = [
-      {
-        hostname = var.public_hostname
-        service  = "http://kamal-proxy"
-      },
-      # Catch-all required by cloudflared.
-      {
-        service = "http_status:404"
-      },
-    ]
-  }
-}
-
-# ── DNS — proxied CNAME pointing at the tunnel ────────────────────────────────
-
-resource "cloudflare_dns_record" "genkan" {
-  zone_id = data.cloudflare_zone.this.id
-  name    = var.public_hostname
-  type    = "CNAME"
-  content = "${cloudflare_zero_trust_tunnel_cloudflared.genkan.id}.cfargotunnel.com"
-  ttl     = 1 # auto (required when proxied)
-  proxied = true
+  account_id      = var.account_id
+  zone_id         = data.cloudflare_zone.this.id
+  tunnel_name     = var.tunnel_name
+  public_hostname = var.public_hostname
 }
