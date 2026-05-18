@@ -19,6 +19,12 @@ concurrency:
   group: deploy-genkan
   cancel-in-progress: false
 
+# See menu-deploy.yml for why permissions must be granted at the caller level.
+permissions:
+  contents: read
+  packages: write
+  actions: read
+
 jobs:
   deploy:
     if: >-
