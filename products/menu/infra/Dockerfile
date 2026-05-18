@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.7
+# syntax=docker/dockerfile:1.24
 # Multi-stage build for the menu app inside the Bun workspaces monorepo.
 #
 # Build context is the REPO ROOT (set via deploy.yml's `builder.context:

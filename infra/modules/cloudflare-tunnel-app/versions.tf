@@ -1,5 +1,5 @@
 terraform {
-  required_version = "~> 1.10"
+  required_version = "~> 1.15"
 
   # Modules declare their provider REQUIREMENTS (so a root that doesn't
   # depend on Cloudflare gets a clear error) but inherit the configured

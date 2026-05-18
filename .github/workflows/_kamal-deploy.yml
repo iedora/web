@@ -263,7 +263,7 @@ jobs:
         # failed the workflow on HIGH/CRITICAL. Without this, a red gate
         # would also lose the diagnostic data.
         if: always()
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-image.sarif
           category: image-${{ inputs.product }}
@@ -294,7 +294,7 @@ jobs:
 
       - name: Attest SLSA build provenance
         if: success()
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@v4
         with:
           subject-name: ghcr.io/${{ inputs.ghcr_user }}/${{ inputs.product }}
           subject-digest: ${{ steps.digest.outputs.digest }}
@@ -311,7 +311,7 @@ jobs:
 
       - name: Attest image SBOM
         if: success()
-        uses: actions/attest-sbom@v3
+        uses: actions/attest-sbom@v4
         with:
           subject-name: ghcr.io/${{ inputs.ghcr_user }}/${{ inputs.product }}
           subject-digest: ${{ steps.digest.outputs.digest }}
