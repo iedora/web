@@ -20,6 +20,7 @@ import { Wordmark } from "@iedora/design-system";
       <Wordmark variant="display" />
       <span class="hint" aria-hidden="true">Open the house</span>
     </h1>
+    <p class="intro-line">A quiet house for digital craftsmanship.</p>
   </div>
 
   <!-- Contact house: slides open when the wordmark is clicked. -->
@@ -46,18 +47,49 @@ import { Wordmark } from "@iedora/design-system";
 
     <div class="ds-shoji" id="shoji">
       <div class="ds-shoji__inner">
-        <form class="ds-pane-grid" id="contactForm" autocomplete="off" novalidate>
+        <form
+          class="ds-pane-grid"
+          id="contactForm"
+          aria-label="Contact"
+          autocomplete="on"
+          novalidate
+        >
           <label class="ds-pane">
             <span class="ds-pane__label">Name</span>
-            <input class="ds-input" type="text" name="name" placeholder="—" required />
+            <input
+              class="ds-input"
+              type="text"
+              name="name"
+              autocomplete="name"
+              required
+              aria-required="true"
+              placeholder="—"
+            />
           </label>
           <label class="ds-pane">
             <span class="ds-pane__label">From</span>
-            <input class="ds-input" type="email" name="email" placeholder="you@—" required />
+            <input
+              class="ds-input"
+              type="email"
+              name="email"
+              inputmode="email"
+              autocomplete="email"
+              spellcheck="false"
+              required
+              aria-required="true"
+              placeholder="you@—"
+            />
           </label>
           <label class="ds-pane ds-pane--full">
             <span class="ds-pane__label">Message</span>
-            <textarea class="ds-textarea" name="message" rows="3" placeholder="Take your time. We read everything." required></textarea>
+            <textarea
+              class="ds-textarea"
+              name="message"
+              rows="3"
+              required
+              aria-required="true"
+              placeholder="Take your time. We read everything."
+            ></textarea>
           </label>
           <div class="ds-pane ds-pane--full shoji-send">
             <button type="submit" class="ds-btn ds-btn--solid">
@@ -67,7 +99,7 @@ import { Wordmark } from "@iedora/design-system";
           </div>
         </form>
       </div>
-      <div class="ds-shoji__receipt" aria-live="polite">
+      <div class="ds-shoji__receipt" role="status" aria-live="polite" aria-atomic="true">
         <div class="ds-shoji__receipt-inner">
           <div class="ds-shoji__seal" aria-hidden="true">i</div>
           <h4 class="ds-shoji__title">Received, gently.</h4>
@@ -133,6 +165,26 @@ import { Wordmark } from "@iedora/design-system";
     margin-right: 8px;
   }
   body.ds-loaded .wordmark-wrap:hover .hint { opacity: 1; }
+
+  /* One sentence under the wordmark — fades in shortly after the
+     letter-by-letter reveal lands. */
+  .intro-line {
+    margin: 22px 0 0;
+    max-width: 38ch;
+    font-family: var(--serif);
+    font-weight: 400;
+    font-size: 17px;
+    line-height: 1.55;
+    color: var(--ink-70);
+    text-wrap: pretty;
+    opacity: 0;
+    transform: translateY(6px);
+    transition: opacity var(--d-5) 0.85s var(--ease), transform var(--d-5) 0.85s var(--ease);
+  }
+  body.ds-loaded .intro-line { opacity: 1; transform: translateY(0); }
+  @media (prefers-reduced-motion: reduce) {
+    .intro-line { transition: none; }
+  }
 
   /* Contact pane — same cell as the front, fades in on .open */
   .contact-house {

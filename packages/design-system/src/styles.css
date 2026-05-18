@@ -854,6 +854,13 @@
   border-right: 0;
   border-bottom: 0;
 }
+
+/* Phones: stack panes single-column. Drops the vertical divider that
+   would otherwise sit at viewport-mid on narrow screens. */
+@media (max-width: 680px) {
+  .ds-pane-grid { grid-template-columns: 1fr; }
+  .ds-pane { border-right: 0; }
+}
 .ds-pane__label {
   font-family: var(--mono);
   font-size: var(--t-2xs);
@@ -942,7 +949,11 @@
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   padding: 40px 0;
-  gap: 16px;
+  /* 32px reserves a minimum breathing band between the head rule and
+     the title even when stage content fills the 1fr row (e.g. mission's
+     three-line title at desktop sizes). Mobile breakpoint tightens this
+     back down. */
+  gap: 32px;
 }
 .ds-v-head {
   width: min(var(--container), 100%);
@@ -980,10 +991,17 @@
      container width and centered, so the title block, the head bar and
      the foot bar all share one left edge on wide screens. (A duplicate
      `width: 100%` used to clobber this and let stage content sprawl to
-     the viewport edges.) */
+     the viewport edges.)
+
+     `padding-block-start: 32px` guarantees a 32px breathing band between
+     the stage box top and the first line of stage content (title), so
+     large display serifs (Fraunces opsz 144 at 7.8vw) don't end up
+     crowding the hairline rule under the section head. Without it, the
+     stage's intrinsic grid layout puts the first row at y=0 inside the
+     stage, ~0px from the head's bottom edge on tall viewports. */
   width: min(var(--container), 100%);
   margin: 0 auto;
-  padding: 0 var(--margin);
+  padding: 32px var(--margin) 0;
   align-self: center;
   min-height: 0;
   overflow: hidden;
