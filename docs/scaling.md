@@ -127,6 +127,54 @@ Realistic page-render budgets:
 
 **Not Docker Swarm overlay.** Kamal explicitly rejects Swarm — [`Kamal Handbook`](https://kamal-deploy.org/docs/) is built around a flat "containers on hosts" model, no orchestrator overlay. Don't fight it.
 
+### Kamal config changes that come with N>1
+
+Three concrete diffs land the moment you go past one host or one replica. Skipping them in advance is fine — none matter on a single box — but bake them in the day you add a second.
+
+**1. Throttle the rolling deploy.** Without `boot.limit`, Kamal rolls every host in parallel (SSHKit threads); a bad image takes the whole fleet at once. Pin one-at-a-time with a short settle window so kamal-proxy can drain:
+
+```yaml
+servers:
+  web:
+    hosts: [...]
+    boot:
+      limit: 1
+      wait: 10
+```
+
+**2. Move migrations to a pre-deploy hook with `--primary`.** Today `scripts/migrate.mjs` runs in `servers.web.cmd` and is safe under N replicas because of its `pg_advisory_lock` ([rule 2 in genkan's hard rules](../AGENTS.md) and menu's `migrate.mjs`). At N>1 it's still safe but wasteful — every replica boots, every replica grabs the lock, only one wins. Replace with a `.kamal/hooks/pre-deploy` script that runs exactly once against the freshly-built image:
+
+```bash
+#!/usr/bin/env bash
+# .kamal/hooks/pre-deploy
+set -euo pipefail
+kamal app exec --primary --version="$KAMAL_VERSION" "node scripts/migrate.mjs"
+```
+
+And drop the migrate from `cmd:` (just `node server.js`). `--version=$KAMAL_VERSION` is load-bearing — without it Kamal would run the migration against the *current* image, before the new code is rolled. Pinned by `basecamp/kamal#526`.
+
+**3. Per-host cloudflared accessory, same tunnel token.** Cloudflare Tunnel connectors are inherently HA: same token on N connectors = N registered connections, CF load-balances across them automatically. No LB on your side. The single-host snippet:
+
+```yaml
+accessories:
+  cloudflared:
+    host: <%= ENV.fetch("ONPREM_HOST") %>
+```
+
+becomes:
+
+```yaml
+accessories:
+  cloudflared:
+    hosts:
+      - <%= ENV.fetch("WEB_HOST_1") %>
+      - <%= ENV.fetch("WEB_HOST_2") %>
+```
+
+`TUNNEL_TOKEN` is unchanged — Tofu still mints exactly one tunnel. Each connector picks up the same secret and registers independently. If one host dies, CF stops routing to its connector within ~30s; existing connections drop, new ones land on the survivor.
+
+These three together are what makes Kamal "scale to N hosts" actually mean zero-downtime rolling deploys with surviving-host failover, not just "two boxes running the same image".
+
 **When this makes sense.**
 - You have paying customers who notice an outage within minutes.
 - You're willing to spend €48/yr extra AND accept the per-page latency penalty above.
@@ -148,18 +196,21 @@ Postgres logical replication ([docs](https://www.postgresql.org/docs/current/log
 
 ## 6. Recommended preparation today (zero cost)
 
-Install Tailscale as a host service on the homelab. Takes 2 minutes, costs nothing, makes scenario 4 a 2-line change later instead of a networking project.
+Install Tailscale as a host service on the homelab. Takes 2 minutes, costs nothing, makes scenario 4 a 2-line change later instead of a networking project. **Also unlocks CI deploys** (the GitHub Actions runner joins the tailnet via `tailscale/github-action@v4` and reaches the homelab over MagicDNS — see `docs/deploy.md` § Network reachability).
 
 ```bash
 # On the homelab box, as root:
 curl -fsSL https://tailscale.com/install.sh | sh
-tailscale up --ssh --hostname=iedora-homelab
+tailscale up --hostname=iedora-homelab
 # Authenticate via the printed URL (one-time, your Tailscale account).
 
-# Note the MagicDNS hostname Tailscale assigns (something like
-# iedora-homelab.tail-xxxx.ts.net) — write it in products/menu/infra/.env as a comment
-# next to ONPREM_HOST. That's it.
+# Note the MagicDNS hostname Tailscale assigns (e.g. iedora-homelab.tail-xxxx.ts.net).
+# Local `just <product>::deploy` keeps using the LAN IP in products/<product>/infra/.env
+# (fast, no detour); the CI runner uses the tailnet MagicDNS name via the
+# `ONPREM_HOST` GitHub Variable.
 ```
+
+**`--ssh` is optional and orthogonal to reachability.** Adding `--ssh` to `tailscale up` enables [Tailscale SSH](https://tailscale.com/kb/1193/tailscale-ssh) — `tailscaled` claims port 22 on the tailnet IP and authenticates connections using tailnet identity instead of `authorized_keys`. Useful if you want to retire SSH keys for interactive admin access. **Not required** for either Kamal deploys or the CI runner; standard OpenSSH continues to work whether the flag is set or not. Default to off; flip on later if you want the centralized auth model.
 
 Why on the host, not in a container: Tailscale-as-container forces you to share its netns or run sidecars per accessory. Host-level means every container's outbound traffic can reach the tailnet via the host's routing table, no Kamal config changes today.
 

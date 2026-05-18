@@ -191,19 +191,21 @@ jobs:
         run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
 
       - name: Cache Next.js build output
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
-          # Turbopack's persistent cache lives here in Next 16 — large
-          # saving on warm runs. Path is repo-root-relative;
-          # `actions/cache` doesn't honour `defaults.run.working-directory`.
+          # Turbopack's persistent cache. Key hashes ONLY deps + config —
+          # Turbopack does per-module invalidation internally, so hashing
+          # source files defeats incremental builds (every commit = cold
+          # cache). Vercel's stale 2023 doc still says to hash sources;
+          # that guidance pre-dates Turbopack's persistent cache.
           path: products/menu/.next/cache
-          key: ${{ runner.os }}-nextjs-${{ hashFiles('bun.lock') }}-${{ hashFiles('products/menu/src/**/*.ts', 'products/menu/src/**/*.tsx') }}
+          key: next-menu-${{ runner.os }}-${{ hashFiles('products/menu/bun.lock', 'products/menu/next.config.ts') }}
           restore-keys: |
-            ${{ runner.os }}-nextjs-${{ hashFiles('bun.lock') }}-
+            next-menu-${{ runner.os }}-
 
       - name: Cache Playwright browsers
         id: pw-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-${{ steps.pw-version.outputs.version }}

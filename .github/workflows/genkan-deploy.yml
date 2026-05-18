@@ -1,0 +1,33 @@
+# Genkan CD — same shape as menu-deploy.yml.
+
+name: Genkan deploy
+
+on:
+  workflow_run:
+    workflows: ['Genkan']
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: 'Commit SHA to deploy (defaults to current main)'
+        required: false
+        type: string
+
+jobs:
+  deploy:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main')
+    uses: ./.github/workflows/_kamal-deploy.yml
+    with:
+      product: genkan
+      sha: ${{ github.event.workflow_run.head_sha || inputs.sha || github.sha }}
+      onprem_host: ${{ vars.ONPREM_HOST }}
+      public_hostname: ${{ vars.GENKAN_PUBLIC_HOSTNAME }}
+      bws_project_id: ${{ vars.BWS_PROJECT_ID }}
+      ghcr_user: ${{ vars.GHCR_USER || github.repository_owner }}
+    secrets:
+      BWS_ACCESS_TOKEN: ${{ secrets.BWS_ACCESS_TOKEN }}
+      KAMAL_SSH_PRIVATE_KEY: ${{ secrets.KAMAL_SSH_PRIVATE_KEY }}

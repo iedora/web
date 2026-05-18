@@ -5,12 +5,14 @@
 # action stays usable from any working-directory).
 #
 # This is THE one place setup gets defined — every job that needs deps
-# delegates to it. Bumping Bun, or adding a cache layer, is a one-file edit.
+# delegates to it. Bumping Bun, or tuning the cache, is a one-file edit.
 #
-# Pattern reference: t3-oss/create-t3-turbo `tooling/github/setup/action.yml`.
+# Cache layer: `~/.bun/install/cache` keyed on bun.lock. `setup-bun` itself
+# does NOT cache the install dir (only the bun binary) — issue #48. With a
+# warm cache, `bun install` on a 5-product monorepo drops from ~25s to ~3s.
 
 name: 'Setup workspace'
-description: 'Install Bun and resolve every Bun workspace from the repo root.'
+description: 'Install Bun, prime the install cache, and resolve every Bun workspace.'
 
 inputs:
   bun-version:
@@ -25,6 +27,18 @@ runs:
       uses: oven-sh/setup-bun@v2
       with:
         bun-version: ${{ inputs.bun-version }}
+
+    # Bun's global install cache. Hierarchical key: exact bun.lock match
+    # restores 100%; same-OS fallback gets us partial reuse on lock churn.
+    # cache@v5 (Apr 2026) — Node 24 runtime, native against the Cache v2
+    # backend that replaced v1 in Apr 2025.
+    - name: Cache Bun install dir
+      uses: actions/cache@v5
+      with:
+        path: ~/.bun/install/cache
+        key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+        restore-keys: |
+          bun-${{ runner.os }}-
 
     - name: Install workspace dependencies
       # `working-directory` for `uses:` steps doesn't honour the caller's

@@ -1,9 +1,13 @@
 # Kamal 2 — single homelab box behind Cloudflare Tunnel.
 #
-# Build runs natively on the homelab box via `builder.remote: ssh://...`
-# (amd64, no QEMU on the Mac). Image is pushed to GitHub Container Registry
-# and pulled by the same box. Registry auth uses the `gh` CLI's token
-# (see .kamal/secrets).
+# Builds split by caller:
+#   - Local laptop (`just menu::deploy`): native amd64 build on the homelab
+#     via `builder.remote: ssh://...`. No QEMU on the Mac, no source
+#     transfer over the WAN.
+#   - GitHub Actions (`menu-deploy.yml`): local build on the runner with
+#     buildx + `type=gha,mode=max,scope=menu` cache. ERB toggle below
+#     keys off `KAMAL_CI=true` (set by the workflow).
+# Either way the image lands in GHCR and is pulled by the homelab.
 
 <%
   public_hostname = ENV.fetch("PUBLIC_HOSTNAME")
@@ -52,24 +56,29 @@ registry:
 ssh:
   user: root
 
-# Remote-only builder: SSH to the box and build there natively (amd64).
-# No buildx on the Mac, no QEMU, no source transfer over the WAN.
+# Builder. Two modes, picked by KAMAL_CI:
+#   - CI:     local build on the GHA runner with GHA buildx cache
+#             (mode=max so every intermediate stage is exported; scope=menu
+#             so menu + genkan don't trample each other's layers).
+#   - laptop: SSH-remote build on the homelab, no QEMU.
+#
+# Kamal runs from products/menu/infra/kamal/. Build context is the REPO ROOT
+# (../../../..) so the Bun workspace lockfile + /packages/* are visible.
+# `dockerfile:` is resolved from Kamal's cwd, NOT from the build context —
+# Kamal absolutizes it before invoking docker.
 builder:
   arch: amd64
-  remote: ssh://root@<%= ENV.fetch("ONPREM_HOST") %>
-  local: false
-  # Kamal runs from products/menu/infra/kamal/; both paths below are resolved
-  # via File.expand_path against that cwd.
-  #
-  # Build context is the REPO ROOT (../../../..) so the Bun workspace lockfile
-  # at /bun.lock + /packages/design-system are visible to the build.
-  # The Dockerfile is referenced by its repo-relative path.
   context: ../../../..
-  # `dockerfile:` is resolved from Kamal's cwd (products/menu/infra/kamal/),
-  # NOT from the build context. Kamal converts it to an absolute path before
-  # invoking docker, so docker can read a Dockerfile that sits outside the
-  # build context root.
   dockerfile: ../Dockerfile
+<% if ENV["KAMAL_CI"] == "true" %>
+  local: true
+  cache:
+    type: gha
+    options: mode=max,scope=menu
+<% else %>
+  local: false
+  remote: ssh://root@<%= ENV.fetch("ONPREM_HOST") %>
+<% end %>
 
 env:
   clear:

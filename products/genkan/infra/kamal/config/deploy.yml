@@ -53,18 +53,23 @@ registry:
 ssh:
   user: root
 
-# Remote-only builder: SSH to the box and build there natively (amd64).
+# Builder. Two modes, picked by KAMAL_CI (see menu's deploy.yml for the
+# full rationale):
+#   - CI:     local build on the GHA runner, cache scope=genkan.
+#   - laptop: SSH-remote build on the homelab.
 builder:
   arch: amd64
-  remote: ssh://root@<%= ENV.fetch("ONPREM_HOST") %>
-  local: false
-  # Kamal runs from products/genkan/infra/kamal/. Build context is the REPO
-  # ROOT (../../../..) so the Bun workspace lockfile + linked packages are
-  # visible to the build.
   context: ../../../..
-  # See products/menu/infra/kamal/config/deploy.yml for the rationale —
-  # `dockerfile:` is resolved from Kamal's cwd, not the build context.
   dockerfile: ../Dockerfile
+<% if ENV["KAMAL_CI"] == "true" %>
+  local: true
+  cache:
+    type: gha
+    options: mode=max,scope=genkan
+<% else %>
+  local: false
+  remote: ssh://root@<%= ENV.fetch("ONPREM_HOST") %>
+<% end %>
 
 env:
   clear:

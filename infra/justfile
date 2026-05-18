@@ -18,14 +18,39 @@ tofu := "bin/with-secrets tofu -chdir=tofu"
 _default:
     @just --list --unsorted
 
-# Boot the shared accessories (Postgres + backups). Tofu first (so the R2
-# bucket + its scoped S3 token exist before backups reads `tofu output`),
-# Kamal second.
+# Boot the shared accessories (Postgres + backups) AND apply the cross-
+# product Tofu config (R2 backups bucket + Tailscale ACL/CI OAuth client).
+#
+# Tofu first (so the R2 bucket + its scoped S3 token exist before backups
+# reads `tofu output`, AND the Tailscale CI OAuth client exists so CI can
+# read it from BWS); Kamal second.
+#
+# The Tailscale CI OAuth client's secret is available ONLY at create time
+# — Tofu state holds the latest value, and we write it through to BWS so
+# CI can read it without running Tofu (same pattern as house workload token).
 deploy:
     #!/usr/bin/env bash
     set -euo pipefail
     {{tofu}} init -upgrade -input=false >/dev/null
     {{tofu}} apply -auto-approve
+    # Write-through: push the CI Tailscale OAuth credentials to BWS so the
+    # GitHub Actions workflow can fetch them via `bws secret list`. Idempotent
+    # — creates the entries on first run, updates them on subsequent runs
+    # (e.g. after `tofu apply -replace=tailscale_oauth_client.ci`).
+    CI_ID=$(bin/with-secrets {{tofu}} output -raw ci_tailscale_oauth_client_id)
+    CI_SECRET=$(bin/with-secrets {{tofu}} output -raw ci_tailscale_oauth_client_secret)
+    for KEY_VAL in "INFRA_CI_TAILSCALE_OAUTH_CLIENT_ID:$CI_ID" \
+                   "INFRA_CI_TAILSCALE_OAUTH_CLIENT_SECRET:$CI_SECRET"; do
+      KEY=${KEY_VAL%%:*}
+      VAL=${KEY_VAL#*:}
+      SECRET_ID=$(bws secret list "$BWS_PROJECT_ID" -o json \
+        | jq -r --arg k "$KEY" '.[] | select(.key==$k) | .id')
+      if [ -n "$SECRET_ID" ]; then
+        bws secret edit "$SECRET_ID" --value "$VAL" -o none
+      else
+        bws secret create "$KEY" "$VAL" "$BWS_PROJECT_ID" -o none
+      fi
+    done
     bin/with-secrets bash -c \
       'cd kamal && PATH="{{kamal-bin}}$PATH" exec kamal accessory boot all'
 

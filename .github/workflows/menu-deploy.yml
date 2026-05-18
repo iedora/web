@@ -1,0 +1,48 @@
+# Menu CD — fires after the Menu CI workflow completes successfully on main.
+#
+# Triggers:
+#   - workflow_run: green Menu CI on main → auto-deploy
+#   - workflow_dispatch: manual redeploy (no CI re-run)
+#
+# Why workflow_run, not push paths: the upstream CI workflow already encodes
+# the "did anything in menu change" question via its paths: filter. If CI
+# ran AND passed AND it was on main, that's the signal — no second filter.
+
+name: Menu deploy
+
+on:
+  workflow_run:
+    workflows: ['Menu']
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: 'Commit SHA to deploy (defaults to current main)'
+        required: false
+        type: string
+
+jobs:
+  deploy:
+    # Guards:
+    #   - workflow_run: only when the upstream concluded SUCCESS. There is a
+    #     well-documented bug (actions/runner#4035) where workflow_run can
+    #     fire before the upstream completes — this gate handles that case.
+    #   - workflow_dispatch: always allowed.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main')
+    uses: ./.github/workflows/_kamal-deploy.yml
+    with:
+      product: menu
+      # workflow_run gives us head_sha; workflow_dispatch lets the user pick
+      # one or defaults to the SHA of the ref the dispatch fired on.
+      sha: ${{ github.event.workflow_run.head_sha || inputs.sha || github.sha }}
+      onprem_host: ${{ vars.ONPREM_HOST }}
+      public_hostname: ${{ vars.MENU_PUBLIC_HOSTNAME }}
+      bws_project_id: ${{ vars.BWS_PROJECT_ID }}
+      ghcr_user: ${{ vars.GHCR_USER || github.repository_owner }}
+    secrets:
+      BWS_ACCESS_TOKEN: ${{ secrets.BWS_ACCESS_TOKEN }}
+      KAMAL_SSH_PRIVATE_KEY: ${{ secrets.KAMAL_SSH_PRIVATE_KEY }}

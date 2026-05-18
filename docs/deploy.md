@@ -155,7 +155,21 @@ for KEY in INFRA_CLOUDFLARE_API_TOKEN INFRA_STATE_PASSPHRASE \
 done
 ```
 
-Generate each value with `openssl rand -hex 32`, except `INFRA_CLOUDFLARE_API_TOKEN` (from step 3) and `INFRA_GHCR_TOKEN` (https://github.com/settings/tokens — classic PAT, `write:packages` scope). For `MENU_OAUTH_CLIENT_ID` / `MENU_OAUTH_CLIENT_SECRET`, generate fresh random values and remember them — they get seeded into genkan's `oauth_client` table by genkan's `migrate.mjs` on first boot (driven by `TRUSTED_CLIENTS`).
+Generate each value with `openssl rand -hex 32`, except `INFRA_CLOUDFLARE_API_TOKEN` (from step 3) and `INFRA_GHCR_TOKEN` (https://github.com/settings/tokens — **classic PAT, `write:packages` scope** — see "Why classic for GHCR" below). For `MENU_OAUTH_CLIENT_ID` / `MENU_OAUTH_CLIENT_SECRET`, generate fresh random values and remember them — they get seeded into genkan's `oauth_client` table by genkan's `migrate.mjs` on first boot (driven by `TRUSTED_CLIENTS`).
+
+**Why classic for GHCR (one declared exception to the fine-grained PAT preference).** Every other PAT in this stack is fine-grained — `INFRA_GITHUB_API_TOKEN` (Tofu repo config), etc. `INFRA_GHCR_TOKEN` is the exception, and stays classic because fine-grained PATs + personal accounts + GHCR is GitHub's worst-supported auth combination today: the "Packages" permission only reliably surfaces in the UI for org-scoped tokens with org-owned packages, and even when surfaced it requires packages to be pre-linked to the granted repo (chicken-and-egg on first push). Classic PAT with `write:packages` sidesteps both issues. The trade-off is mostly cosmetic for a single-repo solo account: classic `write:packages` covers all your account's GHCR images, but with one repo the practical blast radius equals a fine-grained PAT's anyway. Revisit if you ever move iedora into a GH org.
+
+**Token + OAuth-client naming convention.** Every human-named credential follows the `iedora-<role>` shape so you can scan by name and know the credential's purpose without opening it — important for fast rotation.
+
+| Credential | Where it lives | Name / description |
+|---|---|---|
+| GitHub fine-grained PAT (Tofu repo config) | https://github.com/settings/personal-access-tokens?type=beta | `iedora-tofu-admin` |
+| GitHub classic PAT (GHCR push) | https://github.com/settings/tokens | `iedora-ghcr` (note: classic = the exception above) |
+| Tailscale OAuth bootstrap (Tofu auth) | https://login.tailscale.com/admin/settings/oauth | `iedora-tofu-admin` |
+| Tailscale OAuth CI (runner auth) | Tofu-managed via `tailscale_oauth_client.ci` (description) | `iedora-gha-ci` |
+| CI SSH keypair (root@homelab) | local `~/.ssh/ci_ed25519` + BWS `INFRA_KAMAL_SSH_PRIVATE_KEY` | comment `ci@iedora-YYYYMMDD-HHMM` (date-stamped on creation) |
+
+Two `iedora-tofu-admin`s coexist in different systems (Tailscale and GitHub) — that's intentional: same role name + different lookup paths = easy to find the right one when rotating.
 
 Keep the BWS access token in your password manager — losing it means losing access to every other secret. `products/menu/infra/.env` is gitignored.
 
@@ -214,6 +228,174 @@ For ad-hoc kamal commands (e.g. `kamal app stop`, `kamal accessory exec`), sourc
 set -a; . products/menu/infra/.env; set +a
 kamal app stop
 ```
+
+---
+
+## Continuous deployment via GitHub Actions
+
+Once the manual flow above works end-to-end, the same Kamal config runs from GitHub Actions. **Push to `main` → CI runs → green CI triggers deploy.** Local `just <product>::deploy` keeps working unchanged — it's the escape hatch for first-time setup, debugging, and the homelab-only Astro path.
+
+### How it's wired
+
+```
+git push main
+   └─► .github/workflows/<product>.yml         (typecheck, lint, unit, e2e)
+        └─► .github/workflows/<product>-deploy.yml   (workflow_run: on success)
+             └─► .github/workflows/_kamal-deploy.yml (reusable)
+                  ├─► docker buildx build (cache: type=gha,mode=max,scope=<product>)
+                  ├─► docker push → ghcr.io/<user>/<product>:<sha>
+                  ├─► kamal deploy --version=<sha>
+                  └─► curl https://<hostname>/up   (smoke)
+```
+
+The Kamal `deploy.yml` has an ERB toggle on `KAMAL_CI=true` that swaps `builder.remote: ssh://homelab` for `builder.local: true` + GHA cache. Local laptop deploys (no `KAMAL_CI`) take the remote-builder branch unchanged.
+
+House is simpler — `house-deploy.yml` is direct `push` paths-filtered → `cloudflare/wrangler-action@v3`. No Kamal, no SSH, no GHCR.
+
+### One-time GitHub config (per repo)
+
+**Secrets** (`Settings → Secrets and variables → Actions → Secrets`):
+
+| Secret | What | Source |
+|---|---|---|
+| `BWS_ACCESS_TOKEN` | Unlocks the BWS project. Same token as `products/menu/infra/.env`. | Bitwarden Secrets Manager machine account |
+| `KAMAL_SSH_PRIVATE_KEY` | Private key for `root@$ONPREM_HOST`. Use a **dedicated CI keypair** (`ci_ed25519`), not your personal `id_ed25519` — least-privilege so a GH leak doesn't expose your laptop's full SSH reach. | See "Minting the CI SSH key" below. |
+
+**Variables** (same screen, `Variables` tab — non-secret, visible in logs):
+
+| Variable | Example | Notes |
+|---|---|---|
+| `ONPREM_HOST` | `iedora-homelab` | Tailnet MagicDNS hostname for CI. **Different from the local `.env` value** (which keeps the LAN IP for fast laptop deploys). |
+| `BWS_PROJECT_ID` | UUID | Same as the local `.env`. |
+| `MENU_PUBLIC_HOSTNAME` | `menu.iedora.com` | Used for the post-deploy smoke check. |
+| `GENKAN_PUBLIC_HOSTNAME` | `genkan.iedora.com` | Same. |
+| `GHCR_USER` | `eduvhc` | Optional — falls back to `github.repository_owner` if unset. |
+
+Set them all at once via `gh`:
+
+```bash
+gh secret set BWS_ACCESS_TOKEN < <(echo "0...")
+gh secret set KAMAL_SSH_PRIVATE_KEY < ~/.ssh/id_ed25519
+gh variable set ONPREM_HOST --body "192.168.50.53"
+gh variable set BWS_PROJECT_ID --body "..."
+gh variable set MENU_PUBLIC_HOSTNAME --body "menu.iedora.com"
+gh variable set GENKAN_PUBLIC_HOSTNAME --body "genkan.iedora.com"
+```
+
+**House workload token is auto-populated.** `just house::deploy` (locally, on first run) mints the narrow Workers workload token via Tofu and write-throughs it to BWS as `INFRA_HOUSE_WORKERS_TOKEN`. CI reads from BWS — no Tofu in CI. Rotate via `just house::rotate-token` (NEVER bare `tofu apply -replace=...`, or BWS goes stale and CI fails with 401).
+
+### Minting the CI SSH key
+
+The GH `KAMAL_SSH_PRIVATE_KEY` secret is a **dedicated** ed25519 keypair, not your laptop's personal key. Blast radius if leaked: the homelab box, nothing else.
+
+```bash
+# 1. Mint a fresh keypair on your laptop. Empty passphrase — non-interactive use.
+ssh-keygen -t ed25519 -N "" -f ~/.ssh/ci_ed25519 -C "ci@iedora-$(date +%Y%m%d)"
+
+# 2. Authorize the public half on root@homelab (uses your existing key for auth).
+ssh-copy-id -i ~/.ssh/ci_ed25519.pub root@$ONPREM_HOST
+
+# 3. Confirm the new key works on its own.
+ssh -i ~/.ssh/ci_ed25519 -o BatchMode=yes root@$ONPREM_HOST 'whoami'   # → root
+
+# 4. Push the private half as the GH secret (file → stdin, never on the command line).
+gh secret set KAMAL_SSH_PRIVATE_KEY < ~/.ssh/ci_ed25519
+```
+
+To rotate later: regenerate, ssh-copy-id the new one, push it as the GH secret, then remove the old line from `/root/.ssh/authorized_keys` on the box. (No automation — happens too rarely to be worth wrapping.)
+
+### Network reachability — Tailscale tailnet
+
+GitHub-hosted runners can't route to a LAN IP (`192.168.50.53`). The repo solves this by joining the runner to the same tailnet as the homelab via `tailscale/github-action@v4`. OAuth mints a per-run ephemeral auth key; v4 also runs `tailscale logout` at job end, so the device disappears from the admin console within seconds. Tailscale's "Private connections for every GitHub Actions runner" pattern (their 2025 blog post) is what this implements verbatim.
+
+**Local-laptop deploys still use the LAN IP** (`products/menu/infra/.env` keeps `ONPREM_HOST=192.168.50.53`) — fast, no tailnet round-trip. **CI deploys use the tailnet hostname** (`vars.ONPREM_HOST=iedora-homelab`). Same Kamal config, different host string. The `ci_ed25519` key is authorized for both paths (it's keyed on the user `root`, not the IP).
+
+**One-time homelab setup** (already done if you followed `docs/scaling.md` § 6):
+
+```bash
+ssh root@$ONPREM_HOST 'curl -fsSL https://tailscale.com/install.sh | sh'
+ssh root@$ONPREM_HOST 'tailscale up --hostname=iedora-homelab'
+# Click the printed URL to authenticate the box on your Tailscale account.
+# Verify with `tailscale status` — should print iedora-homelab + 100.x.x.x.
+```
+
+**The ACL + CI OAuth client are managed by Tofu.** `infra/tofu/tailscale.tf` declares both as resources; `just infra::deploy` applies them and write-throughs the CI client credentials to BWS as `INFRA_CI_TAILSCALE_OAUTH_CLIENT_{ID,SECRET}`. CI fetches those from BWS at deploy time. No GH secret/var lives for Tailscale separately.
+
+**One-time bootstrap** (chicken-and-egg: Tofu needs an OAuth client to manage OAuth clients, and the bootstrap client must already hold every scope it grants downstream — Tailscale's least-privilege model). Three steps, in this exact order; doing them out of order forces a two-run bootstrap.
+
+1. **Pre-seed the ACL** so `tag:ci` exists before any client tries to reference it. Tailscale admin → **Access Controls** → paste (or merge into) the policy:
+
+   ```jsonc
+   {
+     "tagOwners": {
+       "tag:ci": ["autogroup:owner"]
+     },
+     "acls": [
+       { "action": "accept", "src": ["*"], "dst": ["*:*"] }
+     ]
+   }
+   ```
+
+   This is the same content `infra/tofu/tailscale.tf` will reconcile on the first apply — Tofu's `overwrite_existing_content = true` makes the apply a no-op against this seed. Without this seed, step 2 fails because the OAuth-client UI rejects references to a non-existent tag.
+
+2. **Generate the bootstrap OAuth client** (Settings → OAuth clients → Generate):
+   - Description: `iedora-tofu-admin`
+   - Scopes (all three, write): **`policy_file`** + **`oauth_keys`** + **`auth_keys`**
+     - `policy_file` (write) — for Tofu to manage the ACL.
+     - `oauth_keys` (write) — for Tofu to mint the narrower CI OAuth client.
+     - `auth_keys` (write) — required because Tailscale only lets you GRANT scopes you HOLD; the CI client gets `auth_keys`, so this one needs it too.
+   - Tags: `tag:ci` (auto-required when `auth_keys` is checked).
+
+   *Existing bootstrap with narrower scopes?* Tailscale supports editing in place — Settings → OAuth clients → click the client → add `auth_keys` + `tag:ci`. No need to recreate.
+
+3. **Push credentials to BWS and apply:**
+
+   ```bash
+   # Note the `-o none --` ordering — `--` ends clap flag parsing so values
+   # starting with `-` (or any other special prefix) are safe.
+   bws secret create -o none -- INFRA_TAILSCALE_OAUTH_CLIENT_ID     "<id>"     "$BWS_PROJECT_ID"
+   bws secret create -o none -- INFRA_TAILSCALE_OAUTH_CLIENT_SECRET "<secret>" "$BWS_PROJECT_ID"
+   just infra::deploy
+   ```
+
+   One `tofu apply` reconciles the ACL (no-op against the seed), mints `tailscale_oauth_client.ci`, write-throughs CI client ID/secret to BWS as `INFRA_CI_TAILSCALE_OAUTH_CLIENT_{ID,SECRET}`.
+
+After that, no GH secret/var for Tailscale exists — CI reads from BWS via the same `bws secret list` pattern as every other deploy-time value.
+
+**ACL drift warning.** `tailscale_acl.policy` is declared with `overwrite_existing_content = true` so Tofu can converge from the default Tailscale-shipped policy on first apply. The consequence: every subsequent `tofu apply` silently overwrites any UI edits to the policy. **Edit the ACL in `infra/tofu/tailscale.tf`, never in the admin console**, after the first apply.
+
+**Rotation.** `tofu apply -replace=tailscale_oauth_client.ci` mints a fresh CI OAuth client; the write-through in `just infra::deploy` pushes the new ID + secret to BWS atomically. CI picks up the new credentials on the next workflow run.
+
+**Pinning note** (workflow): `tailscale/github-action@v4`'s `version` input pins the Tailscale CLI installed on the runner. We hold a literal patch version (currently `1.96.5`) rather than `latest`, because `tailscale/github-action#284` documents `latest` resolving to different CLI versions across Linux/macOS/Windows at the same moment. Roll forward deliberately by bumping the pin.
+
+**If `ONPREM_HOST` is already a public IP** (cloud VPS): drop the Tailscale step entirely. The runner reaches the box directly over SSH. Hardening is then plain `sshd_config` (key-only login, no password, fail2ban).
+
+### Manual operations
+
+```bash
+gh workflow run menu-deploy.yml                       # re-deploy current main
+gh workflow run menu-deploy.yml -f sha=abc1234        # deploy a specific commit
+gh run watch                                          # tail the latest run
+```
+
+Rollback: `gh workflow run menu-deploy.yml -f sha=<previous-good-sha>` re-rolls that image (which is still in GHCR, tagged by SHA). Or from a laptop: `just menu::rollback` (one version back, same as before).
+
+### Caching map
+
+| Layer | Where | Key | Hit rate |
+|---|---|---|---|
+| Bun install (`~/.bun/install/cache`) | composite `setup/action.yml` | `bun-<os>-<bun.lock hash>` | ~95% (only invalidated by lockfile churn) |
+| Next/Turbopack (`.next/cache`) | `menu.yml` e2e job | `next-menu-<os>-<bun.lock + next.config.ts>` | ~90% (Turbopack invalidates per-module internally — coarse key is enough) |
+| Playwright browsers | `menu.yml` e2e job | `pw-<os>-<playwright version>` | ~99% (only invalidated when @playwright/test bumps) |
+| Docker buildx layers | `_kamal-deploy.yml` | `type=gha,mode=max,scope=<product>` | ~80% (mode=max exports every intermediate stage; per-product scope so menu + genkan don't trample) |
+
+GHA caches are per-branch with base-branch fallback, evicted after 7 days untouched, capped at 10 GiB per repo (lift-able for paid orgs). A nightly cron pinging the cache via `actions/cache/restore --lookup-only` would keep hot keys warm if eviction starts biting; not needed today.
+
+### When NOT to use CI for deploy
+
+- **First-ever setup on a fresh box.** GHA can't run `kamal server bootstrap` (which needs an interactive `known_hosts` confirmation and Docker install). Use `just <product>::deploy` from a laptop once; subsequent deploys can come from CI.
+- **Tofu changes.** `_kamal-deploy.yml` does NOT run `tofu apply` — only Kamal. If you edit `products/menu/infra/tofu/*.tf`, you still run `just menu::deploy` locally to reconcile Cloudflare resources. CI then takes over for app deploys.
+- **Anything destructive.** `kamal rollback`, `kamal app stop`, `kamal accessory remove` — local only. The CI flow is one-way (forward roll + smoke check).
 
 ---
 

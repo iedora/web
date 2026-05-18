@@ -1,0 +1,224 @@
+# Reusable Kamal deploy workflow — called by menu-deploy.yml + genkan-deploy.yml.
+#
+# Shape (2026-canonical Kamal-on-GHA):
+#   1. Checkout @ the same SHA the upstream CI ran against
+#   2. setup-buildx + ghaction-github-runtime → exposes the GHA cache token to
+#      buildx subprocesses, so Kamal's `docker buildx build` reads/writes
+#      `type=gha,mode=max` against this repo's cache (scoped per product).
+#   3. docker/login → GHCR with GITHUB_TOKEN (rotates with the workflow run).
+#   4. Install BWS CLI → Kamal's bitwarden-sm secrets adapter shells out to it.
+#   5. SSH key → root@<onprem_host>.
+#   6. Install Ruby + kamal gem.
+#   7. `kamal deploy` (KAMAL_CI=true selects the GHA builder branch of deploy.yml).
+#   8. Smoke-check /up against the public hostname.
+#
+# Why reusable, not composite: composites can't accept `secrets:`, can't
+# parallelise across jobs, and appear as one opaque step in the deploy log.
+# A real `workflow_call` job log shows each step's timing.
+
+name: '_ Kamal deploy (reusable)'
+
+on:
+  workflow_call:
+    inputs:
+      product:
+        description: 'Product name (menu or genkan). Drives image name, scope, working dir.'
+        required: true
+        type: string
+      sha:
+        description: 'Commit SHA to deploy. Used as the image tag.'
+        required: true
+        type: string
+      onprem_host:
+        description: 'Kamal target host (IP or DNS).'
+        required: true
+        type: string
+      public_hostname:
+        description: 'Public hostname for the post-deploy smoke check.'
+        required: true
+        type: string
+      bws_project_id:
+        description: 'Bitwarden Secrets Manager project UUID.'
+        required: true
+        type: string
+      ghcr_user:
+        description: 'GHCR namespace. Image is pushed to ghcr.io/<ghcr_user>/<product>.'
+        required: true
+        type: string
+    secrets:
+      BWS_ACCESS_TOKEN:
+        description: 'Unlocks the BWS project — Kamal''s bitwarden-sm adapter uses it.'
+        required: true
+      KAMAL_SSH_PRIVATE_KEY:
+        description: 'Private key for root@<onprem_host>. Add to ~/.ssh/authorized_keys via ssh-copy-id.'
+        required: true
+
+# Per-product serialization. cancel-in-progress: false so a deploy in flight
+# isn't killed mid-roll. Without queue:max, GHA silently drops queued runs
+# while one is running (May 2026 changelog fixed this).
+concurrency:
+  group: deploy-${{ inputs.product }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy ${{ inputs.product }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+
+    permissions:
+      contents: read
+      packages: write  # `docker push ghcr.io/...`
+
+    env:
+      # Selects the CI branch of the kamal deploy.yml ERB toggle (local build
+      # with GHA cache, not the homelab remote builder).
+      KAMAL_CI: 'true'
+      # Kamal's deploy.yml reads these directly via ERB ENV.fetch.
+      ONPREM_HOST: ${{ inputs.onprem_host }}
+      PUBLIC_HOSTNAME: ${{ inputs.public_hostname }}
+      GHCR_USER: ${{ inputs.ghcr_user }}
+      # BWS access — Kamal's bitwarden-sm adapter reads these from env, and
+      # so does its secrets file (which extracts INFRA_GHCR_TOKEN for
+      # KAMAL_REGISTRY_PASSWORD). NOTE: we previously had a
+      # KAMAL_REGISTRY_PASSWORD=${{ secrets.GITHUB_TOKEN }} override here,
+      # paired with a `${VAR:-$(bws …)}` pattern in the kamal secrets file
+      # — Kamal's secrets-file parser mangles `${VAR:-default}` syntax
+      # (strips `${VAR`, leaves `:-default}` as the literal value). Both
+      # sides reverted to a plain BWS fetch.
+      BWS_ACCESS_TOKEN: ${{ secrets.BWS_ACCESS_TOKEN }}
+      BWS_PROJECT_ID: ${{ inputs.bws_project_id }}
+
+    steps:
+      - name: Checkout @ deploy SHA
+        uses: actions/checkout@v5
+        with:
+          # workflow_run fires with head_sha = the upstream CI's commit. We
+          # check out THAT SHA so the deploy matches what CI validated, even
+          # if main has moved on.
+          ref: ${{ inputs.sha }}
+
+      - name: Install bws CLI
+        # Pinned to bws v2.0.0 (Feb 2025, statically-linked MUSL). Installed
+        # FIRST so the Tailscale-creds fetch step below can read from BWS.
+        env:
+          BWS_VERSION: '2.0.0'
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/bws.zip \
+            "https://github.com/bitwarden/sdk-sm/releases/download/bws-v${BWS_VERSION}/bws-x86_64-unknown-linux-gnu-${BWS_VERSION}.zip"
+          unzip -q /tmp/bws.zip -d /tmp/bws
+          sudo install -m 0755 /tmp/bws/bws /usr/local/bin/bws
+
+      - name: Fetch Tailscale OAuth from BWS
+        # The CI OAuth client is minted by `just infra::deploy` (Tofu) and
+        # write-throughed to BWS as INFRA_CI_TAILSCALE_OAUTH_CLIENT_{ID,SECRET}.
+        # If they're missing, infra hasn't been deployed yet — fail loudly
+        # with the recovery command.
+        id: ts
+        env:
+          BWS_ACCESS_TOKEN: ${{ secrets.BWS_ACCESS_TOKEN }}
+          BWS_PROJECT_ID: ${{ vars.BWS_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          SECRETS_JSON=$(bws secret list "$BWS_PROJECT_ID" -o json)
+          CLIENT_ID=$(echo "$SECRETS_JSON" | jq -r '.[] | select(.key=="INFRA_CI_TAILSCALE_OAUTH_CLIENT_ID") | .value')
+          CLIENT_SECRET=$(echo "$SECRETS_JSON" | jq -r '.[] | select(.key=="INFRA_CI_TAILSCALE_OAUTH_CLIENT_SECRET") | .value')
+          if [ -z "$CLIENT_ID" ] || [ "$CLIENT_ID" = "null" ] || [ -z "$CLIENT_SECRET" ] || [ "$CLIENT_SECRET" = "null" ]; then
+            echo "INFRA_CI_TAILSCALE_OAUTH_CLIENT_{ID,SECRET} missing in BWS." >&2
+            echo "Run 'just infra::deploy' locally to mint + write-through the CI OAuth client." >&2
+            exit 1
+          fi
+          echo "::add-mask::$CLIENT_SECRET"
+          echo "client_id=$CLIENT_ID" >> "$GITHUB_OUTPUT"
+          echo "client_secret=$CLIENT_SECRET" >> "$GITHUB_OUTPUT"
+
+      # Join the runner to the tailnet so it can reach the homelab via its
+      # MagicDNS hostname (`iedora-homelab`) instead of a LAN IP that public
+      # runners can't route to. With OAuth, the action mints an ephemeral
+      # auth key per run; v4 additionally `tailscale logout`s at job end so
+      # the device is gone in seconds, not minutes.
+      #
+      # `version` pinned (not "latest") — the latest tag is non-reproducible
+      # across platforms (tailscale/github-action#284). Roll forward deliberately.
+      # `hostname` per-run keeps the admin device list readable.
+      # `ping` blocks until MagicDNS resolves — avoids a race where the SSH
+      # step runs before systemd-resolved accepts the `.ts.net` search domain.
+      - name: Connect to tailnet
+        uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ steps.ts.outputs.client_id }}
+          oauth-secret: ${{ steps.ts.outputs.client_secret }}
+          tags: tag:ci
+          version: 1.96.5
+          hostname: gha-${{ inputs.product }}-${{ github.run_id }}
+          ping: iedora-homelab
+
+      # Exposes ACTIONS_CACHE_URL + ACTIONS_RUNTIME_TOKEN as env vars that
+      # buildx subprocesses inherit — without this, Kamal's `docker buildx
+      # build --cache-to=type=gha,...` can't reach the GHA cache backend.
+      - name: Expose GHA runtime to subprocesses
+        uses: crazy-max/ghaction-github-runtime@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure SSH for root@onprem
+        # ssh-agent + known_hosts. ssh-keyscan is best-effort: a first-time
+        # deploy against a brand-new host needs an out-of-band fingerprint
+        # check anyway; for the steady-state homelab, this is just trust.
+        env:
+          SSH_KEY: ${{ secrets.KAMAL_SSH_PRIVATE_KEY }}
+          HOST: ${{ inputs.onprem_host }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          eval "$(ssh-agent -s)"
+          ssh-add ~/.ssh/id_ed25519
+          echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
+          echo "SSH_AGENT_PID=$SSH_AGENT_PID" >> "$GITHUB_ENV"
+
+      - name: Set up Ruby + Kamal
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+
+      - name: Install Kamal
+        # Pin Kamal to match the laptop-side gem. Bumps are deliberate.
+        run: gem install kamal -v 2.5.3 --no-document
+
+      - name: Kamal deploy
+        working-directory: products/${{ inputs.product }}/infra/kamal
+        # --version=<sha> tags the image with the commit SHA. With the GHA
+        # builder cache (mode=max, scope=<product>), a no-op rebuild is
+        # ~10s; a full cold build ~3-5 min for these images.
+        run: kamal deploy --version=${{ inputs.sha }}
+
+      - name: Smoke check /up
+        env:
+          URL: https://${{ inputs.public_hostname }}/up
+        run: |
+          set -euo pipefail
+          echo "[deploy] smoke-checking $URL"
+          for i in 1 2 3 4 5 6; do
+            CODE=$(curl -s -o /dev/null -w '%{http_code}' "$URL" || echo 000)
+            if [ "$CODE" = "200" ]; then
+              echo "[deploy] ✓ /up returned 200"
+              exit 0
+            fi
+            echo "[deploy] /up returned $CODE; retry $i/6 in 5s"
+            sleep 5
+          done
+          echo "[deploy] ✗ /up never returned 200 after 30s" >&2
+          exit 1

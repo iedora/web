@@ -1,0 +1,77 @@
+# House CD — Astro static build → Cloudflare Workers Static Assets.
+#
+# Token flow follows the same pattern as menu / genkan kamal secrets: the
+# narrow workload token is minted by Tofu locally (via `just house::deploy`
+# or `just house::rotate-token`), written through to BWS as
+# INFRA_HOUSE_WORKERS_TOKEN, and read here via `bws secret list`. Tofu
+# stays out of CI entirely — house CI does Astro build + wrangler upload
+# and nothing else.
+#
+# First-time bootstrap: run `just house::deploy` once from a laptop. That
+# mints the token AND populates the BWS entry; CI works on every push
+# after that.
+
+name: House deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'products/house/**'
+      - 'packages/design-system/**'
+      - 'bun.lock'
+      - '.github/workflows/house-deploy.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-house
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup
+
+      - name: Install bws CLI
+        env:
+          BWS_VERSION: '2.0.0'
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/bws.zip \
+            "https://github.com/bitwarden/sdk-sm/releases/download/bws-v${BWS_VERSION}/bws-x86_64-unknown-linux-gnu-${BWS_VERSION}.zip"
+          unzip -q /tmp/bws.zip -d /tmp/bws
+          sudo install -m 0755 /tmp/bws/bws /usr/local/bin/bws
+
+      - name: Build Astro
+        working-directory: products/house
+        run: bun run build
+
+      - name: Fetch workload token from BWS
+        id: bws
+        env:
+          BWS_ACCESS_TOKEN: ${{ secrets.BWS_ACCESS_TOKEN }}
+          BWS_PROJECT_ID: ${{ vars.BWS_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          TOKEN=$(bws secret list "$BWS_PROJECT_ID" -o json \
+            | jq -r '.[] | select(.key=="INFRA_HOUSE_WORKERS_TOKEN") | .value')
+          if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
+            echo "INFRA_HOUSE_WORKERS_TOKEN missing in BWS." >&2
+            echo "Run 'just house::deploy' (or 'just house::rotate-token') from a laptop once to populate it." >&2
+            exit 1
+          fi
+          echo "::add-mask::$TOKEN"
+          echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
+
+      - name: Wrangler deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ steps.bws.outputs.token }}
+          workingDirectory: products/house
+          command: deploy

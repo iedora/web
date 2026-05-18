@@ -2,17 +2,20 @@
 
 > One-line purpose: where every credential in the project lives, how to
 > rotate it, and what breaks when it's gone.
-> **Last reviewed:** 2026-05-16 — house migrated off Cloudflare Pages onto
-> Workers Static Assets; this doc tracks the new surface.
+> **Last reviewed:** 2026-05-18 — Tailscale + GitHub PAT + CI SSH key + Tofu-managed
+> GH secrets/vars + write-through CI OAuth credentials added; rotation playbook
+> updated with the May-2026 zero-downtime patterns the research surfaced.
 
 ## Model
 
 | Location | Holds | Why |
 |---|---|---|
-| **Bitwarden Secrets Manager** (`iedora-deploy` project) | All 8 production secrets | Single source of truth; survives laptop loss |
+| **Bitwarden Secrets Manager** (`iedora-deploy` project) | ~16 production secrets — apps, infra bootstrap, Tofu-managed write-throughs | Single source of truth; survives laptop loss |
 | `products/menu/infra/.env` (gitignored, on one laptop) | `BWS_ACCESS_TOKEN` + `BWS_PROJECT_ID` + non-secret IDs (account/zone/hostnames) | The one credential that unlocks the rest — must be on disk to bootstrap |
-| `products/menu/infra/tofu/terraform.tfstate` (encrypted) | Tunnel token + R2 sub-tokens (`assets_r2`, `backups_r2`) for the menu product | Created by Tofu; rotate via `tofu apply -replace=<resource>` |
-| `products/house/infra/tofu/terraform.tfstate` (encrypted) | Narrow `workers_deploy` token (Workers Scripts: Write + DNS: Write) for `wrangler deploy` | Created by Tofu; rotate via `tofu apply -replace=cloudflare_api_token.workers_deploy` |
+| `infra/tofu/terraform.tfstate` (encrypted) | `cloudflare_api_token.backups_r2` + `tailscale_oauth_client.ci` (its `key` attribute) | Cross-product shared infra; write-through to BWS via `just infra::deploy` |
+| `products/menu/infra/tofu/terraform.tfstate` (encrypted) | Tunnel token + R2 sub-token (`assets_r2`) for the menu product | Created by Tofu; rotate via `tofu apply -replace=<resource>` |
+| `products/house/infra/tofu/terraform.tfstate` (encrypted) | Narrow `workers_deploy` token (Workers Scripts: Write + DNS: Write + Workers Routes: Write) | Created by Tofu; write-through to BWS as `INFRA_HOUSE_WORKERS_TOKEN`; rotate via `just house::rotate-token` |
+| **GitHub Actions secrets/variables** (Tofu-managed via `integrations/github`) | `BWS_ACCESS_TOKEN`, `KAMAL_SSH_PRIVATE_KEY` (secrets); `BWS_PROJECT_ID`, `ONPREM_HOST`, `MENU_PUBLIC_HOSTNAME`, `GENKAN_PUBLIC_HOSTNAME` (variables) | Drives CI deploys; declared in `infra/tofu/github.tf`, values flow through from BWS |
 
 `BWS_ACCESS_TOKEN` is the keys-to-the-kingdom: it unlocks every other secret. Treat it as if it were the master password.
 
@@ -78,17 +81,38 @@ each key:
 
 ## The secrets in BWS
 
-| Key | What it does | Impact of leak | Rotation effort |
+Organized by class (bootstrap / app / Tofu write-through) so it's clear who creates each value and who reads it.
+
+### Bootstrap credentials — what unlocks the rest
+
+| Key | What it does | Impact of leak | Rotation |
 |---|---|---|---|
-| `INFRA_CLOUDFLARE_API_TOKEN` | Master Cloudflare API token (7 permission groups across Account / Zone(`iedora.com`) / User scopes — see Token tiers above) | Attacker can edit `iedora.com` DNS, manage the tunnel, write to R2, push Workers, mint new tokens | Browser create-new → BWS edit → revoke old. Sub-tokens (tunnel/R2/workers_deploy) survive; rotate them separately only if suspected leaked |
-| `INFRA_STATE_PASSPHRASE` | Tofu state encryption (PBKDF2 + AES-GCM) | Old state file becomes decryptable if attacker has the file | `tofu init -migrate-state` with new passphrase |
-| `INFRA_POSTGRES_PASSWORD` | Postgres root + app DB password (shared Postgres accessory) | Full DB read/write for menu AND genkan databases | `just menu::rotate-secret INFRA_POSTGRES_PASSWORD` + reboot postgres accessory + redeploy both apps |
-| `INFRA_BACKUP_PASSPHRASE` | GPG passphrase for encrypted Postgres dumps in R2 | Attacker with R2 access can decrypt past dumps | **Don't rotate** — invalidates historical dumps. Maintain dual-passphrase overlap if necessary |
-| `INFRA_GHCR_TOKEN` | GitHub PAT (`write:packages`) for image push/pull | Attacker can push malicious images to `ghcr.io/$GHCR_USER/{menu,genkan}` | GitHub UI regenerate + BWS edit + redeploy |
-| `MENU_AUTH_SECRET` | Signs menu's session cookies (HMAC) | Attacker can forge menu sessions for any user | `just menu::rotate-secret MENU_AUTH_SECRET` — **invalidates every active menu session** |
-| `MENU_OAUTH_CLIENT_ID` | Menu's OAuth client ID at genkan | Identifies menu as a first-party client | Re-register the client; update on both sides |
-| `MENU_OAUTH_CLIENT_SECRET` | Menu's OAuth client secret at genkan | Lets attacker impersonate menu in the OAuth handshake | `just menu::rotate-secret MENU_OAUTH_CLIENT_SECRET` + redeploy both menu and genkan |
-| `GENKAN_AUTH_SECRET` | Signs genkan's session cookies + JWTs | Attacker can forge genkan sessions | `just genkan::rotate-secret GENKAN_AUTH_SECRET` — **invalidates every active genkan session** |
+| `INFRA_CLOUDFLARE_API_TOKEN` | Master Cloudflare API token (7 permission groups across Account / Zone / User — see Token tiers) | Edit DNS, manage tunnel, write R2, push Workers, mint new tokens | Browser **Roll** (preserves token ID) → BWS edit → `just infra::deploy`. Sub-tokens survive |
+| `INFRA_TAILSCALE_OAUTH_CLIENT_ID` + `_SECRET` | Tailscale OAuth client (`policy_file`+`oauth_keys`+`auth_keys`+`tag:ci`) used by the Tofu provider to manage ACL and mint the CI client | Attacker can edit tailnet ACL, mint new CI clients | Tailscale UI → generate new client → BWS edit (both halves) → `just infra::deploy` → delete old client |
+| `INFRA_GITHUB_API_TOKEN` | Fine-grained PAT scoped to the iedora repo (Actions/Secrets/Variables R+W) used by the Tofu `integrations/github` provider | Attacker can push GH Actions secrets/vars, modify workflows | github.com → regenerate the existing fine-grained PAT (preserves identity) → BWS edit → `just infra::deploy` |
+| `INFRA_GHCR_TOKEN` | **Classic** PAT (`write:packages`) for Kamal's `docker push` to GHCR — the documented exception to fine-grained | Attacker can push malicious images to `ghcr.io/eduvhc/{menu,genkan,iedora-backup}` | GitHub UI regenerate (or revoke + create) → BWS edit → next deploy picks up |
+| `INFRA_STATE_PASSPHRASE` | Tofu state encryption (PBKDF2 + AES-GCM, 600k iterations) | Old state file in git becomes decryptable | **`fallback` block rotation** — see Zero-downtime patterns below |
+| `INFRA_KAMAL_SSH_PRIVATE_KEY` | Private half of the dedicated `ci_ed25519` keypair; Tofu pushes this to GH as the `KAMAL_SSH_PRIVATE_KEY` secret for CI deploys | Attacker can SSH as root to the homelab | Generate new keypair → `ssh-copy-id` → BWS edit → `just infra::deploy` → remove old pubkey from homelab `authorized_keys` (see deploy.md § Minting the CI SSH key) |
+| `BWS_ACCESS_TOKEN` (lives in `.env`, NOT in BWS itself) | The machine-account token that unlocks BWS | Attacker can read every other secret | **Blue/green** — see Zero-downtime patterns below |
+
+### App secrets
+
+| Key | What it does | Impact of leak | Rotation |
+|---|---|---|---|
+| `INFRA_POSTGRES_PASSWORD` | Postgres root + app DB password (shared accessory) | Full DB read/write for menu AND genkan | **Dual-role pattern** — see Zero-downtime patterns below. Without it: `ALTER USER` + `kamal deploy` accepts ~10s of failed-auth blips on in-flight requests |
+| `INFRA_BACKUP_PASSPHRASE` | GPG passphrase for Postgres dumps in R2 | Attacker with R2 access can decrypt past dumps | **Keep old as `INFRA_BACKUP_PASSPHRASE_OLD`** when rotating; never garbage-collect until the last dump it protected has aged out of R2's lifecycle |
+| `MENU_AUTH_SECRET` | Signs menu's session cookies (HMAC) | Attacker can forge menu sessions for any user | **`BETTER_AUTH_SECRETS` plural** — see Zero-downtime patterns below |
+| `GENKAN_AUTH_SECRET` | Signs genkan's session cookies + JWTs | Attacker can forge genkan sessions | Same — switch to plural array; rotation becomes zero-downtime |
+| `MENU_OAUTH_CLIENT_ID` + `_SECRET` | Menu's OAuth client identity at genkan | Lets attacker impersonate menu in the OAuth handshake | Register `menu-v2` at genkan with new secret → deploy menu with new id/secret pair → delete old client. Better Auth 1.6's OAuth provider doesn't yet support multi-secret on one client; new-client-then-cutover is the only path. Track upstream — `private_key_jwt` (asymmetric, no shared secret) is the better long-term answer |
+
+### Tofu-managed write-throughs
+
+These are minted by Tofu in encrypted state, then pushed to BWS by `just infra::deploy` (or product equivalents) so other systems can read from BWS without running Tofu.
+
+| Key | Source | Rotation |
+|---|---|---|
+| `INFRA_CI_TAILSCALE_OAUTH_CLIENT_ID` + `_SECRET` | `tailscale_oauth_client.ci` (auth_keys scope, tag:ci) | `cd infra/tofu && bin/with-secrets tofu apply -replace=tailscale_oauth_client.ci` → `just infra::deploy` reconciles + write-through |
+| `INFRA_HOUSE_WORKERS_TOKEN` | `cloudflare_api_token.workers_deploy` (narrow Workers + DNS perms) | `just house::rotate-token` wraps both the `-replace` and the BWS write-through atomically |
 
 ## Expand–Contract for permission / token changes
 
@@ -187,12 +211,103 @@ No code changes — `.kamal/secrets` and `bin/with-secrets` both pull `BWS_ACCES
 
 ## Expiration discipline
 
-| Credential | Expires | Reminder |
+Cadences below blend NIST SP 800-57 Rev5 guidance with what's realistic for solo-dev iedora. Calendar reminders live in your personal task system; this table is what's reasonable, not what's mandated.
+
+| Credential | Cadence | Reminder source |
 |---|---|---|
-| `INFRA_CLOUDFLARE_API_TOKEN` | Every 90 days (set at token creation) | Cloudflare emails 14/7/1 days before |
-| `INFRA_GHCR_TOKEN` | 1 year (set at token creation) | GitHub emails 1 week before |
-| `BWS_ACCESS_TOKEN` | No expiration | Rotate manually every 6-12 months |
-| Everything else in BWS | No expiration | Rotate on suspicion of leak |
+| `INFRA_CLOUDFLARE_API_TOKEN` (bootstrap) | 90 days | Cloudflare emails 14/7/1 days before |
+| `INFRA_TAILSCALE_OAUTH_CLIENT_{ID,SECRET}` (bootstrap) | Event-driven only — **no expiration by design** ([Tailscale docs](https://tailscale.com/docs/features/oauth-clients)). The CI ephemeral keys minted from it self-rotate per workflow run | n/a — Tailscale's official position is "rotate OAuth clients on suspected compromise, not on a calendar" |
+| `INFRA_GITHUB_API_TOKEN` (fine-grained) | 90 days (NIST default for service-account creds) | github.com PAT expiry emails 7 days before |
+| `INFRA_GHCR_TOKEN` (classic) | 1 year | GitHub emails 1 week before |
+| `INFRA_KAMAL_SSH_PRIVATE_KEY` (ci_ed25519) | Annually (CIS Benchmarks for ed25519) | Manual; tie to a Q1 calendar event |
+| `INFRA_STATE_PASSPHRASE` | Decades (NIST: "up to several years"); rotate on incident | Manual |
+| `INFRA_POSTGRES_PASSWORD` | 90 days (PCI-DSS 8.3.9) | Manual |
+| `INFRA_BACKUP_PASSPHRASE` | Annually — keep `_OLD` archived forever | Manual |
+| `MENU_AUTH_SECRET`, `GENKAN_AUTH_SECRET` | Annually (with BETTER_AUTH_SECRETS plural, zero-downtime) | Manual |
+| `MENU_OAUTH_CLIENT_SECRET` | Annually (OWASP ASVS v4.0 9.2) | Manual |
+| `BWS_ACCESS_TOKEN` | 6–12 months — no enforced expiration | Manual; blue/green pattern below |
+| Tofu-managed write-throughs (`*_CI_TAILSCALE_*`, `INFRA_HOUSE_WORKERS_TOKEN`) | Inherit from the source resource; rotate via `tofu apply -replace=` | n/a |
+
+## Zero-downtime rotation patterns
+
+These are the 2026-canonical recipes for rotating each credential without a service blip — sourced from each vendor's official docs + the research the agent compiled. Default to these patterns over naive "destroy-then-create" whenever a credential's value is read by a long-lived process.
+
+### Better Auth signing secrets — plural array
+
+Better Auth 1.5+ ships **versioned secrets** via `BETTER_AUTH_SECRETS` (plural, JSON array). First entry signs new envelopes; remaining entries decrypt-only. Rotation:
+
+```
+# In BWS, MENU_AUTH_SECRETS is now a JSON array (not the singular MENU_AUTH_SECRET):
+MENU_AUTH_SECRETS=["new-secret","old-secret"]
+```
+
+Deploy → all NEW cookies/JWTs sign with `new-secret`; existing ones validate against `old-secret`. After every issued cookie has been touched once (or a deliberate session-rotation window), drop the old entry:
+
+```
+MENU_AUTH_SECRETS=["new-secret"]
+```
+
+Migration from singular: the new plural form has been supported since Better Auth 1.5 ([Better Auth options](https://better-auth.com/docs/reference/options)). Keeping the singular as a fallback for legacy data is automatic. Same shape applies to `GENKAN_AUTH_SECRETS`. This makes session-key rotation a non-event — preferred quarterly cadence over annual.
+
+### Postgres password — dual-role pattern
+
+Run two app roles (e.g. `menu_app` + `menu_app_rotate`) on each database. Apps connect under one at a time; rotation alternates:
+
+1. `ALTER USER menu_app_rotate PASSWORD 'new-password'` — Postgres requires no reload; immediately live for new connections.
+2. BWS edit `INFRA_POSTGRES_PASSWORD` → the value the app's DATABASE_URL now points at.
+3. `just menu::deploy` — Kamal rolls the container; new container picks up the new env var.
+
+Existing connections on the old role remain authenticated until they reconnect; no failed-auth blips. Next rotation alternates roles. See [Sheshbabu's writeup](https://www.sheshbabu.com/posts/implementing-zero-downtime-postgres-credentials-rotation-with-node-js/) for the canonical recipe.
+
+**Single-role fallback** (what we do today): `ALTER USER` + `kamal deploy` accepts a ~10s window where the very last in-flight transactions on the old container fail with `password authentication failed`. Recoverable, not silent. Adopt dual-role when you have customers who'd notice.
+
+### Tofu state passphrase — `fallback` block rotation
+
+OpenTofu 1.7+ ships an encryption `fallback` mechanism that's the canonical rotation primitive. In `versions.tf`:
+
+```hcl
+encryption {
+  key_provider "pbkdf2" "default" { passphrase = var.state_passphrase_new }
+  key_provider "pbkdf2" "old"     { passphrase = var.state_passphrase_old }
+
+  method "aes_gcm" "new" { keys = key_provider.pbkdf2.default }
+  method "aes_gcm" "old" { keys = key_provider.pbkdf2.old }
+
+  state {
+    method = method.aes_gcm.new
+    fallback { method = method.aes_gcm.old }
+  }
+}
+```
+
+`tofu apply` reads with `old` (fallback), writes with `new`. Then on a SEPARATE commit, remove the `fallback` block and the `old` key provider — the state is now encrypted only with `new`. THEN update BWS `INFRA_STATE_PASSPHRASE` to the new value. ([OpenTofu state encryption](https://opentofu.org/docs/language/state/encryption/))
+
+**Critical caveat:** git history of `.tfstate.encrypted` files remains decryptable with the OLD passphrase forever. Compromise of the old passphrase = treat as compromise of every secret the state ever held. Rewriting history (`git filter-branch` or BFG) is the only remediation.
+
+### BWS access token — blue/green
+
+The one secret that can't live in BWS (chicken-and-egg). Rotation requires two access tokens alive simultaneously:
+
+1. Bitwarden UI → Machine accounts → `iedora-deploy` → Access tokens → **Create a SECOND token** (don't revoke the old yet).
+2. Update `gh secret set BWS_ACCESS_TOKEN < <(echo "$NEW_TOKEN")` AND `products/menu/infra/.env` to the new value.
+3. Push a tiny test commit / `gh workflow run menu-deploy.yml -f sha=HEAD` — verify CI authenticates with the new token.
+4. Verify a local `just infra::deploy` (uses `.env`).
+5. **Then** Bitwarden UI → revoke the OLD access token.
+
+Skipping step 1 (revoke before create) makes the bootstrap unrecoverable — you'd need to re-mint everything by hand. The dual-token coexistence is supported by the Bitwarden data model; just not by tooling.
+
+### Cloudflare API tokens — "Roll" preserves ID
+
+Cloudflare's first-party flow for bootstrap rotation is **Roll** on the token's overview page (`POST /accounts/.../tokens/{id}/value`): same token ID, same scopes, same IP restrictions, new secret value ([Cloudflare: Roll tokens](https://developers.cloudflare.com/fundamentals/api/how-to/roll-token/)). Tofu state for downstream resources is unaffected — they reference the bootstrap by its provider authentication, not by the secret value. After rolling: `bws secret edit INFRA_CLOUDFLARE_API_TOKEN` → done. For Tofu-managed sub-tokens (`cloudflare_api_token.*` resources), there's no Roll equivalent — use `tofu apply -replace=`.
+
+### Tailscale CI OAuth — atomic replace
+
+```
+cd infra/tofu
+bin/with-secrets tofu apply -replace=tailscale_oauth_client.ci
+```
+
+Tofu destroys + creates in one apply. The new client's `key` lands in state, then the write-through pushes it to BWS as `INFRA_CI_TAILSCALE_OAUTH_CLIENT_{ID,SECRET}`. CI runs mid-flight on the old client remain authenticated until they disconnect; only NEW `tailscale up` calls after the swap need the new secret.
 
 ## Detection (more important than rotation)
 
