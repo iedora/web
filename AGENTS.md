@@ -228,8 +228,8 @@ Adding a new workspace = one new file.
 .github/
   actions/setup/action.yml      composite: install Bun + bun install --frozen-lockfile
   workflows/
-    menu.yml                     menu's full pipeline (typecheck, lint, unit, e2e)
-    genkan.yml                   genkan's pipeline (typecheck, unit)
+    menu.yml                     menu's full pipeline (typecheck, lint, unit, security, e2e)
+    genkan.yml                   genkan's pipeline (typecheck, unit, security)
     design-system.yml            @iedora/design-system unit suite
     identity.yml                 @iedora/identity unit suite
     auth-testkit.yml             @iedora/auth-testkit unit suite
@@ -253,12 +253,16 @@ Adding a new workspace = one new file.
 
 **The jobs (per file):**
 
-- **menu.yml** — `typecheck`, `lint`, `unit` (parallel), then `e2e`
-  with `needs: [typecheck, lint, unit]`. The e2e job owns the entire
-  env block (Postgres + LocalStack services, GENKAN_* / S3_* /
-  DATABASE_URL literals) — they're all menu-specific.
-- **genkan.yml** — `typecheck`, `unit` (parallel). No e2e suite
-  (see `docs/testing.md` "Why genkan has no Playwright suite").
+- **menu.yml** — `typecheck`, `lint`, `unit`, `security` (parallel),
+  then `e2e` with `needs: [typecheck, lint, unit, security]`. The
+  e2e job owns the entire env block (Postgres + LocalStack services,
+  GENKAN_* / S3_* / DATABASE_URL literals) — they're all menu-specific.
+  The security job runs `aquasecurity/trivy-action` (fs scan, fails
+  on HIGH/CRITICAL via `--ignore-unfixed`) and emits an SPDX-JSON
+  SBOM uploaded as a 90-day artifact.
+- **genkan.yml** — `typecheck`, `unit`, `security` (parallel). No
+  e2e suite (see `docs/testing.md` "Why genkan has no Playwright
+  suite"). Same trivy + SBOM shape as menu's security job.
 - **design-system.yml** — `unit` (jsdom-backed Vitest).
 - **identity.yml** — `unit` (pure crypto + parsing).
 - **auth-testkit.yml** — `unit` (boots real Better Auth + PGLite,
@@ -280,6 +284,20 @@ project; CI itself is the signal. This also dodges the well-known
 gotcha where `paths:`-filtered workflows leave required status
 checks "expected" indefinitely on unrelated PRs. Revisit when
 adding collaborators.
+
+**Dependency updates: Renovate.** Config lives at `renovate.json` (repo
+root). The Renovate GitHub App is installed on this repo and runs on
+its own schedule (weekly, Monday early morning Europe/Lisbon). It
+auto-merges minor/patch updates after CI is green, plus security
+advisories (zero-day window). Major bumps and the framework / auth-
+stack / Bun toolchain pins (Next, React, Better Auth, `oven/bun`) are
+deliberately held for manual review — see the `packageRules` in
+`renovate.json`. False-positive Trivy findings can be allowlisted in
+the `.trivyignore` file at repo root (quarterly review expected).
+
+To pause Renovate for a specific dependency: add an entry to
+`packageRules` with `"enabled": false`. To pause it entirely: comment
+`@renovate-bot disable` on the dependency dashboard issue.
 
 ## Where to look when unsure
 

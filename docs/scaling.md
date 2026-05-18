@@ -231,26 +231,26 @@ That's the entire "prep for multi-host" investment. Do it next time you SSH to t
 
 ## 7. External uptime monitoring (zero cost, off-box)
 
-Every product exposes a `/up` endpoint (`HEALTHCHECK` in each Dockerfile, also reachable publicly):
+Every product exposes a `/up` endpoint (`HEALTHCHECK` in each Dockerfile, also reachable publicly). Three [Better Stack](https://betterstack.com/) monitors are live against them at 3-min cadence; alerts route to Eduardo's email.
 
-| Product | URL |
-|---|---|
-| Menu   | `https://menu.iedora.com/up`   |
-| Genkan | `https://genkan.iedora.com/up` |
-| House  | `https://iedora.com/`          |
+| Product | URL | Cadence |
+|---|---|---|
+| Menu   | `https://menu.iedora.com/up`   | 3 min |
+| Genkan | `https://genkan.iedora.com/up` | 3 min |
+| House  | `https://iedora.com/`          | 3 min |
 
-Wire an external monitor to ping these every 1–5 min and notify on failure. The check must run **off the homelab** — a self-hosted monitor going down with the host it monitors helps nobody.
+Better Stack's free tier covers 10 monitors at 3-min cadence — well under our usage. Configuration lives in their UI (no Tofu provider on the free tier), so the only state is in Eduardo's Better Stack account.
 
-**Recommended: [Better Stack](https://betterstack.com/) (free tier — 10 monitors, 3 min cadence, e-mail/Slack/SMS).** Setup is three fields per product (URL, expected status `200`, notification channel) on their UI. No code or repo change.
+**Why off-box matters.** The check must run **outside the homelab** — a self-hosted monitor (Uptime Kuma on the same box) dies with the host it monitors, defeating the point. That's why Better Stack / UptimeRobot / Cloudflare Health Checks all sit in someone else's PoP.
 
-**Alternatives:**
+**Adding a new monitor** when a fourth product ships: log in → Monitors → Create monitor → paste URL + expected `200` + 3-min cadence + email notification. ~30s, same shape as the existing three.
 
-- **UptimeRobot** — free, 5 min cadence, simpler UI. Fine if you don't need Better Stack's status page.
-- **Cloudflare Health Checks** — already paying for Cloudflare; checks origin from multiple PoPs. Sits at the bottom of the Cloudflare dashboard under Traffic → Health Checks. Requires Pro plan for most useful features.
+**Considered alternatives:**
 
-**Don't self-host the monitor.** Uptime Kuma on the same box that runs the app is theatre — when the box dies, so does the alarm.
+- **UptimeRobot** — free, 5 min cadence (vs. Better Stack's 3 min on free), simpler UI. Equivalent if Better Stack ever drops the free tier.
+- **Cloudflare Health Checks** — already paying for Cloudflare; checks origin from multiple PoPs. Requires Pro plan for useful notification channels.
 
-When you eventually want metrics + traces (not just uptime), the upgrade is Grafana Cloud free tier + the Node OpenTelemetry SDK in each Next app. That's a bigger lift and explicitly out of scope until paying users exist.
+**Upgrade path** when uptime isn't enough (metrics + traces): Grafana Cloud free tier + Node OpenTelemetry SDK in each Next app. Out of scope until paying users exist.
 
 ---
 
