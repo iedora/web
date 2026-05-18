@@ -229,6 +229,31 @@ That's the entire "prep for multi-host" investment. Do it next time you SSH to t
 
 ---
 
+## 7. External uptime monitoring (zero cost, off-box)
+
+Every product exposes a `/up` endpoint (`HEALTHCHECK` in each Dockerfile, also reachable publicly):
+
+| Product | URL |
+|---|---|
+| Menu   | `https://menu.iedora.com/up`   |
+| Genkan | `https://genkan.iedora.com/up` |
+| House  | `https://iedora.com/`          |
+
+Wire an external monitor to ping these every 1–5 min and notify on failure. The check must run **off the homelab** — a self-hosted monitor going down with the host it monitors helps nobody.
+
+**Recommended: [Better Stack](https://betterstack.com/) (free tier — 10 monitors, 3 min cadence, e-mail/Slack/SMS).** Setup is three fields per product (URL, expected status `200`, notification channel) on their UI. No code or repo change.
+
+**Alternatives:**
+
+- **UptimeRobot** — free, 5 min cadence, simpler UI. Fine if you don't need Better Stack's status page.
+- **Cloudflare Health Checks** — already paying for Cloudflare; checks origin from multiple PoPs. Sits at the bottom of the Cloudflare dashboard under Traffic → Health Checks. Requires Pro plan for most useful features.
+
+**Don't self-host the monitor.** Uptime Kuma on the same box that runs the app is theatre — when the box dies, so does the alarm.
+
+When you eventually want metrics + traces (not just uptime), the upgrade is Grafana Cloud free tier + the Node OpenTelemetry SDK in each Next app. That's a bigger lift and explicitly out of scope until paying users exist.
+
+---
+
 ## Comparison
 
 | Scenario | Added cost/yr | Added latency/page | Added complexity | Best fit |

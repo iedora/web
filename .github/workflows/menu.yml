@@ -91,9 +91,43 @@ jobs:
         # under Node here (they fail under Bun's runtime — oven-sh/bun#21342).
         run: bun run test
 
+  security:
+    name: Security (Trivy + SBOM)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    # Scans the workspace lockfile (Bun workspaces dedupe deps at the root,
+    # so the relevant CVE surface is the whole repo). HIGH/CRITICAL gates
+    # the run; --ignore-unfixed avoids failing on CVEs with no patch yet.
+    # `.trivyignore` at repo root holds accepted exceptions.
+    steps:
+      - uses: actions/checkout@v6
+      - name: Trivy vulnerability gate
+        uses: aquasecurity/trivy-action@0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+          ignore-unfixed: true
+          format: table
+      - name: Trivy SBOM (SPDX JSON)
+        uses: aquasecurity/trivy-action@0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: spdx-json
+          output: menu-sbom.spdx.json
+          exit-code: '0'
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: menu-sbom
+          path: menu-sbom.spdx.json
+          retention-days: 90
+
   e2e:
     name: E2E (Playwright)
-    needs: [typecheck, lint, unit]
+    needs: [typecheck, lint, unit, security]
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     defaults:

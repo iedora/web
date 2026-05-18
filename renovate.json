@@ -1,0 +1,66 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":dependencyDashboard",
+    ":semanticCommits",
+    ":automergeMinor",
+    ":automergePatch",
+    ":automergeLinters",
+    ":automergeTesters",
+    ":automergeTypes"
+  ],
+  "schedule": ["before 6am on monday"],
+  "timezone": "Europe/Lisbon",
+  "rangeStrategy": "bump",
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 6am on monday"],
+    "automerge": true
+  },
+  "platformAutomerge": true,
+  "prHourlyLimit": 4,
+  "prConcurrentLimit": 8,
+  "packageRules": [
+    {
+      "matchUpdateTypes": ["major"],
+      "automerge": false,
+      "labels": ["renovate-major"]
+    },
+    {
+      "matchManagers": ["github-actions"],
+      "automerge": true,
+      "groupName": "github-actions",
+      "schedule": ["before 6am on monday"]
+    },
+    {
+      "matchDepTypes": ["devDependencies"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "automerge": true,
+      "minimumReleaseAge": "3 days"
+    },
+    {
+      "matchDepNames": ["bun", "oven/bun"],
+      "automerge": false,
+      "labels": ["renovate-toolchain"]
+    },
+    {
+      "matchDepNames": ["next", "react", "react-dom"],
+      "automerge": false,
+      "labels": ["renovate-framework"]
+    },
+    {
+      "matchDepNames": ["better-auth", "@better-auth/oauth-provider"],
+      "automerge": false,
+      "groupName": "better-auth",
+      "labels": ["renovate-auth"]
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "labels": ["security"],
+    "automerge": true,
+    "minimumReleaseAge": "0 days"
+  },
+  "osvVulnerabilityAlerts": true
+}

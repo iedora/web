@@ -71,3 +71,35 @@ jobs:
         # Co-located + __tests__/ suites; some boot @iedora/auth-testkit
         # for integration coverage (impersonation, role-escalation, JWKS).
         run: bun run test
+
+  security:
+    name: Security (Trivy + SBOM)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    # Same shape as menu.yml's security job — see that file's notes for
+    # why scan-ref is the whole repo (Bun workspaces dedupe at the root).
+    steps:
+      - uses: actions/checkout@v6
+      - name: Trivy vulnerability gate
+        uses: aquasecurity/trivy-action@0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+          ignore-unfixed: true
+          format: table
+      - name: Trivy SBOM (SPDX JSON)
+        uses: aquasecurity/trivy-action@0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: spdx-json
+          output: genkan-sbom.spdx.json
+          exit-code: '0'
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: genkan-sbom
+          path: genkan-sbom.spdx.json
+          retention-days: 90
