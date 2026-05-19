@@ -64,6 +64,15 @@ resource "cloudflare_zero_trust_access_identity_provider" "genkan" {
 # is the value for "I want CF Access to authenticate access to a regular
 # HTTP service behind my tunnel". `session_duration` matches OO's own
 # session window so the two cookies expire together.
+#
+# The allow policy is INLINED here rather than living in a separate
+# cloudflare_zero_trust_access_policy resource referenced by id. Reason:
+# the CF Terraform provider v5 schema marks `id` and `include` as
+# mutually exclusive (ExactlyOneOf) — both are technically valid — but
+# inlining sidesteps the separate-resource drift management, keeps the
+# allow-list in one place, and is the canonical pattern in the provider
+# docs. Codex flagged the previous shape ({ id = ... } only) as risky
+# on PR #18.
 resource "cloudflare_zero_trust_access_application" "observability" {
   account_id       = var.account_id
   name             = "iedora-observability"
@@ -72,25 +81,21 @@ resource "cloudflare_zero_trust_access_application" "observability" {
   session_duration = "8h"
   allowed_idps     = [cloudflare_zero_trust_access_identity_provider.genkan.id]
 
-  policies = [{
-    id = cloudflare_zero_trust_access_policy.iedora_team.id
-  }]
-}
-
-# Allow-rule: one entry per active iedora team email. Email is read from
-# the OIDC id_token's `email` claim (set on the IdP resource above).
-# For a future team growth path, swap to `email_domain` (e.g. allow
-# anyone @iedora.com) or a Cloudflare-managed email_list.
-resource "cloudflare_zero_trust_access_policy" "iedora_team" {
-  account_id = var.account_id
-  name       = "iedora team"
-  decision   = "allow"
-
-  include = [
-    for email in var.cf_access_allowed_emails : {
-      email = {
-        email = email
-      }
+  policies = [
+    {
+      name     = "iedora team"
+      decision = "allow"
+      # One include entry per allowed email. The id_token's `email`
+      # claim (set on the IdP resource above) is what CF Access matches
+      # against. For a future team growth path, swap to `email_domain`
+      # (allow anyone @iedora.com) or a Cloudflare-managed email_list.
+      include = [
+        for email in var.cf_access_allowed_emails : {
+          email = {
+            email = email
+          }
+        }
+      ]
     }
   ]
 }
