@@ -1,6 +1,6 @@
 # Infra declarative roadmap
 
-> _Draft prepared overnight while the research agent runs. The "Findings" section is filled in once the agent reports. Implementation work referenced below has NOT been applied — only file-level changes that are safe to review. Nothing was pushed to remotes, nothing was `tofu apply`'d, nothing on the homelab was touched._
+> _Updated 2026-05-20: the Kamal-to-Tofu migration landed. Tier 1 (Tofu-managed GH config) and Tier 2 (shared tunnel module) are live. The "Imperative" inventory shrank substantially — the menu app container itself is now a `docker_container` resource, not a Kamal rollout target. Next phase: Tier 7 (Zitadel adapter — issue #19 Phase 3+)._
 
 ## Goal
 
@@ -13,7 +13,7 @@ Maximize the share of infra defined declaratively so an LLM can safely add a 4th
 
 What we are NOT trying to do:
 
-- Replace Kamal's deploy.yml or the CI workflow YAMLs with HCL (those are already declarative — moving them to HCL would be ceremony).
+- Replace the CI workflow YAMLs with HCL (those are already declarative — moving them to HCL would be ceremony).
 - Move to Terragrunt or Kubernetes (heavier than the gain).
 - Eliminate state files (encrypted state in git is already the pattern; works).
 - Eliminate `tofu apply` (the runtime step IS imperative; what we declare is the desired state).
@@ -26,11 +26,14 @@ What we are NOT trying to do:
 
 | Resource | Location | Notes |
 |---|---|---|
+| Hetzner CAX11 VPS + firewall + SSH key | `infra/tofu/hetzner.tf` | `hcloud` provider; one box, ARM64 |
 | Cloudflare R2 buckets, scoped tokens, CORS | `products/menu/infra/tofu/`, `infra/tofu/` | Per-product roots + shared backups bucket |
-| Cloudflare Tunnels + ingress + DNS | `products/{menu,genkan}/infra/tofu/` | Duplicated ~50 lines across menu + genkan |
+| Cloudflare DNS for menu + auth (grey-cloud A records) | `infra/tofu/main.tf` | Direct to Hetzner IPv4; Caddy on-box terminates TLS |
+| Cloudflare Tunnel + DNS for obs.iedora.com | `infra/tofu/main.tf` (`module.observability_tunnel`) | The only remaining tunnel — OpenObserve doesn't sit behind Caddy |
 | Cloudflare workload token (wrangler) | `products/house/infra/tofu/` | Narrow scope; minted by Tofu, consumed by wrangler |
-| Tailscale ACL + CI OAuth client | `infra/tofu/tailscale.tf` | Just added — write-throughs to BWS |
-| Kamal deploy configs | `products/*/infra/kamal/config/deploy.yml` | Declarative YAML; applied imperatively by `kamal deploy` |
+| Every Docker container on the box | `infra/tofu/containers.tf` | `kreuzwerker/docker` provider over SSH: postgres, backups, openobserve, openobserve-tunnel, zitadel, zitadel-login, caddy, **menu_web** |
+| GitHub Actions secrets + variables | `infra/tofu/github.tf` | `integrations/github` provider; `for_each` over a locals map |
+| Zitadel orgs + projects | `infra/tofu/zitadel.tf` | `zitadel/zitadel` provider; lands after the SA-key bootstrap |
 | Docker images | `products/*/infra/Dockerfile` | Declarative Dockerfiles |
 | CI workflows | `.github/workflows/*.yml` | Declarative YAML |
 
@@ -38,13 +41,11 @@ What we are NOT trying to do:
 
 | What | Where | Pain |
 |---|---|---|
-| GitHub Actions secrets + variables | `docs/deploy.md` instructs 6× manual `gh secret set` / `gh variable set` | A new product requires editing the doc + running 2-3 more commands |
 | BWS bootstrap secret population | `docs/deploy.md` instructs a `bws secret create` shell loop | Easy to miss a key; no source-of-truth for what BWS *should* contain |
-| Per-product Tofu boilerplate | 3× duplicated `versions.tf` (32 lines each = 96 line total) + 3× duplicated core variables | Adding a 4th product = copy-paste-edit 3 files |
-| Tunnel + DNS pattern | menu + genkan have ~50 line near-identical blocks | Schema drift if one is updated and not the other |
-| Cloudflare account ID | Hardcoded in 4× `.env` files | One more thing to remember on new-laptop setup |
-| 4× `bin/with-secrets` scripts | Per-product + shared infra | All compute the same TF_VAR_* aliases ± per-root variations |
-| Homelab one-time setup | `scaling.md` + `deploy.md` describe in prose: install Tailscale, install Docker via Kamal bootstrap, ssh-copy-id | Recoverable but not codified |
+| Per-product Tofu boilerplate | 2× duplicated `versions.tf` (32 lines each) + duplicated core variables | Adding a 3rd product = copy-paste-edit 3 files |
+| Cloudflare account ID | Hardcoded in 3× `.env` files | One more thing to remember on new-laptop setup |
+| 3× `bin/with-secrets` scripts | Per-product + shared infra | All compute the same TF_VAR_* aliases ± per-root variations |
+| Hetzner VPS bootstrap of Zitadel SA key | 3-pass `just infra::deploy` dance — Pass 3 lifts FirstInstance's JSON key out of a Docker volume into BWS | Runs ONCE per Zitadel re-bootstrap; codified in `infra/justfile` but not pure-declarative |
 
 **Inherently imperative (leave alone):**
 

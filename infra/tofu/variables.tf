@@ -55,84 +55,27 @@ variable "observability_hostname" {
   default     = "obs.iedora.com"
 }
 
-# ── Cloudflare Access in front of obs.iedora.com (issue #13) ─────────────────
-# OpenObserve OSS doesn't ship OIDC — Enterprise-only feature. We protect the
-# UI at the edge via Cloudflare Access instead: CF Access handles the SSO
-# challenge using genkan as the OIDC IdP; only authenticated iedora users
-# can REACH obs.iedora.com. OpenObserve still does its own login on top
-# (defense-in-depth + break-glass).
-
-variable "cf_access_team_domain" {
+variable "zitadel_hostname" {
   description = <<-EOT
-    Cloudflare Zero Trust team domain — the `<team>` portion of
-    `https://<team>.cloudflareaccess.com`. Picked during Zero Trust onboarding,
-    visible in the Zero Trust dashboard under Settings → Custom Pages.
-    Used to derive the OIDC callback URL CF Access registers with genkan.
+    Public FQDN for the self-hosted ZITADEL IdP (issue #19). Tunneled from
+    the homelab via Cloudflare; cloudflared terminates inside the `kamal`
+    network at `http://infra-zitadel:8080`. End users hit
+    `https://auth.iedora.com/ui/v2/login`; OIDC clients use it as the issuer.
+
+    NOTE (2026-05-19): the official `zitadel/zitadel` Tofu provider is NOT
+    used during the homelab era — Cloudflare's free plan blocks
+    `application/grpc` at the edge (no zone-level toggle, Pro+ feature), so
+    Zitadel orgs/projects/OIDC apps are managed via the Console UI for now.
+    When IPv4 arrives (new ISP or Hetzner), we drop the CF Tunnel for this
+    hostname and switch back to declarative TF management.
   EOT
   type        = string
-  default     = "iedora"
+  default     = "auth.iedora.com"
 
   validation {
-    condition     = can(regex("^[a-z0-9-]{1,63}$", var.cf_access_team_domain))
-    error_message = "cf_access_team_domain must be lowercase kebab, 1-63 chars."
+    condition     = can(regex("^[a-z0-9.-]+\\.[a-z]{2,}$", var.zitadel_hostname))
+    error_message = "zitadel_hostname must be a valid FQDN."
   }
-}
-
-variable "cf_access_allowed_emails" {
-  description = <<-EOT
-    Email addresses allowed through Cloudflare Access to obs.iedora.com.
-    One per active iedora team member; rotate when someone joins / leaves.
-    For scalability later, swap for an `email_domain` or `email_list`
-    include rule on the cloudflare_zero_trust_access_policy resource.
-  EOT
-  type        = list(string)
-  default     = []
-
-  validation {
-    condition     = length(var.cf_access_allowed_emails) > 0
-    error_message = "cf_access_allowed_emails must list at least one address — empty list bricks UI access."
-  }
-}
-
-variable "cf_access_genkan_client_id" {
-  description = <<-EOT
-    OAuth client ID minted for the Cloudflare Access -> genkan handshake.
-    TF_VAR_cf_access_genkan_client_id (set by bin/with-secrets from
-    INFRA_CF_ACCESS_GENKAN_CLIENT_ID). Pre-registered in genkan's
-    TRUSTED_CLIENTS so first-party clients skip consent.
-
-    Mint once: `openssl rand -hex 16`. Goes into BOTH places: BWS (for
-    this Tofu run) and genkan's BWS-backed TRUSTED_CLIENTS env (for
-    pre-registration on container boot).
-  EOT
-  type        = string
-}
-
-variable "cf_access_genkan_client_secret" {
-  description = <<-EOT
-    OAuth client secret matching cf_access_genkan_client_id.
-    TF_VAR_cf_access_genkan_client_secret. Mint via
-    `openssl rand -base64 48`. See cf_access_genkan_client_id description
-    for the two-place storage convention.
-  EOT
-  type        = string
-  sensitive   = true
-}
-
-variable "tailscale_oauth_client_id" {
-  description = <<-EOT
-    Tailscale BOOTSTRAP OAuth client ID. TF_VAR_tailscale_oauth_client_id
-    (set by bin/with-secrets from INFRA_TAILSCALE_OAUTH_CLIENT_ID).
-    Created once manually in the Tailscale admin → Settings → OAuth clients.
-    Scopes: policy_file (write) + oauth_keys (write).
-  EOT
-  type        = string
-}
-
-variable "tailscale_oauth_client_secret" {
-  description = "Tailscale BOOTSTRAP OAuth client secret. TF_VAR_tailscale_oauth_client_secret (set by bin/with-secrets from INFRA_TAILSCALE_OAUTH_CLIENT_SECRET)."
-  type        = string
-  sensitive   = true
 }
 
 # ── GitHub repo config ───────────────────────────────────────────────────────
@@ -186,20 +129,186 @@ variable "claude_code_oauth_token" {
   sensitive   = true
 }
 
-variable "ci_onprem_host" {
-  description = "Tailnet hostname (MagicDNS) the GHA runner SSHes to. Differs from local-laptop ONPREM_HOST (which uses LAN IP)."
-  type        = string
-  default     = "iedora-homelab"
-}
-
 variable "menu_public_hostname" {
-  description = "Menu's public FQDN (used by CI for the post-deploy smoke check)."
+  description = "Public FQDN for the menu app — used as Better Auth's BETTER_AUTH_URL, the A record name, and the Caddyfile site label."
   type        = string
   default     = "menu.iedora.com"
 }
 
-variable "genkan_public_hostname" {
-  description = "Genkan's public FQDN."
+# ── Hetzner Cloud ────────────────────────────────────────────────────────────
+
+variable "infra_hcloud_token" {
+  description = <<-EOT
+    Hetzner Cloud project API token. TF_VAR_infra_hcloud_token (from BWS
+    INFRA_HCLOUD_TOKEN). Generated once at
+    https://console.hetzner.cloud/projects/<id>/security/tokens — pick
+    Read & Write scope. Project-scoped, so a leaked token can only touch
+    the iedora project (no account-wide impact).
+  EOT
   type        = string
-  default     = "genkan.iedora.com"
+  sensitive   = true
 }
+
+variable "hetzner_server_type" {
+  description = <<-EOT
+    Hetzner SKU for the infra VPS. CAX11 (ARM, 2 vCPU / 4 GB / 40 GB) covers
+    the current workload with headroom. Scale to CAX21 (4/8) for Phase 4
+    multi-tenant ramp — Hetzner resizes in place without destroy/recreate.
+  EOT
+  type        = string
+  default     = "cax11"
+
+  validation {
+    condition     = contains(["cax11", "cax21", "cax31", "cax41"], var.hetzner_server_type)
+    error_message = "Use one of the ARM CAX SKUs (cheapest line). Intel/AMD options exist but cost more for the same RAM."
+  }
+}
+
+variable "hetzner_location" {
+  description = <<-EOT
+    Hetzner datacenter. fsn1 (Falkenstein, DE) and nbg1 (Nuremberg, DE) both
+    sit on the EU backbone — ~40-50ms RTT from Portugal. hel1 (Helsinki, FI)
+    adds ~30ms. Stick with fsn1 unless DC capacity forces a move.
+  EOT
+  type        = string
+  default     = "fsn1"
+
+  validation {
+    condition     = contains(["fsn1", "nbg1", "hel1"], var.hetzner_location)
+    error_message = "Only EU CAX-capable datacenters: fsn1, nbg1, hel1."
+  }
+}
+
+# ── Container secrets (BWS-sourced) ──────────────────────────────────────────
+# Tofu inputs that flow into the docker_container env arrays in
+# containers.tf. bin/with-secrets exports each as TF_VAR_* from its BWS
+# key. (Previously these lived in a Kamal-style .kamal/secrets file; the
+# migration to Tofu-managed containers folded them in here.)
+
+variable "infra_postgres_password" {
+  description = "Postgres superuser password (shared accessory). TF_VAR_infra_postgres_password (from BWS INFRA_POSTGRES_PASSWORD)."
+  type        = string
+  sensitive   = true
+}
+
+variable "infra_backup_passphrase" {
+  description = "GPG passphrase the backups container uses to encrypt Postgres dumps before R2 upload. TF_VAR_infra_backup_passphrase (from BWS INFRA_BACKUP_PASSPHRASE)."
+  type        = string
+  sensitive   = true
+}
+
+variable "infra_ghcr_token" {
+  description = <<-EOT
+    Classic GitHub PAT (write:packages) used to pull `ghcr.io/eduvhc/iedora-backup`
+    from the homelab. TF_VAR_infra_ghcr_token (from BWS INFRA_GHCR_TOKEN).
+    Only needed because the self-built backup image is private; everything
+    else (postgres, openobserve, zitadel, cloudflared) is on public registries.
+  EOT
+  type        = string
+  sensitive   = true
+}
+
+variable "infra_openobserve_root_user_email" {
+  description = "OpenObserve root login email. TF_VAR_infra_openobserve_root_user_email (from BWS INFRA_OPENOBSERVE_ROOT_USER_EMAIL)."
+  type        = string
+  sensitive   = true
+}
+
+variable "infra_openobserve_root_user_password" {
+  description = "OpenObserve root login password. TF_VAR_infra_openobserve_root_user_password (from BWS INFRA_OPENOBSERVE_ROOT_USER_PASSWORD)."
+  type        = string
+  sensitive   = true
+}
+
+variable "infra_zitadel_masterkey" {
+  description = "Zitadel masterkey (exactly 32 chars). TF_VAR_infra_zitadel_masterkey (from BWS INFRA_ZITADEL_MASTERKEY)."
+  type        = string
+  sensitive   = true
+
+  validation {
+    condition     = length(var.infra_zitadel_masterkey) == 32
+    error_message = "infra_zitadel_masterkey must be EXACTLY 32 chars; Zitadel rejects anything else with `invalid key length`."
+  }
+}
+
+variable "infra_zitadel_first_admin_password" {
+  description = "Bootstrap password for Zitadel's `zitadel-admin` human user. Used only on first init. TF_VAR_infra_zitadel_first_admin_password (from BWS INFRA_ZITADEL_FIRST_ADMIN_PASSWORD)."
+  type        = string
+  sensitive   = true
+}
+
+# ── Menu app secrets (consumed by docker_container.menu_web) ─────────────────
+# Menu used to run via Kamal; on 2026-05-20 it moved to a Tofu-managed
+# docker_container so the whole stack is one `tofu apply`. These vars wire
+# its runtime env from BWS through TF_VAR_*.
+
+variable "menu_auth_secret" {
+  description = "Better Auth signing secret for menu. TF_VAR_menu_auth_secret (from BWS MENU_AUTH_SECRET)."
+  type        = string
+  sensitive   = true
+}
+
+variable "menu_oauth_client_id" {
+  description = <<-EOT
+    OAuth client ID menu uses against the identity provider. Was genkan during
+    Phases 1-2; will be Zitadel from Phase 3 onward (issue #19). For now this
+    is read but auth flow won't complete (genkan is gone). Pre-customer; OK.
+    TF_VAR_menu_oauth_client_id (from BWS MENU_OAUTH_CLIENT_ID).
+  EOT
+  type        = string
+  sensitive   = true
+}
+
+variable "menu_oauth_client_secret" {
+  description = "OAuth client secret matching `menu_oauth_client_id`. TF_VAR_menu_oauth_client_secret (from BWS MENU_OAUTH_CLIENT_SECRET)."
+  type        = string
+  sensitive   = true
+}
+
+variable "infra_menu_assets_access_key" {
+  description = "R2 S3-compatible access key for the menu assets bucket. TF_VAR_infra_menu_assets_access_key (from BWS INFRA_MENU_ASSETS_ACCESS_KEY)."
+  type        = string
+  sensitive   = true
+}
+
+variable "infra_menu_assets_secret_key" {
+  description = "R2 S3-compatible secret key for the menu assets bucket. TF_VAR_infra_menu_assets_secret_key (from BWS INFRA_MENU_ASSETS_SECRET_KEY)."
+  type        = string
+  sensitive   = true
+}
+
+variable "infra_menu_assets_endpoint" {
+  description = "Public-facing R2 endpoint for menu assets (e.g. https://assets.iedora.com). TF_VAR_infra_menu_assets_endpoint (from BWS INFRA_MENU_ASSETS_ENDPOINT)."
+  type        = string
+}
+
+variable "infra_menu_assets_bucket" {
+  description = "R2 bucket name (typically just `menu`). TF_VAR_infra_menu_assets_bucket (from BWS INFRA_MENU_ASSETS_BUCKET)."
+  type        = string
+}
+
+variable "infra_openobserve_ingest_header" {
+  description = "OTLP HTTP `Authorization` header value for OpenObserve ingest (`Basic <base64>`). TF_VAR_infra_openobserve_ingest_header (from BWS INFRA_OPENOBSERVE_INGEST_HEADER)."
+  type        = string
+  sensitive   = true
+}
+
+variable "infra_zitadel_sa_key_json" {
+  description = <<-EOT
+    JSON service-account key for Zitadel's `zitadel-admin-sa` machine user
+    (IAM_OWNER, minted by FirstInstance and written to /zitadel-bootstrap/
+    zitadel-admin-sa.json on the Hetzner box). The `zitadel/zitadel` Tofu
+    provider authenticates with it via `jwt_profile_json`.
+    TF_VAR_infra_zitadel_sa_key_json (from BWS INFRA_ZITADEL_SA_KEY_JSON;
+    populated once by `just infra::zitadel-fetch-sa-key` after first boot).
+
+    Default empty string is the bootstrap window — `infra/tofu/zitadel.tf`
+    gates every zitadel_* resource on this being non-empty, so the first
+    apply is a no-op for Zitadel TF management. The provider auth code is
+    never reached until the second apply lands the resources.
+  EOT
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+

@@ -1,0 +1,202 @@
+# Infra deploy — one `tofu apply` for the whole iedora estate.
+#
+# Triggers:
+#   - workflow_dispatch: manual operator button (the canonical "roll the
+#     infra" lever — used after editing any `.tf` and pushing to main).
+#   - workflow_run: when Menu CI completes on main with `success`. Menu CI
+#     builds the image; this workflow re-runs `tofu apply` so the
+#     `docker_container.menu_web` resource (which used to be Kamal-managed)
+#     re-pulls the newest image tag and recreates the container.
+#
+# What `just infra::deploy` does (from infra/justfile):
+#   1. tofu init -upgrade -input=false
+#   2. Pass 1: target hcloud_* resources only IF the Hetzner box doesn't
+#      exist yet (`hetzner_ipv4` output unset).
+#   3. ssh-keyscan into ~/.ssh/known_hosts — SKIPPED in CI ([ -t 0 ] gate),
+#      the runner manages its own known_hosts.
+#   4. Pass 2: full `tofu apply -auto-approve`.
+#   5. Pass 3: if INFRA_ZITADEL_SA_KEY_JSON isn't in BWS yet, fetch from
+#      the bootstrap volume → BWS → re-apply.
+#   6. Write-through INFRA_ONPREM_HOST = hetzner_ipv4 to BWS.
+#
+# Auth in CI:
+#   - BWS_ACCESS_TOKEN (GH secret) — `bin/with-secrets` reads every other
+#     credential out of BWS via this.
+#   - INFRA_KAMAL_SSH_PRIVATE_KEY (GH secret) — written to ~/.ssh/id_ed25519
+#     so the kreuzwerker/docker provider can SSH to the Hetzner box.
+#   - ONPREM_HOST is a runtime IP (the Hetzner box's public IPv4). We use
+#     the BWS-stored value `INFRA_ONPREM_HOST` rather than hardcoding —
+#     `just infra::deploy` itself writes that secret through, so it's
+#     declarative + survives a box reprovision.
+
+name: Infra deploy
+
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: ['Menu']
+    types: [completed]
+    branches: [main]
+
+# Tofu apply must NEVER be cancelled mid-flight — partial applies can leave
+# the state file half-written (resources marked `tainted` or worse, the
+# remote state half-updated). Queue subsequent runs instead.
+concurrency:
+  group: infra-deploy
+  cancel-in-progress: false
+
+# Least-privilege default (OpenSSF Scorecard Token-Permissions). `id-token:
+# write` reserved for future Sigstore attestations on the Tofu plan output.
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: tofu apply
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+
+    permissions:
+      contents: read
+      id-token: write  # reserved for future Sigstore plan attestations
+
+    # workflow_run guard: only proceed when Menu CI passed on main. Same
+    # pattern as menu-deploy.yml (handles actions/runner#4035 where
+    # workflow_run can fire before the upstream completes).
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main')
+
+    env:
+      BWS_ACCESS_TOKEN: ${{ secrets.BWS_ACCESS_TOKEN }}
+      BWS_PROJECT_ID: ${{ vars.BWS_PROJECT_ID }}
+      # `bin/with-secrets` reads CLOUDFLARE_ACCOUNT_ID directly (not via
+      # BWS) — it's the bootstrap input that points at which CF account
+      # owns the rest. Stored as a GH Actions variable for visibility.
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+
+    steps:
+      - name: Checkout @ main
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          # workflow_run fires with head_sha = upstream CI's commit. For
+          # workflow_dispatch this is just `github.sha` (the dispatch ref).
+          # Either way we want THAT commit's .tf files.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Install bws CLI
+        # Pinned to bws v2.0.0 (Feb 2025, statically-linked MUSL). Same
+        # snippet used by _kamal-deploy.yml + house-deploy.yml.
+        env:
+          BWS_VERSION: '2.0.0'
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/bws.zip \
+            "https://github.com/bitwarden/sdk-sm/releases/download/bws-v${BWS_VERSION}/bws-x86_64-unknown-linux-gnu-${BWS_VERSION}.zip"
+          unzip -q /tmp/bws.zip -d /tmp/bws
+          sudo install -m 0755 /tmp/bws/bws /usr/local/bin/bws
+
+      - name: Install just
+        uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+        with:
+          just-version: '1.36.0'
+
+      - name: Install OpenTofu
+        uses: opentofu/setup-opentofu@847eaa4afeb791b06daa46e8eafa8b1b68d7cfb4 # v2.0.1
+        with:
+          tofu_version: '1.15.0'
+          # Default `true` would wrap the `tofu` binary in a Node.js shim
+          # to capture stdout/stderr/exitcode as step outputs. Our usage
+          # is via `just` → `bin/with-secrets` → `tofu`, so the wrapper
+          # never sees the call anyway, and disabling it sidesteps the
+          # known issue where the wrapper truncates very long plan output.
+          tofu_wrapper: false
+
+      - name: Verify python3
+        # `bin/with-secrets` shells out to python3 to convert BWS JSON →
+        # POSIX-safe env file. ubuntu-24.04 ships python3 by default; this
+        # step is purely a fail-fast if the image ever changes.
+        run: python3 --version
+
+      - name: Fetch ONPREM_HOST from BWS
+        # The Hetzner box's public IPv4. Source of truth is the Tofu output
+        # `hetzner_ipv4`; `just infra::deploy` write-throughs that into
+        # INFRA_ONPREM_HOST after every apply. Reading from BWS keeps us
+        # declarative — if the box gets reprovisioned at a different IP,
+        # the next `tofu apply` writes the new value through and we pick
+        # it up on subsequent runs.
+        id: host
+        run: |
+          set -euo pipefail
+          HOST=$(bws secret list "$BWS_PROJECT_ID" -o json \
+            | jq -r '.[] | select(.key=="INFRA_ONPREM_HOST") | .value')
+          if [ -z "$HOST" ] || [ "$HOST" = "null" ]; then
+            echo "INFRA_ONPREM_HOST missing in BWS." >&2
+            echo "Run 'just infra::deploy' from a laptop once to provision Hetzner + populate it." >&2
+            exit 1
+          fi
+          echo "::add-mask::$HOST"
+          echo "host=$HOST" >> "$GITHUB_OUTPUT"
+
+      - name: Configure SSH for root@onprem
+        # The kreuzwerker/docker Tofu provider talks to the Hetzner Docker
+        # daemon over SSH — same key the operator uses from the laptop.
+        # `INFRA_KAMAL_SSH_PRIVATE_KEY` is the historical name (predates
+        # the Tofu migration); kept for parity with BWS.
+        env:
+          SSH_KEY: ${{ secrets.INFRA_KAMAL_SSH_PRIVATE_KEY }}
+          HOST: ${{ steps.host.outputs.host }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          # Pre-populate known_hosts so the docker provider's system SSH
+          # doesn't fail with "host key verification failed". The justfile's
+          # interactive ssh-keyscan branch is gated on `[ -t 0 ]` and skips
+          # in CI — that's why we do it here.
+          ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          chmod 600 ~/.ssh/known_hosts
+          eval "$(ssh-agent -s)"
+          ssh-add ~/.ssh/id_ed25519
+          echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
+          echo "SSH_AGENT_PID=$SSH_AGENT_PID" >> "$GITHUB_ENV"
+
+      - name: just infra::deploy
+        # `working-directory: infra` so `just` finds the justfile and so
+        # `bin/with-secrets` resolves relative paths correctly. The recipe
+        # itself runs:
+        #   tofu init -upgrade -input=false
+        #   tofu apply (pass 1 — targeted hcloud — skipped if box exists)
+        #   tofu apply (pass 2 — full)
+        #   zitadel SA-key fetch + re-apply (pass 3 — skipped on steady state)
+        #   BWS write-through of INFRA_ONPREM_HOST
+        # `TF_VAR_state_passphrase` and every other TF_VAR_* alias is
+        # exported by `bin/with-secrets` from the BWS env block.
+        working-directory: infra
+        run: just deploy
+
+      - name: Smoke check menu.iedora.com/up
+        # The menu container is now Tofu-managed (formerly Kamal). After
+        # apply, the public hostname should be back to 200 within a few
+        # seconds — give it 30s (6 × 5s) before failing the workflow.
+        env:
+          URL: https://menu.iedora.com/up
+        run: |
+          set -euo pipefail
+          echo "[infra-deploy] smoke-checking $URL"
+          for i in 1 2 3 4 5 6; do
+            CODE=$(curl -s -o /dev/null -w '%{http_code}' "$URL" || echo 000)
+            if [ "$CODE" = "200" ]; then
+              echo "[infra-deploy] OK /up returned 200"
+              break
+            fi
+            echo "[infra-deploy] /up returned $CODE; retry $i/6 in 5s"
+            sleep 5
+            if [ "$i" = "6" ]; then
+              echo "[infra-deploy] FAIL /up never returned 200 after 30s" >&2
+              exit 1
+            fi
+          done

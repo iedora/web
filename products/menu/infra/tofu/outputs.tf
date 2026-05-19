@@ -1,5 +1,5 @@
 output "public_hostname" {
-  description = "FQDN routed to kamal-proxy."
+  description = "FQDN visitors hit for the app. Surface for downstream tooling — DNS itself is managed at the repo-root infra/tofu/."
   value       = var.public_hostname
 }
 
@@ -33,15 +33,3 @@ output "assets_r2_secret_access_key" {
   value       = sha256(cloudflare_api_token.assets_r2.value)
   sensitive   = true
 }
-
-output "tunnel_id" {
-  description = "Cloudflare Tunnel UUID."
-  value       = module.tunnel.id
-}
-
-output "tunnel_token" {
-  description = "Connector token for the cloudflared accessory. Read at deploy time by .kamal/secrets via `tofu output -raw tunnel_token`."
-  value       = module.tunnel.token
-  sensitive   = true
-}
-

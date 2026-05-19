@@ -1,10 +1,12 @@
 # syntax=docker/dockerfile:1.24
 # Multi-stage build for the menu app inside the Bun workspaces monorepo.
 #
-# Build context is the REPO ROOT (set via deploy.yml's `builder.context:
-# ../../..`). Bun installs the workspace deps; Node executes the build
-# (Bun + next build is unstable per AGENTS.md); final image runs server.js
-# on Node over Next's standalone output.
+# Build context is the REPO ROOT. The image is built + pushed to GHCR by
+# `.github/workflows/menu.yml`; the running container is provisioned by
+# the repo-root `infra/tofu/` (`docker_container.menu_web` on the Hetzner
+# VPS). Bun installs the workspace deps; Node executes the build (Bun +
+# next build is unstable per AGENTS.md); final image runs server.js on
+# Node over Next's standalone output.
 #
 # All three stages are glibc (Debian) — no musl→glibc handoff between
 # install/build/runtime keeps native-module prebuilts (postgres-js, sharp,
@@ -37,7 +39,7 @@ RUN --mount=type=cache,target=/root/.bun/install/cache,sharing=locked \
     bun install --frozen-lockfile --ignore-scripts
 
 # ── Stage 2: build ────────────────────────────────────────────────────────────
-FROM node:24-bookworm-slim@sha256:6bdcd38621f965652197b6fffa34b719a7dd6831a00e91e338671887e51e1e1b AS builder
+FROM node:24-bookworm-slim@sha256:24dc26ef1e3c3690f27ebc4136c9c186c3133b25563ae4d7f0692e4d1fe5db0e AS builder
 WORKDIR /workspace
 # Copy the ENTIRE /workspace from deps — this brings every workspace's
 # node_modules tree, including packages/design-system/node_modules where
@@ -55,7 +57,8 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 
 # SKIP_ENV_VALIDATION=1 returns a build-time stub Proxy from src/shared/env.ts
-# so Next can collect page data without real env. Runtime env comes via Kamal.
+# so Next can collect page data without real env. Runtime env is injected
+# by the repo-root Tofu container resource (env block sourced from BWS).
 ENV SKIP_ENV_VALIDATION=1
 
 # Better Auth reads process.env at module load — placeholders so build is quiet.
@@ -65,7 +68,7 @@ ENV BETTER_AUTH_URL=http://build.local
 RUN node --run build
 
 # ── Stage 3: runtime ──────────────────────────────────────────────────────────
-FROM node:24-bookworm-slim@sha256:6bdcd38621f965652197b6fffa34b719a7dd6831a00e91e338671887e51e1e1b AS runner
+FROM node:24-bookworm-slim@sha256:24dc26ef1e3c3690f27ebc4136c9c186c3133b25563ae4d7f0692e4d1fe5db0e AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -92,9 +95,9 @@ USER nextjs
 WORKDIR /app/products/menu
 EXPOSE 3000
 
-# Kamal uses this as the rolling-deploy gate. /up returns 200 from Next
-# as soon as server.js binds the port. Node 24's global fetch covers the
-# whole one-liner; no curl needed in the image.
+# Caddy on the Hetzner box uses /up as the upstream health probe. /up
+# returns 200 from Next as soon as server.js binds the port. Node 24's
+# global fetch covers the whole one-liner; no curl needed in the image.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD node -e "fetch('http://127.0.0.1:3000/up').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 

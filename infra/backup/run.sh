@@ -1,6 +1,6 @@
 #!/bin/sh
 # Daemon: run backup.sh on a fixed interval. Crashes the container on failure
-# so Kamal/Docker restarts it (visible in `kamal accessory logs backups`).
+# so Docker restarts it (visible in `just infra::logs backups`).
 set -eu
 
 : "${SCHEDULE:=@daily}"

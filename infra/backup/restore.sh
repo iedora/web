@@ -9,7 +9,7 @@
 #   *.sql.gpg   → psql at cluster level (pg_dumpall output covers every DB)
 #
 # Designed for interactive use:
-#   kamal accessory exec backups --interactive --reuse "sh /restore.sh"
+#   just infra::restore   (wraps: ssh root@$ONPREM_HOST docker exec -it infra-backups sh /restore.sh)
 set -eu
 
 export PGPASSWORD="$POSTGRES_PASSWORD"

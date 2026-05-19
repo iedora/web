@@ -1,8 +1,8 @@
 variable "cloudflare_api_token" {
   description = <<-EOT
     Cloudflare API token. Permissions:
-      - Account · Cloudflare Tunnel · Edit
-      - Zone · DNS · Edit (scoped to the zone holding var.public_hostname)
+      - Zone · DNS · Edit (scoped to the zone holding var.public_hostname —
+        needed for the R2 custom-domain CNAME at assets.<zone>)
       - Account · Account Settings · Read
       - Account · Workers R2 Storage · Edit
       - User · API Tokens · Edit
@@ -34,14 +34,14 @@ variable "account_id" {
   }
 }
 
-variable "tunnel_name" {
-  description = "Logical name for the tunnel (shown in Cloudflare → Zero Trust → Networks → Tunnels)."
+variable "token_name_prefix" {
+  description = "Prefix for the scoped R2 API token name (shown in Cloudflare → My Profile → API Tokens). Result: `<prefix>-assets-r2`."
   type        = string
   default     = "menu"
 }
 
 variable "public_hostname" {
-  description = "FQDN visitors hit for the app (e.g. menu.example.com)."
+  description = "FQDN visitors hit for the app (e.g. menu.iedora.com). Used to derive the Cloudflare zone (everything after the first dot), the default assets hostname (`assets.<zone>`), and the CORS allowed origin for browser-direct R2 uploads. The DNS record / TLS for this hostname itself is NOT managed here — it's a direct A record to the Hetzner VPS managed at the repo-root `infra/tofu/`."
   type        = string
 
   validation {
@@ -67,4 +67,3 @@ variable "assets_bucket_location" {
   type        = string
   default     = "EEUR"
 }
-

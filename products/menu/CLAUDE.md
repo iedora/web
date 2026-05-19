@@ -2,13 +2,19 @@
 
 Menu-specific hard rules, file layout, and commands. The root `AGENTS.md` covers cross-cutting conventions (stack, slice pattern, CI, repo-root commands). Claude Code auto-loads both when working under this subtree.
 
-Menu is a SaaS multi-tenant restaurant menu builder (menu.iedora.com). Each tenant is an organization that owns one or more `restaurant` rows. Admins build menus via drag-and-drop; the public menu renders from the same data. Menu owns ZERO organization data of its own — every organization read/write goes over HTTP to genkan via `src/features/identity/`.
+Menu is a SaaS multi-tenant restaurant menu builder (menu.iedora.com). Each tenant is an organization that owns one or more `restaurant` rows. Admins build menus via drag-and-drop; the public menu renders from the same data.
+
+> **Identity status (2026-05-19).** The original genkan IdP has
+> been deleted. Identity is moving to Zitadel (`auth.iedora.com` —
+> issue #19 Phase 3+). Until that cuts over, `src/features/identity/`
+> still references the old genkan-http adapter and is effectively
+> dead code; the Zitadel adapter is pending.
 
 ## Hard rules — Menu
 
 Paths starting with `src/...` are menu-relative.
 
-1. **Tenant scoping is mandatory.** Every query touching `restaurant`, `menu`, `category`, or `item` MUST filter by `restaurantId` AND verify the caller is a member of the parent organization. Never trust IDs from the client without rechecking ownership. Centralize this in `src/features/auth/` — use `requireRestaurantAccess(restaurantId)` before any tenant query. Organization membership is resolved through `src/features/identity/` (HTTP to genkan), not from a local table.
+1. **Tenant scoping is mandatory.** Every query touching `restaurant`, `menu`, `category`, or `item` MUST filter by `restaurantId` AND verify the caller is a member of the parent organization. Never trust IDs from the client without rechecking ownership. Centralize this in `src/features/auth/` — use `requireRestaurantAccess(restaurantId)` before any tenant query. Organization membership currently routes through `src/features/identity/` (HTTP to genkan, now dead code — see issue #19 Phase 3+ for the Zitadel adapter).
 
 2. **Schema is the source of truth.** `src/shared/db/schema.ts` is the single canonical schema. Migrations are generated, not handwritten — run `bun run db:generate` then `bun run db:migrate`.
 
@@ -42,7 +48,7 @@ Paths starting with `src/...` are menu-relative.
 products/menu/
   src/
     app/                             Next.js App Router
-      (auth)/                          public auth pages (signup, login) — bounce to genkan
+      (auth)/                          public auth pages (signup, login)
       _components/landing/             landing-page.tsx + landing.css (public home)
       dashboard/                       admin pages — protected
         analytics/                     Casa-only KPIs + scan chart; free → billing redirect
@@ -55,18 +61,18 @@ products/menu/
       r/[slug]/                        public menu page per restaurant — cached snapshot
       onboarding/                      first-org-creation AND add-another-restaurant flow
       api/
-        auth/[...all]/                 Better Auth handler (also receives genkan's OIDC callbacks)
+        auth/[...all]/                 Better Auth handler
         track/[slug]/                  pixel-beacon view tracking (cookie dedup + bot filter)
-        identity/webhook/              receives genkan webhooks via @iedora/identity
+        identity/webhook/              identity webhook receiver via @iedora/identity (dead until Zitadel cutover)
       up/                              health-check route
       showcase/                        public marketing surface (template gallery)
       page.tsx, layout.tsx, globals.css
     features/
-      auth/                          session + tenant-scoping guards (Better Auth client to genkan)
+      auth/                          session + tenant-scoping guards (Better Auth)
       billing/                       invoice ledger
       dashboard-home/                restaurants-with-counts aggregate query
       i18n/                          per-language registry (en, pt, es, fr) + format helpers
-      identity/                      OAuth-bearer adapter — HTTP to genkan /api/identity/organization/*
+      identity/                      OAuth-bearer adapter (dead — genkan deleted; Zitadel adapter pending issue #19 Phase 3+)
       menu-builder/                  dnd-kit admin builder
       menu-publishing/               public menu cache + renderer + template registry + sample seed
       metrics/                       daily-view + analytics range helpers
@@ -75,9 +81,9 @@ products/menu/
       restaurant-identity/           restaurant CRUD + theme/identity settings
       upload/                        S3-compatible uploads + presign/commit/clear (LocalStack in CI)
     shared/
-      db/{client.ts,schema.ts}       drizzle client + canonical schema (no auth.* — genkan owns it)
+      db/{client.ts,schema.ts}       drizzle client + canonical schema
       env.ts                         Zod-validated env (build-time stub when SKIP_ENV_VALIDATION=1)
-      brand.ts                       brand strings + GENKAN_URL (inlined into client bundle at build)
+      brand.ts                       brand strings (inlined into client bundle at build)
       ui/                            shadcn primitives + editorial-list
       testing/pglite.ts              makeTestDb() fixture
       utils.ts                       cn() helper
@@ -88,13 +94,13 @@ products/menu/
   next.config.ts, tsconfig.json      Next + TS config (paths: @/* → ./src/*)
   docker-compose.yml                 postgres + localstack (dev only)
   .env.example                       Next.js dev template — copy to .env.local
-  package.json                       menu deps; workspace deps to @iedora/{design-system,auth-testkit}
+  package.json                       menu deps; workspace deps to @iedora/design-system
   scripts/
     check-migrations.ts              dev-time guardrail; warns when journal has pending migrations
   tests/e2e/
     fixtures.ts                      auto-fixture: fails fast on any RSC error / 5xx response
     specs/                           organized by module: auth, tenancy, menu-builder, public-menu, …
-    helpers/                         shared signup/org/db utilities (uses auth-testkit shim)
+    helpers/                         shared signup/org/db utilities
   infra/                             menu product's deploy machinery
     Dockerfile                       app build (multi-stage Bun-install + Node-build + standalone)
     justfile                         deploy/destroy/rotate-secret/logs/etc. recipes; `set dotenv-load`
@@ -102,7 +108,7 @@ products/menu/
     bin/with-secrets                 BWS-env wrapper; injects TF_VAR_* aliases
     tofu/                            Cloudflare tunnel + DNS + R2 assets bucket (encrypted state)
     kamal/                           Kamal 2 — app + cloudflared accessory (NO postgres/backups —
-                                     those live in /infra/kamal/ as the shared `infra-*` accessories)
+                                     those are Tofu-managed `infra-*` containers in /infra/tofu/containers.tf)
 ```
 
 ## Commands

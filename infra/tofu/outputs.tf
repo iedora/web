@@ -14,20 +14,13 @@ output "backups_r2_secret_access_key" {
   sensitive   = true
 }
 
-output "ci_tailscale_federated_id" {
-  description = "Federated identity client ID — passed to tailscale/github-action@v4 as `oauth-client-id`."
-  value       = tailscale_federated_identity.ci.id
-}
-
-output "ci_tailscale_federated_audience" {
-  description = "Audience claim that GitHub's OIDC token must match. Tailscale auto-generates this; passed to the github action as `audience`."
-  value       = tailscale_federated_identity.ci.audience
-}
-
 # ── OpenObserve outputs ──────────────────────────────────────────────────────
-# Read by infra/kamal/.kamal/secrets at deploy time. No write-through to
-# BWS: deploys for shared infra always run locally where Tofu state is
-# available (unlike per-product CI deploys, which need BWS).
+# Used to be read by infra/kamal/.kamal/secrets; now flow directly into
+# the docker_container envs in containers.tf. Keeping the outputs around
+# because the menu workspace still reads `observability_tunnel_token`
+# if/when it wires its own observability tunnel in the future. No
+# write-through to BWS: deploys for shared infra always run locally where
+# Tofu state is available.
 
 output "observability_bucket_name" {
   description = "R2 bucket holding OpenObserve's parquet cold-tier shards."
@@ -51,19 +44,19 @@ output "observability_tunnel_token" {
   sensitive   = true
 }
 
-# ── Cloudflare Access (issue #13) ────────────────────────────────────────────
+# ── Hetzner outputs ──────────────────────────────────────────────────────────
+# IPv4 is the source of truth for: the docker provider host, every per-product
+# Kamal `.env` ONPREM_HOST, the zitadel-rebootstrap SSH commands, and the
+# A records pointed at the box. Outputting it here means `just infra::deploy`
+# can write through to BWS as INFRA_ONPREM_HOST so the per-product workspaces
+# don't need their own hcloud provider.
 
-output "cf_access_callback_url" {
-  description = <<-EOT
-    The OIDC redirect_uri Cloudflare Access registers with genkan. Pre-seed
-    this into genkan's TRUSTED_CLIENTS as the redirect URI for the
-    CF_ACCESS_GENKAN_* OAuth client. Stable across deploys as long as the
-    cf_access_team_domain variable doesn't change.
-  EOT
-  value       = local.cf_access_callback_url
+output "hetzner_ipv4" {
+  description = "Public IPv4 of the Hetzner CAX11 box. A records + SSH targets resolve here."
+  value       = hcloud_server.iedora.ipv4_address
 }
 
-output "cf_access_observability_app_id" {
-  description = "UUID of the Cloudflare Access self-hosted application protecting obs.iedora.com. Useful for the dashboard URL + for the IdP's allowed-apps list."
-  value       = cloudflare_zero_trust_access_application.observability.id
+output "hetzner_ipv6" {
+  description = "Public IPv6 of the Hetzner box. Useful for AAAA records once we're ready to dual-stack."
+  value       = hcloud_server.iedora.ipv6_address
 }

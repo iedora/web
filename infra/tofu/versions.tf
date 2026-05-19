@@ -6,13 +6,47 @@ terraform {
       source  = "cloudflare/cloudflare"
       version = "~> 5.19"
     }
-    tailscale = {
-      source  = "tailscale/tailscale"
-      version = "~> 0.29"
-    }
     github = {
       source  = "integrations/github"
       version = "~> 6.12"
+    }
+    # Manages the Hetzner CAX11 VPS (replaced the homelab on 2026-05-19 — the
+    # homelab had no public IPv4 + Cloudflare Free blocks gRPC at the edge,
+    # which broke the Zitadel TF provider. Hetzner has a public IPv4 so
+    # auth.iedora.com goes direct, no CF in path for that hostname).
+    hcloud = {
+      source  = "hetznercloud/hcloud"
+      version = "~> 1.55"
+    }
+    # Derives the operator's SSH public key from the BWS-stored private key
+    # via `data "tls_public_key"`. Avoids storing the public key separately
+    # — single source of truth for the key material.
+    tls = {
+      source  = "hashicorp/tls"
+      version = "~> 4.1"
+    }
+    # Synthetic "wait until X" resources used to block dependent resources
+    # behind a remote-exec readiness probe (Docker daemon on the new Hetzner
+    # box before the docker provider tries to connect).
+    null = {
+      source  = "hashicorp/null"
+      version = "~> 3.2"
+    }
+    # Manages the always-on infrastructure containers (postgres, openobserve,
+    # zitadel, backups, caddy, tunnels) on the Hetzner box. Per-product app
+    # rollouts (menu) still go through Kamal — this provider only owns the
+    # always-on infra layer.
+    docker = {
+      source  = "kreuzwerker/docker"
+      version = "~> 3.7"
+    }
+    # Declarative management of Zitadel resources (orgs, projects, OIDC apps,
+    # actions, claims). Works on Hetzner because auth.iedora.com bypasses CF
+    # (grey cloud DNS only, Caddy on Hetzner terminates TLS, gRPC unblocked).
+    # Pin to OpenTofu registry's 2.12.x — terraform.io's registry lags at 2.8.
+    zitadel = {
+      source  = "zitadel/zitadel"
+      version = "~> 2.12"
     }
   }
 
@@ -40,16 +74,6 @@ provider "cloudflare" {
   api_token = var.cloudflare_api_token
 }
 
-# Tailscale — provisions the tailnet ACL + the CI OAuth client used by the
-# GitHub Actions runner to join the tailnet. The provider authenticates via
-# a BOOTSTRAP OAuth client (created once manually in the Tailscale admin
-# console with scopes `policy_file` + `oauth_keys`). The provider then mints
-# the narrower CI client. See infra/tofu/tailscale.tf.
-provider "tailscale" {
-  oauth_client_id     = var.tailscale_oauth_client_id
-  oauth_client_secret = var.tailscale_oauth_client_secret
-}
-
 # GitHub — reconciles the repo's Actions secrets + variables. Provider auth
 # is a fine-grained PAT (BWS key INFRA_GITHUB_API_TOKEN) scoped to one repo
 # with permissions: Actions read+write, Secrets read+write, Variables
@@ -59,4 +83,30 @@ provider "tailscale" {
 provider "github" {
   owner = var.github_owner
   token = var.github_token
+}
+
+# Hetzner Cloud — provisions the CAX11 VPS that runs every infra container.
+# Auth is a project-scoped API token (INFRA_HCLOUD_TOKEN, set once in BWS).
+provider "hcloud" {
+  token = var.infra_hcloud_token
+}
+
+# Docker — talks to the Hetzner box's Docker daemon over SSH. The IP comes
+# from `hcloud_server.iedora.ipv4_address` (output of the hcloud provider),
+# so the docker provider is implicitly downstream of the Hetzner one. Same
+# SSH key `INFRA_KAMAL_SSH_PRIVATE_KEY` that Kamal uses (registered as
+# `hcloud_ssh_key.operator` so cloud-init drops it into root's authorized_keys).
+#
+# `registry_auth` covers ghcr.io because the self-built backup image
+# (ghcr.io/eduvhc/iedora-backup) is private. Everything else
+# (postgres, openobserve, zitadel, cloudflared, caddy) is on public
+# registries and needs no auth.
+provider "docker" {
+  host = "ssh://root@${hcloud_server.iedora.ipv4_address}"
+
+  registry_auth {
+    address  = "ghcr.io"
+    username = var.github_owner
+    password = var.infra_ghcr_token
+  }
 }

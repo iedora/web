@@ -1,33 +1,33 @@
 # Backups — daily Postgres dumps to Cloudflare R2
 
-A `backups` Kamal accessory runs a self-built image based on `postgres:18-alpine` (source: `infra/backup/`) on the same network as the `infra-postgres` accessory. Daily it `pg_dumpall`s every database on the server (menu + genkan + anything future), GPG-encrypts the dump with `INFRA_BACKUP_PASSPHRASE`, and uploads to the `iedora-backups` Cloudflare R2 bucket. 14-day retention. ~€0/yr at our size (R2 free tier ≤ 10 GB + zero egress).
+The Tofu-managed `docker_container.backups` runs a self-built image based on `postgres:18-alpine` (source: `infra/backup/`) on the same `kamal` Docker network as `docker_container.postgres`. Daily it `pg_dumpall`s every database on the server (menu + zitadel + anything future), GPG-encrypts the dump with `INFRA_BACKUP_PASSPHRASE`, and uploads to the `iedora-backups` Cloudflare R2 bucket. 14-day retention. ~€0/yr at our size (R2 free tier ≤ 10 GB + zero egress).
 
-> **Why self-built** — the canonical community image `eeshugerman/postgres-backup-s3` stops at tag `:16` upstream as of mid-2026. Postgres rejects pg_dump version mismatch outright, so a 16-client image can't dump our PG 18 server. The self-built image (~40 lines of bash + a 7-line Dockerfile based on `postgres:18-alpine`) guarantees client/server version parity. When you bump Postgres, bump the image tag here too and run `just infra::build-backup`.
+> **Why self-built** — the canonical community image `eeshugerman/postgres-backup-s3` stops at tag `:16` upstream as of mid-2026. Postgres rejects pg_dump version mismatch outright, so a 16-client image can't dump our PG 18 server. The self-built image (~40 lines of bash + a 7-line Dockerfile based on `postgres:18-alpine`) guarantees client/server version parity. When you bump Postgres, bump the image tag in `infra/tofu/containers.tf` and run `just infra::build-backup`.
 
-Kamal itself doesn't manage backups — this is the canonical "use an accessory" pattern (confirmed across discussions [#654](https://github.com/basecamp/kamal/discussions/654), [#1150](https://github.com/basecamp/kamal/discussions/1150), [#1240](https://github.com/basecamp/kamal/discussions/1240), [#1414](https://github.com/basecamp/kamal/discussions/1414)).
+> **About the `kamal` network name** — the Docker network on the Hetzner box is still called `kamal` (declared as `docker_network.kamal` in `infra/tofu/containers.tf`). The name persists from the pre-2026-05-20 Kamal era; renaming it would force a recreate of every container on the box. Treat it as a tombstone.
 
 ## One-time setup
 
-The infra Tofu root (`infra/tofu/`) provisions BOTH the `iedora-backups` R2 bucket AND its scoped S3 access keys via a single `cloudflare_api_token` resource — Cloudflare's R2 S3 API accepts a regular Cloudflare API token as credentials (Access Key ID = token ID, Secret = SHA-256(token value), see [docs](https://developers.cloudflare.com/r2/api/tokens/)). The infra `.kamal/secrets` reads both via `tofu output -raw`. No dashboard interaction.
+The infra Tofu root (`infra/tofu/`) provisions BOTH the `iedora-backups` R2 bucket AND its scoped S3 access keys via a single `cloudflare_api_token` resource — Cloudflare's R2 S3 API accepts a regular Cloudflare API token as credentials (Access Key ID = token ID, Secret = SHA-256(token value), see [docs](https://developers.cloudflare.com/r2/api/tokens/)). The values flow directly into `docker_container.backups.env`. No dashboard interaction.
 
-Prerequisite: your existing `INFRA_CLOUDFLARE_API_TOKEN` needs **User · API Tokens · Edit** added (so Tofu can create the R2 sub-token). The other required scopes are listed in `products/menu/infra/.env.example`.
+Prerequisite: your existing `INFRA_CLOUDFLARE_API_TOKEN` needs **User · API Tokens · Edit** added (so Tofu can create the R2 sub-token). The other required scopes are listed in `docs/deploy.md` § Step 3.
 
 The one value you provide yourself: `INFRA_BACKUP_PASSPHRASE` in BWS — the GPG passphrase that encrypts each dump. **Save it to your password manager** the moment you generate it. Lose the passphrase = lose the ability to decrypt past backups.
 
 ```bash
-# generate once, paste into products/menu/infra/.env, copy to password manager:
-openssl rand -hex 32
+# generate once, push into BWS as INFRA_BACKUP_PASSPHRASE, copy to password manager:
+bws secret create INFRA_BACKUP_PASSPHRASE "$(openssl rand -hex 32)" "$BWS_PROJECT_ID" -o none
 ```
 
 Then:
 
 ```bash
 just infra::build-backup  # one-off: build + push ghcr.io/$GHCR_USER/iedora-backup:18
-just infra::deploy        # Tofu creates bucket + R2 token; Kamal boots postgres + backups accessories
+just infra::deploy        # Tofu apply (R2 + token + every container including infra-backups)
 just infra::backup        # force an immediate dump to verify end-to-end
 ```
 
-`just infra::build-backup` only needs to be re-run when the Postgres major changes (bump the tag in `infra/kamal/config/deploy.yml` to match) or when `infra/backup/*.sh` is edited.
+`just infra::build-backup` only needs to be re-run when the Postgres major changes (bump the tag on `docker_container.backups.image` in `infra/tofu/containers.tf` to match) or when `infra/backup/*.sh` is edited.
 
 ## Forcing an on-demand backup
 
@@ -48,7 +48,7 @@ Don't whole-DB-restore over a live database. Restore into a scratch DB, surgical
 docker run -d --name scratch-pg -e POSTGRES_PASSWORD=x -p 5433:5432 postgres:18-alpine
 
 # 2. Pull the latest dump from R2 (via aws-cli or rclone, or use the container):
-kamal accessory exec backups --interactive --reuse bash
+ssh root@$ONPREM_HOST 'docker exec -it infra-backups bash'
 # Inside: aws --endpoint-url=$S3_ENDPOINT s3 cp s3://$S3_BUCKET/pg/<latest>.dump.gpg /tmp/
 # Decrypt: gpg --batch --passphrase=$PASSPHRASE --decrypt /tmp/<latest>.dump.gpg > /tmp/dump
 
@@ -67,42 +67,41 @@ just menu::console
 
 ```bash
 # 1. Stop accessing the DB (or take the app offline)
-just menu::rollback                       # roll back to known-good version
+INFRA_MENU_IMAGE_TAG=<known-good-sha> just infra::deploy   # roll back to last-good image
 
 # 2. Wipe the postgres volume + boot fresh
-just infra::wipe-postgres           # destroys the accessory + /root/infra-postgres
-just infra::deploy                  # boots a fresh postgres + backups
+just infra::wipe-postgres           # destroys the container + /root/infra-postgres
+just infra::deploy                  # boots a fresh postgres + backups + menu
 
 # 3. Restore latest dump
 just infra::restore                 # picks the latest pg_dumpall output
 
-# 4. Schema is at whatever the latest dump captured; redeploy each product so the
-#    boot-time `node scripts/migrate.mjs` applies any newer migrations
-#    (idempotent, pg_advisory_lock).
-just menu::deploy
-just genkan::deploy
+# 4. Schema is at whatever the latest dump captured; the menu container's
+#    boot-time `node scripts/migrate.mjs` applies any newer migrations on
+#    next recreate (idempotent, pg_advisory_lock).
+just infra::deploy
 ```
 
 Wall-clock: ~10 min for a < 1 GB dump.
 
 ### Whole box dies (Hetzner regional outage / homelab power loss)
 
-Same flow as the [Hetzner migration](./scaling.md#3-migration-move-entirely-to-a-hetzner-vps) section, but with a restore step at the end:
+A new Hetzner box is one `just infra::deploy` away — Tofu provisions a fresh CAX11 from scratch via the `hcloud` provider. With the restore step:
 
 ```bash
-# 1. Provision new box, get root SSH working (docs/deploy.md step 4)
-# 2. Update ONPREM_HOST=<new-ip> in infra/.env, products/menu/infra/.env, products/genkan/infra/.env
-# 3. just infra::deploy    # boots fresh Postgres + backups accessory on new box
-# 4. just infra::restore   # pulls latest dump from R2 into the new postgres
-# 5. just menu::deploy && just genkan::deploy   # tofu re-points tunnels, apps boot
+# 1. infra::destroy            # tears down the dead box's state (skip if Hetzner already removed it)
+# 2. just infra::deploy        # provisions a NEW CAX11 + boots Postgres + backups + menu in one apply
+# 3. just infra::restore       # pulls latest dump from R2 into the new postgres
+# 4. just infra::deploy        # re-runs apply — the menu container picks up the now-populated DB
 ```
 
-Wall-clock: ~30 min. The Cloudflare tunnel + DNS doesn't change (Tofu repoints ingress), so user-facing hostname stays put.
+Wall-clock: ~30 min. The Cloudflare DNS records repoint automatically (Tofu rewrites `cloudflare_dns_record.menu` to the new Hetzner IPv4), so user-facing hostnames stay put.
 
 ### Bad migration shipped
 
 ```bash
-just menu::rollback              # instant — Kamal rolls the container back to previous version
+# Roll back to a previous image tag (~5–10s downtime; brief container recreate)
+INFRA_MENU_IMAGE_TAG=<previous-good-sha> just infra::deploy
 
 # If the migration was destructive (DROP COLUMN, etc.) and you need data back:
 # follow the "lost rows" recipe above against yesterday's dump.

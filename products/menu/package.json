@@ -45,7 +45,6 @@
     "@better-auth/cli": "^1.4.21",
     "@better-auth/oauth-provider": "^1.6.11",
     "@electric-sql/pglite": "^0.4.5",
-    "@iedora/auth-testkit": "workspace:*",
     "@iedora/eslint-config": "workspace:*",
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/sdk-metrics": "^2.7.1",

@@ -6,91 +6,74 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 # Iedora monorepo — project conventions
 
-> This is a **Bun-workspaces monorepo**. Two Next.js products
-> (`products/menu/`, `products/genkan/`), one Astro static site
-> (`products/house/`), and four workspace packages
-> (`packages/design-system/`, `packages/iedora-identity/`,
-> `packages/iedora-observability/`, `packages/iedora-auth-testkit/`).
+> This is a **Bun-workspaces monorepo**. One Next.js product
+> (`products/menu/`), one Astro static site (`products/house/`),
+> and three workspace packages (`packages/design-system/`,
+> `packages/iedora-identity/`, `packages/iedora-observability/`).
 > `bun install` runs ONCE at the repo root and resolves every workspace;
 > you almost never `cd` to install.
 >
-> Most hard rules below come in two parts — a "Menu" set (the rules
-> that have been here since the menu app started) and a "Genkan" set
-> (the IdP's load-bearing constraints). Paths starting with `src/...`
-> are relative to whichever product directory the rule talks about.
-> The house product is a static landing page; it has no code-level
-> conventions beyond `products/house/README.md`.
+> Paths starting with `src/...` are relative to the product
+> directory the rule talks about. The house product is a static
+> landing page; it has no code-level conventions beyond
+> `products/house/README.md`.
 
 ## What this is
 
-**iedora** is the umbrella. Two products federate through it:
+**iedora** is the umbrella. Two products live under it:
 
 - **Menu** (menu.iedora.com — `products/menu/`) — a SaaS multi-tenant
   restaurant menu builder. Each tenant is an organization that owns
   one or more `restaurant` rows. Admins build menus via drag-and-drop;
-  the public menu renders from the same data. Menu owns ZERO
-  organization data of its own — every organization read/write goes
-  over HTTP to genkan via `src/features/identity/`.
-- **Genkan** (genkan.iedora.com — `products/genkan/`) — the iedora
-  IdP. Better Auth + `@better-auth/oauth-provider` + the
-  `organization` and `admin` plugins. Owns the canonical user,
-  session, organization, membership, OAuth-client, audit-log and
-  webhook-subscription tables. Every other product authenticates
-  through genkan via OIDC; every product receives identity events
-  via signed webhooks. "Genkan" is Japanese for the entryway of a
-  house — the room you pass through to get inside.
+  the public menu renders from the same data.
 - **House** (iedora.com — `products/house/`) — the umbrella brand
   landing page. Astro static output, deployed to Cloudflare Workers
   Static Assets. Deliberately small. No DB, no auth.
 
+> **Identity (genkan → Zitadel).** The original `products/genkan/`
+> IdP (Better Auth + `@better-auth/oauth-provider`) has been
+> deleted. Identity is moving to **Zitadel** (self-hosted at
+> `auth.iedora.com` — issue #19). Phase 1 (Zitadel running
+> alongside the old genkan in infra) is in; Phases 3+ (menu cuts
+> over to Zitadel as the actual IdP) are future work. Until then,
+> menu's `src/features/identity/` adapter is effectively dead code.
+
 ## Stack
 
-- **Next.js 16** (App Router, Turbopack default, Cache Components) — both products.
+- **Next.js 16** (App Router, Turbopack default, Cache Components) — menu.
 - **TypeScript** strict — every workspace.
 - **Drizzle ORM** + `postgres-js` driver, **Postgres 18**.
-- **Better Auth 1.6.11** — pinned exact across the repo. Menu uses
-  the core plus the bundled `organization` plugin (federated to
-  genkan); genkan also runs **`@better-auth/oauth-provider`
-  1.6.11**, plus the `admin` and `organization` plugins, plus the
-  built-in `jwt` plugin for OIDC.
+- **Better Auth 1.6.11** — pinned exact in menu. Currently used
+  for menu's local session layer; the federated IdP role moves
+  to Zitadel under issue #19.
 - **shadcn/ui** + Tailwind v4 — menu only. Editorial primitives
   (Wordmark, Card, Dialog, …) come from
-  **`@iedora/design-system`** for ALL three products.
+  **`@iedora/design-system`** for both products.
 - **@dnd-kit** — menu's drag-and-drop builder.
 - **Bun** — package manager, test runner, dev orchestrator.
   `bun install` at the repo root resolves every workspace; the
   workspace lockfile is `bun.lock`. **Production runtime is
   Node** — `bun + next build` is unstable as of 2026
-  (oven-sh/bun#23944), and `next start` runs under Node in Kamal.
-- **`@iedora/auth-testkit`** — workspace fixture that boots a real
-  Better Auth + OAuth-provider against PGLite for integration tests
-  in any product that consumes genkan. See `docs/testing.md` for the
-  full walkthrough.
+  (oven-sh/bun#23944), and `next start` runs under Node in the production container.
 
 ## Hard rules — per product
 
 Each product owns its own CLAUDE.md with its product-specific hard rules. Claude Code auto-loads the relevant one when you work under that subtree, keeping context lean.
 
 - **[products/menu/CLAUDE.md](products/menu/CLAUDE.md)** — 14 menu-specific rules: tenant scoping, schema source-of-truth, auth in DAL (not layouts), no middleware.ts (it's `proxy.ts` in Next 16), money in cents, dnd-kit position columns, open/closed template + language + plan registries, public-menu cache invalidation by tag, beacon-based view tracking, vertical slice boundaries.
-- **[products/genkan/CLAUDE.md](products/genkan/CLAUDE.md)** — 7 genkan-specific rules: two-tier admin auth, audit chain Postgres-advisory-lock integrity, JWKS rotation cron, reauth gate for destructive actions, webhook-secret AES-GCM encryption, impersonation audit ordering, telemetry off.
 - **[products/house/CLAUDE.md](products/house/CLAUDE.md)** — deliberately no code-level rules (static Astro on Workers Static Assets).
-
-Genkan reuses menu's slice rules (menu's rules 2, 3, 5, 14 are cross-cutting) — read both when working across the federation boundary.
 
 ## Pattern: how to add a feature
 
-Reference templates: `src/features/auth/` in either product.
-`src/features/audit/` in genkan is a slightly larger example
-(adapter + chain library + verifier + use-cases + tests).
-The shape is the same in menu and genkan:
+Reference template: `src/features/auth/` in menu.
 
 1. `mkdir src/features/<slice>/{adapters,use-cases,ui}` — `ui/` only if the slice owns React components.
 2. Define **`ports.ts`** — narrow interfaces describing every effect the slice needs (db reads/writes, external APIs). One method per atomic op; no Drizzle / Next types leak through.
-3. Write the production **`adapters/drizzle.ts`** (or `better-auth.ts`, `s3.ts`, `genkan-http.ts`, …). Marked `'server-only'`. Implements the port against the real world.
+3. Write the production **`adapters/drizzle.ts`** (or `better-auth.ts`, `s3.ts`, …). Marked `'server-only'`. Implements the port against the real world.
 4. Write **`use-cases/<verb>.ts`** as pure-ish async functions: `(port, input) => result`. No `redirect()` / `headers()` access except via the port — that's what lets Vitest run them against PGLite.
 5. Expose the slice via **`index.ts`** — `React.cache()`-memoize page loaders that fan out to children. Re-export types callers need. Don't export the adapter itself.
-6. If the slice has mutations, add **`actions.ts`** with `'use server'` at the top: auth guard → `runUseCase(productionAdapter, input)` → `revalidateRestaurant(slug)` (menu) / `revalidatePath(...)` (genkan; no cached snapshot to invalidate by tag). Server actions don't live in `index.ts` — Next's directive doesn't traverse barrels reliably.
-7. Add a co-located **`<slice>.test.ts`** (menu) or **`__tests__/<verb>.test.ts`** (genkan) next to the source — `makeTestDb()` from `@/shared/testing/pglite`, real Drizzle queries, fakes only at the port boundary. If you need a real OIDC handshake, reach for `@iedora/auth-testkit`'s `startTestGenkan()`.
+6. If the slice has mutations, add **`actions.ts`** with `'use server'` at the top: auth guard → `runUseCase(productionAdapter, input)` → `revalidateRestaurant(slug)`. Server actions don't live in `index.ts` — Next's directive doesn't traverse barrels reliably.
+7. Add a co-located **`<slice>.test.ts`** next to the source — `makeTestDb()` from `@/shared/testing/pglite`, real Drizzle queries, fakes only at the port boundary.
 8. Add a short **`README.md`** at the slice root documenting the public API.
 
 For asset targets, languages, plans, templates: the registry
@@ -100,37 +83,38 @@ pattern is already encoded in the matching skill
 ## File layout
 
 The repo is a Bun workspace: `bun.lock` at the root, every
-workspace under `packages/*` or `products/*`. Sibling products
-never share files — anything that looked shared (BWS credentials,
-the Cloudflare zone) gets duplicated per product so each one is
-independently appliable.
+workspace under `packages/*` or `products/*`. Each product's
+deploy stack is independently appliable — BWS credentials and
+the Cloudflare zone live inside the product, not in shared infra.
 
 ```
 iedora/                                  repo root
   bun.lock                               single workspace lockfile
-  package.json                           workspaces: packages/* + products/{menu,genkan,house}
-  justfile                               just modules: infra::, menu::, genkan::, house::
+  package.json                           workspaces: packages/* + products/{menu,house}
+  justfile                               just modules: infra::, menu::, house::
   .github/                               composite setup action + one workflow per workspace
     actions/setup/action.yml             composite: install Bun + bun install --frozen-lockfile
     workflows/menu.yml                   menu's full pipeline (typecheck + lint + unit + e2e)
-    workflows/genkan.yml                 genkan's pipeline (typecheck + lint + unit)
     workflows/design-system.yml          design-system pipeline (typecheck + lint + unit)
     workflows/identity.yml               iedora-identity pipeline (typecheck + lint + unit + fuzz)
     workflows/observability.yml          iedora-observability pipeline (typecheck + lint + unit)
-    workflows/auth-testkit.yml           iedora-auth-testkit pipeline (typecheck + lint + unit)
   .mcp.json                              shadcn, postgres, bun, next-devtools, playwright MCP servers
   docs/                                  brand-level docs (deploy, scaling, backups, secrets,
                                          security-audit, tenancy, vendors, architecture, testing)
 
-  infra/                                 SHARED INFRASTRUCTURE — applied BEFORE any product.
-                                         Postgres accessory + daily backups accessory live here
-                                         because both products use them. Container names are
-                                         `infra-postgres` and `infra-backups`.
+  infra/                                 SHARED INFRASTRUCTURE — the single deploy entry point.
+                                         Postgres + backups + OpenObserve + Zitadel + Caddy +
+                                         the menu_web app container all live here as Tofu-managed
+                                         Docker containers on the Hetzner VPS. Container names
+                                         are `infra-*` for cross-product accessories; the menu
+                                         app container is named `menu_web`.
     justfile                             deploy / backup / restore / wipe-postgres / build-backup
     .env.example                         infra template (BWS token + ONPREM_HOST + GHCR_USER + CF acct)
-    bin/with-secrets                     BWS wrapper; only TF_VAR_account_id + cloudflare_api_token + state_passphrase
-    tofu/                                ONE resource set: `iedora-backups` R2 bucket + its scoped R2 token
-    kamal/                               Kamal 2 — accessory-only (`kamal accessory boot all`, never `kamal deploy`)
+    bin/with-secrets                     BWS wrapper; exports TF_VAR_* aliases (cloudflare/github
+                                         bootstrap + onprem_host + per-container BWS-sourced secrets)
+    tofu/                                Single Tofu root. R2 buckets + GitHub Actions config +
+                                         docker_container resources on the Hetzner VPS via
+                                         `kreuzwerker/docker` over SSH. See containers.tf.
     backup/                              self-built Postgres-backup image (Dockerfile + backup.sh + restore.sh + run.sh)
 
   packages/
@@ -172,27 +156,15 @@ iedora/                                  repo root
         tenant.ts                        withTenantSpan + tenantAttributes + IEDORA_RESTAURANT_ID/ORGANIZATION_ID
         __tests__/                       no-op-in-tests, tenant attribute contract, tenant-isolation contracts
       README.md                          quickstart + behaviour table
-    iedora-auth-testkit/                 @iedora/auth-testkit — in-process Better Auth + PGLite
-      src/
-        index.ts                         startTestGenkan + signTestToken
-        start-test-genkan.ts             boots node:http, wires Better Auth, applies migrations
-        schema.ts                        re-export of genkan's schema (subpath: ./schema)
-        push-schema.ts                   drizzle migrations runner against PGLite
-        seed.ts                          {user,organization,member,grant} convenience seeders
-        sign-test-token.ts               mint a JWT signed by the test instance's JWKS
-        __tests__/                       smoke + handshake + seed sanity tests
-      README.md                          worked example + API table
 
   products/
     menu/                                Next.js 16 — menu.iedora.com (SaaS menu builder)
                                          → full subtree in products/menu/CLAUDE.md
-    genkan/                              Next.js 16 — genkan.iedora.com (iedora IdP)
-                                         → full subtree in products/genkan/CLAUDE.md
     house/                               Astro — iedora.com (brand site, static)
                                          → see products/house/CLAUDE.md + README.md
 ```
 
-Each product's `infra/` mirrors a common shape: `Dockerfile` (Next products), `justfile` (deploy/destroy/rotate-secret recipes), `.env.example`, `bin/with-secrets` (BWS wrapper), `tofu/` (encrypted Cloudflare state), `kamal/` (Kamal 2 config + secrets).
+Menu's `infra/` shape: `Dockerfile` (consumed by `menu.yml` CI to build + push the image to GHCR), `justfile` (recipes for the R2 assets bucket + DNS), `.env.example`, `bin/with-secrets` (BWS wrapper), `tofu/` (encrypted Cloudflare state for the assets bucket + `assets.iedora.com` custom domain). The menu container itself is declared in `infra/tofu/containers.tf` at the repo root (`docker_container.menu_web`) — applied by `just infra::deploy`.
 
 ## Useful commands
 
@@ -206,38 +178,36 @@ or package directory.
 - `bun install` — install/refresh every workspace.
 - `bun install --frozen-lockfile` — what CI uses; matches `bun.lock` exactly.
 - `just` — list every product module + its recipes.
-- `just menu` / `just genkan` / `just house` — list one product's recipes.
+- `just menu` / `just house` — list one product's recipes.
 
 ### Per-product commands
 
 - **Menu** — see [products/menu/CLAUDE.md](products/menu/CLAUDE.md) § Commands.
-- **Genkan** — see [products/genkan/CLAUDE.md](products/genkan/CLAUDE.md) § Commands. (Genkan runs on **port 3001**; menu on 3000.)
-- **Packages** (`packages/<name>/`) — `bun run test` / `test:watch` (Vitest; no DB for `@iedora/identity` and `@iedora/observability`, PGLite for `@iedora/auth-testkit`, jsdom for `@iedora/design-system`); `bun run typecheck`.
+- **Packages** (`packages/<name>/`) — `bun run test` / `test:watch` (Vitest; no DB for `@iedora/identity` and `@iedora/observability`, jsdom for `@iedora/design-system`); `bun run typecheck`.
 
 ### Deploy (`just <product>::<recipe>` at repo root)
 
-- **First-time setup** (once, manual): `ssh-copy-id root@$ONPREM_HOST` (Kamal's canonical SSH user — root with key-only login); `gh auth refresh -s write:packages`; then `just infra::deploy` (shared Postgres + backups), then `just menu::deploy`, then `just genkan::deploy`. See `docs/deploy.md` for the homelab key-copy step when root SSH isn't already enabled.
-- `just infra::deploy` — shared infra: provisions the `iedora-backups` R2 bucket via Tofu, then boots `infra-postgres` + `infra-backups` accessories via Kamal. MUST run before any product deploy.
-- `just menu::deploy` — menu app: tofu apply (tunnel + DNS + assets R2) + kamal setup/deploy, idempotent. The recipe probes for an existing kamal-proxy container and chooses `setup` vs `deploy` accordingly.
-- `just genkan::deploy` — same shape; connects to the shared `infra-postgres` accessory (separate logical database: `genkan`).
-- `just menu::logs` / `console` / `rollback` and `just genkan::logs` / `console` / `rollback` — direct `kamal` calls; each product's `.env` is auto-loaded via `set dotenv-load`. (Migrations run on container start via the Kamal `cmd:` — no separate `migrate` recipe needed.)
-- `just infra::backup` / `restore` — force a Postgres dump now / restore latest (interactive). The infra workspace owns the shared Postgres accessory + the backups accessory; backups are cluster-wide (`pg_dumpall`) and cover every product's database.
-- `just infra::build-backup` — rebuild the backup accessory image (only needed when bumping the Postgres major).
-- `just menu::rotate-secret <KEY>` / `just genkan::rotate-secret <KEY>` — rotate one BWS secret (prompts new value, edits BWS, reminds to redeploy). For sub-tokens (R2, tunnel): `cd products/<name>/infra && bin/with-secrets tofu -chdir=tofu apply -replace=<resource>`. See `docs/secrets.md`.
-- `just menu::destroy` / `just genkan::destroy` — `tofu destroy` for that product: removes its Cloudflare tunnel + DNS (does NOT touch the box, does NOT touch the other product).
+- **First-time setup** (once, manual): root SSH key on the Hetzner box (cloud images ship with it); `gh auth refresh -s write:packages`; populate the bootstrap secrets in BWS; then `just infra::deploy` — one `tofu apply` boots Postgres + backups + Zitadel + Caddy + the menu container in one pass. See `docs/deploy.md`.
+- `just infra::deploy` — the single deploy entry point. Tofu provisions the Hetzner VPS, every Cloudflare resource, the GitHub Actions config, and every container on the box (`infra-postgres`, `infra-backups`, `infra-openobserve`, `infra-zitadel`, `infra-zitadel-login`, `infra-caddy`, `menu_web`). Idempotent — same recipe day-1 and day-N.
+- `just menu::infra` — applies the menu-product-local Tofu (assets R2 bucket + `assets.iedora.com` DNS). Rare — only when the bucket or its CORS / custom-domain configuration changes.
+- `just infra::logs <svc>` / `just infra::console` — tail logs / psql shell on the live box via SSH.
+- `just infra::backup` / `restore` — force a Postgres dump now / restore latest (interactive). Backups are cluster-wide (`pg_dumpall`) and cover every product's database.
+- `just infra::build-backup` — rebuild the backup container image (only needed when bumping the Postgres major).
+- `just infra::rotate-secret <KEY>` — rotate one BWS secret (prompts new value, edits BWS, reminds to redeploy). For sub-tokens (R2, tunnel): `bin/with-secrets tofu -chdir=tofu apply -replace=<resource>` inside the right workspace. See `docs/secrets.md`.
+- `just infra::destroy` — tears down the Hetzner VPS + every Tofu-managed resource.
 - `just house::deploy` / `house::destroy` — manage iedora.com (Astro build → workload-token refresh → `wrangler deploy` uploading dist/ + apex `custom_domain` route). `just house::build` / `house::preview` for local-only checks.
 
 `just` itself is a Rust task runner — `brew install just` on macOS,
-`cargo install just` on the homelab. Replaces the old root + infra
+`cargo install just` on the VPS. Replaces the old root + infra
 Makefiles.
 
-Build + push lives on the homelab box itself
-(`builder.remote: ssh://root@$ONPREM_HOST`, native amd64). Images
-are pushed to **GHCR** (`ghcr.io/$GHCR_USER/menu` for menu,
-`ghcr.io/$GHCR_USER/genkan` for genkan); auth is `gh auth token`
-evaluated from each product's `kamal/.kamal/secrets`. No local
-registry, no buildx insecure-registry config, no daemon.json
-mutation.
+Image build + push happens **in CI** (`.github/workflows/menu.yml`)
+on every push to main: buildx for `linux/arm64` (the Hetzner CAX11 is
+ARM), pushed to **GHCR** (`ghcr.io/$GHCR_USER/menu:latest` + commit
+SHA). Menu CI then dispatches `infra-deploy.yml`, which re-runs
+`tofu apply`; Tofu's `data.docker_registry_image.menu + pull_triggers`
+pulls the new digest and recreates the `docker_container.menu_web`
+in-place. No SSH from CI, no local builder.
 
 ## CI
 
@@ -250,16 +220,12 @@ Adding a new workspace = one new file.
 .github/
   actions/setup/action.yml      composite: install Bun + bun install --frozen-lockfile
   workflows/
-    menu.yml                     menu's full pipeline (typecheck, lint, unit, security, e2e)
-    genkan.yml                   genkan's pipeline (typecheck, unit, security)
+    menu.yml                     menu's full pipeline (typecheck, lint, unit, security, build + push image)
     design-system.yml            @iedora/design-system unit suite
     identity.yml                 @iedora/identity unit suite
     observability.yml            @iedora/observability unit suite
-    auth-testkit.yml             @iedora/auth-testkit unit suite
-    menu-deploy.yml              menu CD (workflow_run after green Menu CI, then _kamal-deploy)
-    genkan-deploy.yml            genkan CD (same shape)
+    infra-deploy.yml             one `tofu apply` for the whole estate; auto-triggers on green menu.yml
     house-deploy.yml             house CD (Astro → wrangler deploy)
-    _kamal-deploy.yml            reusable: kamal deploy + Trivy image scan + SLSA attestations
     codeql.yml                   CodeQL SAST (TS+JS); push + PR + weekly cron
     scorecard.yml                OpenSSF Scorecard posture grading; weekly cron
     dependency-review.yml        block PRs that add HIGH/CRITICAL CVE deps
@@ -270,10 +236,8 @@ Adding a new workspace = one new file.
 1. **`paths:` trigger filter per workflow.** Each workflow's `on:`
    block lists the workspaces that should retrigger it. Menu lists
    `products/menu/**` plus its workspace deps (`design-system`,
-   `identity`, `auth-testkit`) plus root files (`bun.lock`,
-   `package.json`, `tsconfig*.json`, its own workflow file, the
-   composite action). A change in genkan source DOES NOT wake menu's
-   pipeline — they're truly independent.
+   `identity`) plus root files (`bun.lock`, `package.json`,
+   `tsconfig*.json`, its own workflow file, the composite action).
 
 2. **Composite action for setup.** `actions/setup` runs
    `oven-sh/setup-bun@v2` + `bun install --frozen-lockfile` at the
@@ -286,21 +250,14 @@ Adding a new workspace = one new file.
 - **menu.yml** — `typecheck`, `lint`, `unit`, `security` (parallel),
   then `e2e` with `needs: [typecheck, lint, unit, security]`. The
   e2e job owns the entire env block (Postgres + LocalStack services,
-  GENKAN_* / S3_* / DATABASE_URL literals) — they're all menu-specific.
+  S3_* / DATABASE_URL literals) — they're all menu-specific.
   The security job runs `aquasecurity/trivy-action` (fs scan, fails
   on HIGH/CRITICAL via `--ignore-unfixed`) and emits an SPDX-JSON
   SBOM uploaded as a 90-day artifact.
-- **genkan.yml** — `typecheck`, `unit`, `security` (parallel). No
-  e2e suite (see `docs/testing.md` "Why genkan has no Playwright
-  suite"). Same trivy + SBOM shape as menu's security job.
 - **design-system.yml** — `unit` (jsdom-backed Vitest).
 - **identity.yml** — `unit` (pure crypto + parsing).
 - **observability.yml** — `unit` (no-op-in-tests contract + tenant
   attribute pins). No network, no DB.
-- **auth-testkit.yml** — `unit` (boots real Better Auth + PGLite,
-  walks the OIDC handshake). Re-exports genkan's schema, so its
-  `paths:` filter ALSO includes `products/genkan/src/shared/db/schema.ts`
-  — a genkan schema change retriggers it.
 - **codeql.yml** — GitHub-native SAST. Runs on push/PR to main and
   weekly Mon 04:30 UTC. `security-extended` query suite. Findings in
   Security tab → Code scanning, grouped by language.
@@ -309,19 +266,22 @@ Adding a new workspace = one new file.
   want one in README). Two known low scores: Branch-Protection (off
   by design) and Code-Review (solo project).
 - **dependency-review.yml** — `actions/dependency-review-action@v4`
-  on every PR; gates on HIGH+ severity. Complements menu/genkan's
+  on every PR; gates on HIGH+ severity. Complements menu's
   post-merge Trivy fs scan by catching vulnerable deps at PR time.
-- **menu-deploy.yml / genkan-deploy.yml / house-deploy.yml** — CD
-  workflows. The two Kamal-based ones delegate to `_kamal-deploy.yml`
-  (reusable), which builds + deploys + runs a post-deploy Trivy image
-  scan + mints SLSA build-provenance + SBOM attestations attached to
-  GHCR via Sigstore. House goes straight to `wrangler deploy`.
+- **infra-deploy.yml / house-deploy.yml** — CD workflows.
+  `infra-deploy.yml` is one `tofu apply` for the whole iedora estate;
+  it fires on `workflow_dispatch` (manual operator button) and on
+  `workflow_run` after Menu CI completes green on main. Tofu's
+  `pull_triggers` on `docker_image.menu` pulls the freshly-pushed image
+  and recreates `docker_container.menu_web`. House goes straight to
+  `wrangler deploy`. SLSA build-provenance + SBOM attestations are
+  attached to the GHCR image inside `menu.yml` itself (the build job).
 
 **Where env lives:**
 
 - **Job-level (`env:` in menu.yml's e2e job)** — every CI fixture
-  literal: `DATABASE_URL`, `GENKAN_*`, `NEXT_PUBLIC_GENKAN_URL`,
-  `S3_*`. These aren't secret — they live in code, not in GH Secrets.
+  literal: `DATABASE_URL`, `S3_*`. These aren't secret — they live
+  in code, not in GH Secrets.
 - **GH Secrets** — only `BETTER_AUTH_SECRET` (truly sensitive). When
   deploy workflows land, true per-environment secrets graduate to
   **GitHub Environments** (`environment: production` / `staging`).
@@ -349,20 +309,19 @@ To pause Renovate for a specific dependency: add an entry to
 ## Where to look when unsure
 
 1. `node_modules/next/dist/docs/` — bundled, version-matched Next.js docs.
-2. `node_modules/better-auth/` and the Better Auth README in node_modules — auth APIs (1.6.11 pinned across the repo).
-3. `node_modules/@better-auth/oauth-provider/` — the OAuth-provider plugin docs that genkan loads.
-4. `node_modules/drizzle-orm/` — query builder, types.
-5. `products/<product>/src/features/<slice>/README.md` — every slice has a short doc describing its public API.
-6. `packages/<package>/README.md` — every shared package documents its surface.
-7. `docs/architecture.md` — the slice playbook (what goes where + how to add a feature).
-8. `docs/testing.md` — the test pyramid (Vitest+PGLite unit; auth-testkit integration; Playwright e2e).
-9. `docs/security-audit.md` — the security model + audited surface.
-10. `docs/tenancy.md` — how tenancy works across the federation boundary.
-11. `docs/vendors.md` — every paid + free dependency with rationale.
-12. `docs/deploy.md`, `docs/secrets.md`, `docs/backups.md`, `docs/scaling.md` — ops playbooks (apply across products).
-13. `docs/observability.md` — OpenTelemetry wiring (every product), OpenObserve operational notes, sampling, tenant-attribute conventions, query recipes.
-14. `docs/terraform-style.md` — 10-bullet LLM-safe HCL conventions for every Tofu root + shared module in the repo. Apply before editing any `.tf`.
-15. `docs/infra-declarative-roadmap.md` — what's declarative today vs. what's queued for migration; rationale for tiered priorities.
-16. `docs/ai.md` — Claude Code GitHub Action (`.github/workflows/claude.yml`) + its `CLAUDE_CODE_OAUTH_TOKEN`, the `eduvhc/iedora` repo-slug gotcha, and the `.mcp.json` server inventory.
+2. `node_modules/better-auth/` and the Better Auth README in node_modules — auth APIs (1.6.11 pinned in menu).
+3. `node_modules/drizzle-orm/` — query builder, types.
+4. `products/menu/src/features/<slice>/README.md` — every slice has a short doc describing its public API.
+5. `packages/<package>/README.md` — every shared package documents its surface.
+6. `docs/architecture.md` — the slice playbook (what goes where + how to add a feature).
+7. `docs/testing.md` — the test pyramid (Vitest+PGLite unit; Playwright e2e).
+8. `docs/security-audit.md` — the security model + audited surface.
+9. `docs/tenancy.md` — how tenancy works.
+10. `docs/vendors.md` — every paid + free dependency with rationale.
+11. `docs/deploy.md`, `docs/secrets.md`, `docs/backups.md`, `docs/scaling.md` — ops playbooks (apply across products).
+12. `docs/observability.md` — OpenTelemetry wiring (every product), OpenObserve operational notes, sampling, tenant-attribute conventions, query recipes.
+13. `docs/terraform-style.md` — 10-bullet LLM-safe HCL conventions for every Tofu root + shared module in the repo. Apply before editing any `.tf`.
+14. `docs/infra-declarative-roadmap.md` — what's declarative today vs. what's queued for migration; rationale for tiered priorities.
+15. `docs/ai.md` — Claude Code GitHub Action (`.github/workflows/claude.yml`) + its `CLAUDE_CODE_OAUTH_TOKEN`, the `eduvhc/iedora` repo-slug gotcha, and the `.mcp.json` server inventory.
 
 The bundled docs match installed versions — trust them over recall.

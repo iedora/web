@@ -43,8 +43,8 @@ resource "cloudflare_api_token" "backups_r2" {
 # OTLP ingest endpoint at obs.iedora.com.
 #
 # Why this lives in shared infra/, not in a product root: OpenObserve
-# receives spans from EVERY product (menu, genkan, future). Tying it to
-# any one product would mean a product teardown takes down telemetry.
+# receives spans from EVERY product (menu + any future addition). Tying
+# it to any one product would mean a product teardown takes down telemetry.
 
 data "cloudflare_zone" "iedora" {
   filter = {
@@ -92,4 +92,43 @@ module "observability_tunnel" {
   tunnel_name     = "iedora-observability"
   public_hostname = var.observability_hostname
   primary_service = "http://infra-openobserve:5080"
+}
+
+# ── ZITADEL IdP (issue #19) ──────────────────────────────────────────────────
+# menu.iedora.com — direct DNS to the Hetzner box, grey-cloud (proxied=false).
+# Replaces the per-product CF Tunnel that lived in products/menu/infra/tofu/.
+# Caddy on the Hetzner box terminates TLS via Let's Encrypt + reverse-proxies
+# to `infra-menu-web:3000` (see Caddyfile inlined in docker_container.caddy).
+#
+# Trade-off vs CF Tunnel: no CF DDoS / WAF / edge cache on this hostname.
+# For pre-customer scale that's irrelevant; if menu ever serves real traffic
+# at scale, flip `proxied = true` and add `--token` to a tunnel sidecar.
+resource "cloudflare_dns_record" "menu_iedora" {
+  zone_id = data.cloudflare_zone.iedora.id
+  name    = var.menu_public_hostname
+  type    = "A"
+  content = hcloud_server.iedora.ipv4_address
+  ttl     = 60
+  proxied = false
+  comment = "Direct to Hetzner — Caddy terminates TLS, no CF on path"
+}
+
+# auth.iedora.com — direct DNS to the Hetzner box, NO Cloudflare in path.
+# This is the entire reason we moved off the homelab: Cloudflare Free blocks
+# `application/grpc` content-type at the edge, breaking the Zitadel TF
+# provider. Grey-cloud (proxied=false) sidesteps CF entirely; Caddy on the
+# Hetzner box terminates TLS via Let's Encrypt + handles the /ui/v2/* split
+# between the Go binary and the Next.js login app.
+#
+# Trade-off vs CF Tunnel: no DDoS protection on this hostname. Fine for an
+# IdP that's authenticated-only (no anonymous endpoints worth attacking) and
+# pre-customer. menu + obs keep CF Tunnel — they don't need gRPC.
+resource "cloudflare_dns_record" "auth_iedora" {
+  zone_id = data.cloudflare_zone.iedora.id
+  name    = var.zitadel_hostname
+  type    = "A"
+  content = hcloud_server.iedora.ipv4_address
+  ttl     = 60
+  proxied = false
+  comment = "Direct to Hetzner — grey cloud bypasses CF Free gRPC block (#19)"
 }

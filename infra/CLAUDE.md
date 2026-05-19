@@ -1,6 +1,6 @@
 # Shared infra — `infra/`
 
-Cross-product infrastructure: declarative resources via OpenTofu + container accessories via Kamal 2. Applied BEFORE any product deploy (the `infra-postgres` accessory has to be live before menu or genkan can connect). The root `AGENTS.md` covers cross-cutting conventions; Claude Code auto-loads both when working under this subtree.
+Cross-product infrastructure: declarative resources via OpenTofu + container accessories via Kamal 2. Applied BEFORE any product deploy (the `infra-postgres` container has to be live before menu can connect). The root `AGENTS.md` covers cross-cutting conventions; Claude Code auto-loads both when working under this subtree.
 
 ## What this owns
 
@@ -9,29 +9,29 @@ Cross-product infrastructure: declarative resources via OpenTofu + container acc
 - `cloudflare_r2_bucket.backups` + `cloudflare_api_token.backups_r2` — encrypted Postgres dump destination, R2 token scoped to that one bucket.
 - `cloudflare_r2_bucket.observability` + `cloudflare_api_token.observability_r2` — OpenObserve cold-tier parquet shards. Scoped token, same shape as backups.
 - `module.observability_tunnel` — Cloudflare Tunnel + DNS for `obs.iedora.com`. Bypasses kamal-proxy (`primary_service = "http://infra-openobserve:5080"`) because OpenObserve owns its own request lifecycle.
-- `tailscale_acl.policy` — tailnet ACL (declares `tag:ci` ownership).
-- `tailscale_federated_identity.ci` — Workload Identity Federation trust for GitHub OIDC (`repo:eduvhc/iedora:*`). CI authenticates per-job via GitHub's short-lived JWT — no stored secret. The federated ID + audience write through to BWS as `INFRA_CI_TAILSCALE_FEDERATED_{ID,AUDIENCE}` via `just infra::deploy`.
 - `github_actions_secret.secrets[*]` + `github_actions_variable.vars[*]` — the GH Actions config CI depends on. Values flow from BWS via `TF_VAR_*` aliases.
 
-**Kamal accessories (`infra/kamal/`)** — `infra-postgres` (Postgres 18, shared by every product's database), `infra-backups` (daily `pg_dumpall` → R2, GPG-encrypted with `INFRA_BACKUP_PASSPHRASE`), `infra-openobserve` (single-binary observability backend — OTLP receiver + UI on port 5080, R2 cold tier, local hot disk), and `infra-openobserve-tunnel` (cloudflared sidecar for `obs.iedora.com`). Container names are deliberately `infra-*` (not `menu-*` or `infra-postgres` for menu only) because they serve every product.
+**Tofu-managed containers (`infra/tofu/containers.tf`)** — Every always-on Docker container on the Hetzner VPS is declared here via the `kreuzwerker/docker` provider talking to the daemon over SSH. Containers: `infra-postgres` (Postgres 18, shared by every product's database), `infra-backups` (daily `pg_dumpall` → R2, GPG-encrypted with `INFRA_BACKUP_PASSPHRASE`), `infra-openobserve` (single-binary observability backend — OTLP receiver + UI on port 5080, R2 cold tier, local hot disk), `infra-openobserve-tunnel` (cloudflared sidecar for `obs.iedora.com`), `infra-zitadel` (issue #19 Phase 1: ZITADEL v4 IdP on port 8080, talks to the shared Postgres on database `zitadel`), `infra-zitadel-login` (Next.js v2 login UI sharing a `zitadel-bootstrap` named volume with `infra-zitadel`), and `infra-caddy` (TLS termination + reverse proxy for `auth.iedora.com`, directly bound to the VPS's public IPv4 — no Cloudflare Tunnel in front). Container names are deliberately `infra-*` because they serve every product.
 
-**Reusable Tofu modules (`infra/modules/`)** — `cloudflare-tunnel-app/` is the per-product tunnel+ingress+DNS pattern, shared between menu and genkan roots. Adding a 4th product = `module "tunnel" { source = "../../../../infra/modules/cloudflare-tunnel-app"; ... }` in 5 lines.
+**Kamal stays for end apps only** — `infra/` no longer ships any Kamal config. The per-product workspace (`products/menu/infra/kamal/`) still uses Kamal for rolling deploys, and the menu app container joins the `kamal` Docker network alongside the Tofu-managed `infra-*` containers (Tofu owns the network too — see `containers.tf`). Migrating infra to Tofu happened because Kamal's accessory model is one-shot per-product rollouts; the always-on infra layer wanted multi-service declarative drift detection and a shared volume between Zitadel and its login companion — none of which the accessory shape handles cleanly.
+
+**Reusable Tofu modules (`infra/modules/`)** — `cloudflare-tunnel-app/` is the per-product tunnel+ingress+DNS pattern, used today by menu. Adding another product = `module "tunnel" { source = "../../../../infra/modules/cloudflare-tunnel-app"; ... }` in 5 lines.
 
 **Self-built images (`infra/backup/`)** — Dockerfile + `backup.sh` / `restore.sh` / `run.sh`. Built rarely (only when bumping Postgres major), pushed to `ghcr.io/$GHCR_USER/iedora-backup:18`.
 
 ## Hard rules
 
-1. **Declarative-first.** Every resource here is Tofu-managed. **Edit `.tf` files, never the upstream UI** — Tofu's `overwrite_existing_content = true` (Tailscale ACL) and unconditional reconciliation (GitHub Actions secrets/variables) will silently clobber your UI edits on the next `just infra::deploy`. If you find yourself reaching for the Tailscale, GitHub, or Cloudflare console to change something this workspace owns, stop and edit the HCL instead.
+1. **Declarative-first.** Every resource here is Tofu-managed. **Edit `.tf` files, never the upstream UI** — Tofu's unconditional reconciliation (GitHub Actions secrets/variables) will silently clobber your UI edits on the next `just infra::deploy`. If you find yourself reaching for the GitHub or Cloudflare console to change something this workspace owns, stop and edit the HCL instead.
 
-2. **Tofu-managed credentials write through to BWS, not the other way around.** For resources like `tailscale_federated_identity.ci` (ID + audience) and `cloudflare_api_token.workers_deploy`, the value is generated by Tofu and pushed to BWS by `just infra::deploy`. Editing the BWS entry directly is wasted work — the next apply restores Tofu's state value. See `docs/secrets.md` § Tofu-managed write-throughs for the full list.
+2. **Tofu-managed credentials write through to BWS, not the other way around.** For resources like `cloudflare_api_token.workers_deploy`, the value is generated by Tofu and pushed to BWS by `just infra::deploy`. Editing the BWS entry directly is wasted work — the next apply restores Tofu's state value. See `docs/secrets.md` § Tofu-managed write-throughs for the full list.
 
-3. **Bootstrap order is BWS → Tofu → write-through.** First-time setup populates the 4 bootstrap secrets in BWS (`INFRA_CLOUDFLARE_API_TOKEN`, `INFRA_TAILSCALE_OAUTH_CLIENT_{ID,SECRET}`, `INFRA_GITHUB_API_TOKEN`, `INFRA_KAMAL_SSH_PRIVATE_KEY`); `just infra::deploy` then provisions everything else AND writes the Tofu-minted CI credentials back to BWS. See `docs/deploy.md` § Continuous deployment + § Network reachability for the full one-shot flow.
+3. **Bootstrap order is BWS → Tofu → write-through.** First-time setup populates the bootstrap secrets in BWS (`INFRA_CLOUDFLARE_API_TOKEN`, `INFRA_GITHUB_API_TOKEN`, `INFRA_KAMAL_SSH_PRIVATE_KEY`); `just infra::deploy` then provisions everything else AND writes any Tofu-minted CI credentials back to BWS. See `docs/deploy.md` § Continuous deployment for the full one-shot flow.
 
 4. **Follow `docs/terraform-style.md` when editing any `.tf`.** Pessimistic `~>` version pins, `for_each` over `count`, `validation` blocks on inputs, predictable `<provider>_<noun>.<role>_<qualifier>` naming. The 10 LLM-safe HCL conventions exist precisely because this workspace will be edited by LLMs.
 
 5. **State file is encrypted in git.** `terraform.tfstate` is PBKDF2 + AES-GCM encrypted (`infra/tofu/versions.tf` config block, passphrase from `INFRA_STATE_PASSPHRASE`). Decrypting locally requires the passphrase. Rotating the passphrase uses the `fallback` block migration — see `docs/secrets.md` § Tofu state passphrase.
 
-6. **One Tofu root per blast-radius unit.** This shared workspace, plus three per-product workspaces. Don't consolidate. Modules in `infra/modules/` are how code is DRY'd up; state stays segmented. See `docs/deploy.md` § Why one Tofu root per product.
+6. **One Tofu root per blast-radius unit.** This shared workspace, plus per-product workspaces. Don't consolidate. Modules in `infra/modules/` are how code is DRY'd up; state stays segmented. See `docs/deploy.md` § Why one Tofu root per product.
 
 ## File layout
 
@@ -42,21 +42,22 @@ infra/
   bin/
     with-secrets                        BWS wrapper — loads every secret as env, exports TF_VAR_* aliases for Tofu
   tofu/                                 SHARED Tofu root (encrypted state)
-    versions.tf                         providers: cloudflare ~> 5.19, tailscale ~> 0.29, github ~> 6.12
-                                        + encryption block (PBKDF2/AES-GCM)
-    variables.tf                        bootstrap creds + GH/Tailscale config + hostnames (defaults to production)
-    main.tf                             cloudflare_r2_bucket.backups + cloudflare_api_token.backups_r2
-    tailscale.tf                        tailscale_acl.policy + tailscale_federated_identity.ci
+    versions.tf                         providers: cloudflare ~> 5.19, github ~> 6.12,
+                                        kreuzwerker/docker ~> 3.7 (over SSH to the VPS) + encryption block
+    variables.tf                        bootstrap creds + GH config + hostnames + container secrets
+    main.tf                             cloudflare_r2_bucket.{backups,observability} + tokens + tunnel modules
+    containers.tf                       docker_network.kamal + docker_volume.zitadel_bootstrap + docker_container
+                                        (postgres, openobserve, openobserve-tunnel, backups, zitadel,
+                                         zitadel-login, caddy)
     github.tf                           github_actions_secret.secrets + github_actions_variable.vars (for_each over locals)
-    outputs.tf                          backup-bucket coords + CI Tailscale OAuth (sensitive)
+    outputs.tf                          backup-bucket coords (sensitive)
   modules/
     cloudflare-tunnel-app/              shared module for product tunnel+ingress+DNS pattern
       main.tf, variables.tf, outputs.tf, versions.tf, README.md
-  kamal/                                Kamal 2 — accessory-only (never `kamal deploy` here)
-    config/deploy.yml                   declares `infra-postgres` + `infra-backups` accessories
-    .kamal/secrets                      shell-evaluated references to BWS keys (no plaintext values)
   postgres/
-    init.sql                            initial `CREATE DATABASE menu / genkan` + role grants
+    init.sql                            initial `CREATE DATABASE menu / zitadel` (runs once on
+                                        the cluster's first init; uploaded into infra-postgres via the
+                                        docker_container `upload` block)
   backup/                               self-built Postgres-backup image
     Dockerfile                          postgres:18-alpine + aws-cli + gnupg + tini; LABEL → eduvhc/iedora
     run.sh, backup.sh, restore.sh       cron + pg_dumpall + GPG + R2 upload + retention
@@ -65,23 +66,25 @@ infra/
 ## Commands
 
 ```
-just infra::deploy        # Tofu apply (R2 + Tailscale + GitHub) → BWS write-through → Kamal accessory boot
-just infra::destroy       # tofu destroy — removes R2 backup bucket + token (does NOT touch Postgres data)
-just infra::wipe-postgres # destructive — stops + removes infra-postgres + its bind-mount data dir (confirmation gate)
-just infra::logs          # tail the backups accessory cron heartbeats
-just infra::console       # psql into the live Postgres accessory
-just infra::backup        # force a pg_dumpall now (cron runs daily)
-just infra::restore       # restore latest dump (interactive)
+just infra::deploy        # tofu apply (R2 + observability tunnel + GitHub + the VPS infra containers)
+just infra::destroy       # tofu destroy — tears down R2 + tunnels + every infra-* container
+                          # (Postgres data dir on the host survives unless you also `wipe-postgres`)
+just infra::wipe-postgres # destructive — `docker rm -f infra-postgres` + `rm -rf /root/infra-postgres`
+                          # (confirmation gate; menu + zitadel databases all gone after)
+just infra::logs <svc>    # ssh + `docker logs -f infra-<svc>`; defaults to `backups`
+just infra::console       # ssh + `docker exec -it infra-postgres psql -U postgres`
+just infra::backup        # ssh + `docker exec infra-backups sh /backup.sh`
+just infra::restore       # ssh + `docker exec -it infra-backups sh /restore.sh`
 just infra::build-backup  # rebuild + push the backup image (only when bumping Postgres major)
 just infra::rotate-secret # prompt-driven BWS secret rotation
 ```
 
-`bin/with-secrets <cmd>` wraps any command with BWS env + TF_VAR_* aliases loaded — used internally by the justfile recipes. Run it directly when you need to invoke `tofu` or `kamal` outside a recipe.
+`bin/with-secrets <cmd>` wraps any command with BWS env + `TF_VAR_*` aliases loaded — used internally by the justfile recipes. Run it directly when you need to invoke `tofu` outside a recipe (e.g. ad-hoc `tofu state` operations).
 
 ## See also
 
-- **[`docs/deploy.md`](../docs/deploy.md)** — first-time-setup walkthrough, Tailscale + GitHub bootstrap, CI/CD wiring.
+- **[`docs/deploy.md`](../docs/deploy.md)** — first-time-setup walkthrough, GitHub bootstrap, CI/CD wiring.
 - **[`docs/secrets.md`](../docs/secrets.md)** — every credential's location, rotation recipe, cadence, and the zero-downtime patterns (Better Auth plural secrets, Postgres dual-role, Tofu state fallback, BWS blue/green).
 - **[`docs/terraform-style.md`](../docs/terraform-style.md)** — the 10 LLM-safe HCL conventions. Apply before editing any `.tf` in this workspace.
 - **[`docs/infra-declarative-roadmap.md`](../docs/infra-declarative-roadmap.md)** — what's declarative today vs. what's queued; per-tier rationale.
-- **[`docs/scaling.md`](../docs/scaling.md)** — what changes when this workspace grows to N>1 hosts (multi-host Postgres options, per-host cloudflared, Tailscale mesh).
+- **[`docs/scaling.md`](../docs/scaling.md)** — what changes when this workspace grows to N>1 hosts (multi-host Postgres options, per-host cloudflared).

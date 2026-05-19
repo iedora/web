@@ -18,14 +18,14 @@ These vendors process customer data or hold the keys to it. Their compromise dir
 
 | | |
 |---|---|
-| **Service** | DNS + TLS termination + Cloudflare Tunnel (no inbound ports on the homelab) + R2 object storage (encrypted pg_dump backups + future asset uploads) + Workers Static Assets (iedora.com) |
-| **Data they touch** | Every HTTP request and response in flight (Cloudflare terminates TLS at the edge). Backup data at rest (encrypted with `INFRA_BACKUP_PASSPHRASE` from BWS — Cloudflare sees ciphertext only). |
-| **SOC 2 status** | ✅ Type II — current. Available via Cloudflare Trust Hub at https://www.cloudflare.com/trust-hub/compliance-resources/ |
+| **Service** | DNS + TLS termination + Cloudflare Tunnel (menu app on the Hetzner VPS) + R2 object storage (encrypted pg_dump backups + future asset uploads) + Workers Static Assets (iedora.com). `auth.iedora.com` (Zitadel) terminates TLS via Caddy directly on the VPS — no tunnel in front. |
+| **Data they touch** | Every HTTP request and response in flight (Cloudflare terminates TLS at the edge for any hostname proxied through it). Backup data at rest (encrypted with `INFRA_BACKUP_PASSPHRASE` from BWS — Cloudflare sees ciphertext only). |
+| **SOC 2 status** | Type II — current. Available via Cloudflare Trust Hub at https://www.cloudflare.com/trust-hub/compliance-resources/ |
 | **Other compliance** | ISO 27001, ISO 27018, PCI DSS, FedRAMP Moderate |
 | **DPA** | Standard Cloudflare DPA accepted at account-setup time |
-| **What happens if they're compromised** | Attacker sees plaintext request bodies in flight (auth headers, OAuth codes, webhook payloads). Mitigated by: short-lived OAuth tokens, PKCE, refresh-token replay detection. Encrypted backups stay encrypted at rest. |
-| **Rotation / exit plan** | Workload tokens rotate via `tofu apply -replace=<resource>`. Switching providers means re-pointing DNS, replacing the tunnel with an alternative (e.g. Tailscale Funnel), migrating R2 → another S3-compatible store. Estimated 1-2 day project. |
-| **Last reviewed** | 2026-05-17 |
+| **What happens if they're compromised** | Attacker sees plaintext request bodies in flight (auth headers, OAuth codes, webhook payloads) for hostnames Cloudflare proxies. Mitigated by: short-lived OAuth tokens, PKCE, refresh-token replay detection. Encrypted backups stay encrypted at rest. |
+| **Rotation / exit plan** | Workload tokens rotate via `tofu apply -replace=<resource>`. Switching providers means re-pointing DNS, replacing the tunnel with direct exposure (the VPS has public IPv4), migrating R2 → another S3-compatible store. Estimated 1-2 day project. |
+| **Last reviewed** | 2026-05-19 |
 
 ### GitHub
 
@@ -44,29 +44,29 @@ These vendors process customer data or hold the keys to it. Their compromise dir
 
 | | |
 |---|---|
-| **Service** | Production secret storage in project `iedora-deploy` (9 keys, prefixed by ownership: `INFRA_*` for tofu/Cloudflare/Postgres/backups/GHCR; `MENU_*` and `GENKAN_*` for per-product session and OAuth secrets) |
+| **Service** | Production secret storage in project `iedora-deploy` (keys prefixed by ownership: `INFRA_*` for tofu/Cloudflare/Postgres/backups/GHCR; `MENU_*` for menu's session and OAuth secrets). |
 | **Data they touch** | Plaintext secrets at rest (encrypted with Bitwarden's KMS). Access tokens we generate for the deploy machine. |
-| **SOC 2 status** | ✅ Type II — current. Available via https://bitwarden.com/help/bitwarden-security-white-paper/ + SOC 2 report on request |
+| **SOC 2 status** | Type II — current. Available via https://bitwarden.com/help/bitwarden-security-white-paper/ + SOC 2 report on request |
 | **Other compliance** | ISO 27001, GDPR, HIPAA, SOC 3 (public) |
 | **DPA** | Bitwarden DPA accepted at account-setup time |
 | **What happens if they're compromised** | Attacker who steals the BWS access token AND project ID gets every production secret. The token is on **one** developer laptop (FileVault-encrypted) and is the single highest-value credential in the iedora system. Mitigated by: short access-token lifetime (rotate quarterly), FileVault on the laptop, Bitwarden's own audit logs. |
-| **Rotation / exit plan** | Access token rotated via Bitwarden UI → BWS_ACCESS_TOKEN updated in each workspace's local `.env`. Per-secret rotation via `just <workspace>::rotate-secret <KEY>` (any of `infra::`, `menu::`, `genkan::`). Switching providers (HashiCorp Vault, AWS Secrets Manager, age-encrypted file in repo) is a 1-day project — secrets are few and named. |
-| **Last reviewed** | 2026-05-17 |
+| **Rotation / exit plan** | Access token rotated via Bitwarden UI → BWS_ACCESS_TOKEN updated in each workspace's local `.env`. Per-secret rotation via `just <workspace>::rotate-secret <KEY>` (any of `infra::`, `menu::`). Switching providers (HashiCorp Vault, AWS Secrets Manager, age-encrypted file in repo) is a 1-day project — secrets are few and named. |
+| **Last reviewed** | 2026-05-19 |
 
 ---
 
 ## Tier 2 — Infrastructure foundation
 
-### Homelab (physical)
+### Hetzner Cloud (VPS)
 
 | | |
 |---|---|
-| **Service** | Single VM (`192.168.50.53`) running Docker + every iedora container (genkan, menu, postgres, cloudflared, backups). Physical location: Eduardo's premises. |
+| **Service** | Single CAX11 VPS (Falkenstein, public IPv4) running Docker + every iedora container (menu, zitadel, postgres, openobserve, caddy, cloudflared, backups). |
 | **Data they touch** | All production data at rest (Postgres data directory mounted on the box). Backup tarballs (encrypted before R2 upload). |
-| **SOC 2 status** | n/a — self-hosted. Compensating controls: FileVault-equivalent disk encryption on the box (LUKS), SSH key-only auth (no password login), no public ports (Cloudflare Tunnel is the only ingress). |
-| **What happens if it's compromised** | Plaintext DB access. Mitigated by: encrypted disk, no inbound network exposure, daily encrypted backups to R2 (recovery point ≤ 24h), `just infra::restore` to a fresh box. Webhook secrets (now encrypted at rest — see security audit #27) stay safe unless the attacker also has `MENU_AUTH_SECRET` or `GENKAN_AUTH_SECRET`. |
-| **Rotation / exit plan** | Restore on a different host is a ~30-min runbook: stand up new VM, install Docker, paste BWS token, `just infra::deploy && just infra::restore && just menu::deploy && just genkan::deploy`. Cloud failover target (Hetzner / DigitalOcean / OVH) is the planned migration target if home-lab uptime ever becomes a constraint. |
-| **Last reviewed** | 2026-05-17 |
+| **SOC 2 status** | n/a — Hetzner is ISO 27001 certified but does not publish a SOC 2 report. Compensating controls: SSH key-only auth (no password login), `ufw` allowlist on the public IPv4 (only 22 + 443 + Cloudflare-Tunnel-managed outbound), Caddy auto-TLS for `auth.iedora.com`. |
+| **What happens if it's compromised** | Plaintext DB access. Mitigated by: SSH key-only login, public-port allowlist, daily encrypted backups to R2 (recovery point ≤ 24h), `just infra::restore` to a fresh box. Webhook secrets (encrypted at rest — see security audit #27) stay safe unless the attacker also has `MENU_AUTH_SECRET`. |
+| **Rotation / exit plan** | Restore on a different host is a ~30-min runbook: stand up new VPS, install Docker, paste BWS token, `just infra::deploy && just infra::restore && just menu::deploy`. Switching cloud (DigitalOcean / OVH) is the same runbook — `ONPREM_HOST` is just an env value. |
+| **Last reviewed** | 2026-05-19 |
 
 ---
 
@@ -78,19 +78,19 @@ These don't operate a service — they're OSS we run on customer data. Trust dec
 
 | | |
 |---|---|
-| **What we use it for** | Identity (genkan): user/session/account, OAuth 2.1 provider, organization plugin, admin plugin, JWT plugin. Menu: generic-oauth client. |
+| **What we use it for** | Menu's local session layer (user/session/account). The federated IdP role previously held by genkan (Better Auth + OAuth provider) has been retired; identity moves to Zitadel under issue #19. |
 | **License** | MIT |
 | **Maintainer** | Bekacru — sole maintainer at landing time; project picked up by WorkOS in 2025 with active contributions. |
 | **Known CVEs we track** | [CVE-2026-45364](https://www.cvedetails.com/product/177298/Better-auth-Better-Auth.html) (IPv6 rate-limit bypass — mitigated via `ipv6Subnet:64`), [GHSA-wxw3-q3m9-c3jr](https://github.com/advisories) (OAuth state mismatch w/o PKCE — mitigated via `require_pkce:true`). Both documented in `docs/security-audit.md`. |
 | **Monitoring** | GitHub Advisory Database subscription on `better-auth` + manual review of release notes for every minor bump |
-| **Replacement** | Auth.js / NextAuth (more mature, less feature-complete on the IdP side) or build-your-own OIDC layer on top of `oslo` / `oauth4webapi`. Replacement is a 2-4 week project — every plugin we use has an equivalent in the Auth.js ecosystem. |
-| **Last reviewed** | 2026-05-17 |
+| **Replacement** | Auth.js / NextAuth, or — once Zitadel becomes the IdP — drop Better Auth from menu entirely and use plain OIDC session cookies. |
+| **Last reviewed** | 2026-05-19 |
 
 ### Drizzle ORM
 
 | | |
 |---|---|
-| **What we use it for** | Every DB query in genkan + menu. Schema definition, migrations, type-safe queries. |
+| **What we use it for** | Every DB query in menu. Schema definition, migrations, type-safe queries. |
 | **License** | Apache 2.0 |
 | **Maintainer** | drizzle-team (commercial backing) |
 | **Known CVEs** | None tracked at time of review |
@@ -114,7 +114,7 @@ These don't operate a service — they're OSS we run on customer data. Trust dec
 
 | | |
 |---|---|
-| **What we use it for** | App framework for genkan + menu. Routing, rendering, server actions, middleware (proxy). |
+| **What we use it for** | App framework for menu. Routing, rendering, server actions, middleware (proxy). |
 | **License** | MIT |
 | **Maintainer** | Vercel |
 | **Known CVEs** | Regularly patched; we run 16.x and watch for upstream advisories. |
@@ -137,7 +137,7 @@ These don't operate a service — they're OSS we run on customer data. Trust dec
 
 | | |
 |---|---|
-| **What we use** | Internal — `@iedora/design-system`, `@iedora/identity`, `@iedora/auth-testkit`. |
+| **What we use** | Internal — `@iedora/design-system`, `@iedora/identity`, `@iedora/observability`. |
 | **Trust model** | First-party; same review process as application code. Listed here for completeness so an auditor reading this doc can trace every import. |
 
 ---
@@ -160,7 +160,7 @@ These don't operate a service — they're OSS we run on customer data. Trust dec
 
 1. Read the disclosure
 2. Check if any of our keys / data / configs were in scope
-3. Rotate the relevant credential if there's any doubt (`just menu::rotate-secret`)
+3. Rotate the relevant credential if there's any doubt (`just menu::rotate-secret` or `just infra::rotate-secret`)
 4. Add an inline note under the relevant entry above + commit
 5. If the vendor was Tier 1 and the breach was material, decide whether to migrate away
 
@@ -179,7 +179,7 @@ For each capability where we picked the in-house / OSS path over a SaaS:
 
 | Capability | What we don't use | What we do instead | Why |
 |---|---|---|---|
-| Identity | Auth0, Clerk, WorkOS, Stytch | Genkan (Better Auth) | Cost (hundreds of $/mo at small scale) + we wanted full control of the auth surface for the iedora estate |
+| Identity | Auth0, Clerk, WorkOS, Stytch | Zitadel (self-hosted on the same Hetzner VPS; previously Better-Auth-based genkan) | Cost (hundreds of $/mo at small scale) + we wanted full control of the auth surface for the iedora estate |
 | Observability | Datadog, Sentry, Honeycomb | Docker logs + `just menu::logs` | Single-operator; alerting is the operator's eyes. Will add Better Stack or similar when the operator can no longer keep up. |
 | CI | CircleCI, Buildkite, GitLab CI | GitHub Actions | Already inside the GitHub trust boundary |
 | Background jobs | Inngest, Trigger.dev | In-process `setInterval` (JWKS rotation) + database advisory locks | Cron-like work today is rare and small; reach for a real scheduler when that changes |

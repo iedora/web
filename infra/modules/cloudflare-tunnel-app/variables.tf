@@ -43,6 +43,21 @@ variable "extra_ingress" {
   default     = []
 }
 
+variable "path_routes" {
+  description = <<-EOT
+    Path-prefix overrides for `public_hostname`, prepended BEFORE the primary
+    rule. cloudflared ingress is first-match, so these take precedence when
+    the same hostname needs different upstreams per path. Each entry must
+    set `path` (regex) and `service`; `hostname` is auto-set to
+    `var.public_hostname`. Example:
+      path_routes = [{ path = "/ui/v2/.*", service = "http://infra-zitadel-login:3000" }]
+    Empty by default — primary rule keeps the historical "all to primary"
+    behaviour.
+  EOT
+  type        = list(any)
+  default     = []
+}
+
 variable "primary_service" {
   description = <<-EOT
     Upstream the primary `public_hostname` route forwards to. Default

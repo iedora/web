@@ -43,11 +43,22 @@ resource "cloudflare_zero_trust_tunnel_cloudflared_config" "this" {
   tunnel_id  = cloudflare_zero_trust_tunnel_cloudflared.this.id
 
   config = {
-    # Default route → the kamal-proxy singleton container on the host.
-    # Extra ingress entries from the caller (e.g. an admin-only hostname
-    # routing to a different service) come AFTER. The catch-all 404
-    # closes the list — required by cloudflared.
+    # cloudflared ingress matches first-rule-wins. Order matters:
+    #   1. var.path_routes — path-specific overrides for public_hostname
+    #      (e.g. /ui/v2/* → a different container). Must come FIRST or the
+    #      primary rule below swallows everything for the hostname.
+    #   2. Primary route — public_hostname → var.primary_service (default
+    #      `http://kamal-proxy`, the per-product apps).
+    #   3. var.extra_ingress — additional hostnames (e.g. an admin
+    #      subdomain) or catch-all rules the caller wants AFTER primary.
+    #   4. catch-all 404 — required by cloudflared.
     ingress = concat(
+      [
+        for route in var.path_routes : merge(
+          { hostname = var.public_hostname },
+          route,
+        )
+      ],
       [
         {
           hostname = var.public_hostname

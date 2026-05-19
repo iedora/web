@@ -1,47 +1,88 @@
-# Shared infra workspace — Postgres accessory + daily backup accessory.
+# Shared infra workspace — Tofu-managed Hetzner box + containers.
 #
-# `just infra::deploy` provisions the R2 backup bucket via Tofu, then
-# boots the Postgres + backups accessories on the homelab via Kamal.
-# Idempotent: re-running converges. Each product's deploy depends on
-# this having run first so `infra-postgres:5432` is reachable.
+# `just infra::deploy` runs ONE `tofu apply`. Tofu owns:
+#   - Hetzner CAX11 VPS (provisioning + cloud-init Docker install)
+#   - cross-product Cloudflare resources (R2 buckets, tunnels, DNS)
+#   - Tailscale ACL + CI workload identity federation
+#   - GitHub Actions secrets/variables reconciliation
+#   - Every always-on Docker container on the Hetzner box (postgres,
+#     openobserve, zitadel + login, backups, caddy, observability tunnel)
+#   - Zitadel orgs/projects (after one-shot SA-key bootstrap, see below)
+#
+# Kamal still rolls out per-product apps (menu, genkan) against the Hetzner
+# Docker daemon — but this workspace owns 100% of the always-on layer.
 
 set dotenv-load := true
-
-kamal-bin := `
-  for d in /opt/homebrew/lib/ruby/gems/*/bin /usr/local/lib/ruby/gems/*/bin "$HOME"/.gem/ruby/*/bin "$HOME"/.rbenv/versions/*/bin; do
-    [ -d "$d" ] && { printf '%s:' "$d"; exit 0; }
-  done
-`
 
 tofu := "bin/with-secrets tofu -chdir=tofu"
 
 _default:
     @just --list --unsorted
 
-# Boot the shared accessories (Postgres + backups) AND apply the cross-
-# product Tofu config (R2 backups bucket + Tailscale ACL/CI OAuth client).
+# Apply every infra resource: Hetzner VPS + Cloudflare R2 / tunnels +
+# GitHub Actions config + all infra containers via the kreuzwerker/docker
+# provider over SSH to the Hetzner box.
 #
-# Tofu first (so the R2 bucket + its scoped S3 token exist before backups
-# reads `tofu output`, AND the Tailscale CI OAuth client exists so CI can
-# read it from BWS); Kamal second.
+# First-time bootstrap is a 3-pass dance, automated here:
+#   Pass 1 — provision Hetzner VPS only (the docker provider needs a
+#            concrete IP before it can configure; `(known after apply)` =
+#            "unable to parse docker host"). Skipped if box already exists.
+#   Pass 2 — full apply: containers land, FirstInstance writes SA key to
+#            /zitadel-bootstrap/. Zitadel TF resources stay gated (count=0)
+#            because INFRA_ZITADEL_SA_KEY_JSON isn't in BWS yet.
+#   Pass 3 — only if no SA key in BWS: `just zitadel-fetch-sa-key` lifts
+#            the JSON from the bootstrap volume → BWS, then re-apply to
+#            land zitadel.tf resources (org import + project create).
 #
-# The Tailscale CI OAuth client's secret is available ONLY at create time
-# — Tofu state holds the latest value, and we write it through to BWS so
-# CI can read it without running Tofu (same pattern as house workload token).
+# Steady state (every subsequent call): exactly one `tofu apply`.
+#
+# Write-through to BWS after apply:
+#   - INFRA_ONPREM_HOST = hetzner_ipv4 — per-product Kamal configs read it
 deploy:
     #!/usr/bin/env bash
     set -euo pipefail
     {{tofu}} init -upgrade -input=false >/dev/null
+
+    # Pass 1: provision Hetzner box if it doesn't exist yet. The docker
+    # provider's host is `hcloud_server.iedora.ipv4_address`, unknown until
+    # the server is concrete — so a full apply would fail at plan time.
+    if ! {{tofu}} output -raw hetzner_ipv4 >/dev/null 2>&1; then
+      echo "→ Pass 1/3: provisioning Hetzner VPS (no docker provider yet)..."
+      {{tofu}} apply -auto-approve \
+        -target=hcloud_ssh_key.operator \
+        -target=hcloud_firewall.iedora \
+        -target=hcloud_server.iedora \
+        -target=null_resource.docker_ready
+    fi
+
+    # Pre-populate the operator's known_hosts so the docker provider's SSH
+    # to the Hetzner box doesn't fail with "host key verification failed"
+    # (it uses the system ssh client, which honors StrictHostKeyChecking).
+    # Idempotent: re-running just appends a duplicate line we ignore. Skipped
+    # in non-interactive CI where the runner manages known_hosts itself.
+    HETZNER_IPV4=$({{tofu}} output -raw hetzner_ipv4)
+    if [ -t 0 ] && ! ssh-keygen -F "$HETZNER_IPV4" >/dev/null 2>&1; then
+      mkdir -p ~/.ssh
+      ssh-keyscan -H "$HETZNER_IPV4" >> ~/.ssh/known_hosts 2>/dev/null
+    fi
+
+    echo "→ Pass 2/3: full apply (containers + DNS + everything else)..."
     {{tofu}} apply -auto-approve
-    # Write-through: push the CI Tailscale federated identity credentials
-    # to BWS so the GitHub Actions workflow can fetch them via
-    # `bws secret list`. WIF means no client secret — only the federated
-    # identity ID (acts as oauth-client-id) and the Tailscale-auto-generated
-    # audience are needed. GitHub's OIDC JWT is the auth material.
-    CI_FED_ID=$(bin/with-secrets {{tofu}} output -raw ci_tailscale_federated_id)
-    CI_FED_AUD=$(bin/with-secrets {{tofu}} output -raw ci_tailscale_federated_audience)
-    for KEY_VAL in "INFRA_CI_TAILSCALE_FEDERATED_ID:$CI_FED_ID" \
-                   "INFRA_CI_TAILSCALE_FEDERATED_AUDIENCE:$CI_FED_AUD"; do
+
+    # Pass 3: bootstrap the Zitadel SA key into BWS the first time the
+    # FirstInstance step mints it. After this the zitadel TF resources
+    # land on the very next apply.
+    SA_KEY_ID=$(bws secret list "$BWS_PROJECT_ID" -o json \
+      | jq -r '.[] | select(.key=="INFRA_ZITADEL_SA_KEY_JSON") | .id')
+    if [ -z "$SA_KEY_ID" ]; then
+      echo "→ Pass 3/3: fetching FirstInstance SA key → BWS, then re-applying..."
+      just zitadel-fetch-sa-key
+      {{tofu}} apply -auto-approve
+    fi
+
+    # Write-through outputs to BWS.
+    HETZNER_IPV4=$({{tofu}} output -raw hetzner_ipv4)
+    for KEY_VAL in "INFRA_ONPREM_HOST:$HETZNER_IPV4"; do
       KEY=${KEY_VAL%%:*}
       VAL=${KEY_VAL#*:}
       SECRET_ID=$(bws secret list "$BWS_PROJECT_ID" -o json \
@@ -52,46 +93,51 @@ deploy:
         bws secret create -o none -- "$KEY" "$VAL" "$BWS_PROJECT_ID"
       fi
     done
-    bin/with-secrets bash -c \
-      'cd kamal && PATH="{{kamal-bin}}$PATH" exec kamal accessory boot all'
 
-# Tear down the R2 backup bucket + token. Does NOT stop the Postgres
-# accessory — that would delete the data directory's bind mount on the
-# host. Run `just infra::wipe-postgres` for that (destructive).
+# Tear down EVERY Tofu-managed resource — Hetzner VPS + Cloudflare + the
+# infra containers (containers go with the VPS). Destructive: wipes the
+# Hetzner data dir; restore from R2 dump to recover.
 destroy:
     {{tofu}} destroy -auto-approve
 
-# Stop + remove the Postgres accessory AND wipe its bind-mount data dir.
-# Destructive: both menu and genkan databases are gone after this. Asks
-# for "DELETE" confirmation before running.
+# Stop + remove the Postgres container AND wipe its bind-mount data dir on
+# the Hetzner box. Destructive: menu + genkan + zitadel databases all gone.
 wipe-postgres:
     #!/usr/bin/env bash
     set -euo pipefail
     printf 'Type DELETE to wipe infra-postgres + its data dir: '
     read -r CONFIRM
     [ "$CONFIRM" = DELETE ] || { echo "aborted"; exit 1; }
-    bin/with-secrets bash -c \
-      'cd kamal && PATH="{{kamal-bin}}$PATH" exec kamal accessory remove postgres'
-    ssh "root@$ONPREM_HOST" 'rm -rf /root/infra-postgres'
-    echo "✓ infra-postgres + /root/infra-postgres removed"
+    HOST=$({{tofu}} output -raw hetzner_ipv4)
+    ssh "root@$HOST" 'docker rm -f infra-postgres 2>/dev/null; rm -rf /root/infra-postgres'
+    echo "✓ infra-postgres + /root/infra-postgres removed. tofu apply to recreate."
 
-# Tail backups accessory logs (the cron heartbeats).
-logs:
-    bin/with-secrets bash -c 'cd kamal && PATH="{{kamal-bin}}$PATH" exec kamal accessory logs backups'
+# Tail logs of any infra container on the Hetzner box.
+# Usage: `just infra::logs zitadel` (the recipe prefixes `infra-`).
+logs svc="backups":
+    #!/usr/bin/env bash
+    HOST=$({{tofu}} output -raw hetzner_ipv4)
+    ssh "root@$HOST" "docker logs -f --tail=200 infra-{{svc}}"
 
-# psql shell into the live Postgres accessory.
+# psql shell into the live Postgres container.
 console:
-    bin/with-secrets bash -c 'cd kamal && PATH="{{kamal-bin}}$PATH" exec kamal accessory exec postgres --interactive --reuse "psql -U postgres"'
+    #!/usr/bin/env bash
+    HOST=$({{tofu}} output -raw hetzner_ipv4)
+    ssh -t "root@$HOST" "docker exec -it infra-postgres psql -U postgres"
 
 # Force a pg_dump now (the cron runs daily anyway).
 backup:
-    bin/with-secrets bash -c 'cd kamal && PATH="{{kamal-bin}}$PATH" exec kamal accessory exec backups --reuse "sh /backup.sh"'
+    #!/usr/bin/env bash
+    HOST=$({{tofu}} output -raw hetzner_ipv4)
+    ssh "root@$HOST" "docker exec infra-backups sh /backup.sh"
 
 # Restore latest dump (interactive).
 restore:
-    bin/with-secrets bash -c 'cd kamal && PATH="{{kamal-bin}}$PATH" exec kamal accessory exec backups --interactive --reuse "sh /restore.sh"'
+    #!/usr/bin/env bash
+    HOST=$({{tofu}} output -raw hetzner_ipv4)
+    ssh -t "root@$HOST" "docker exec -it infra-backups sh /restore.sh"
 
-# Rebuild + push the backup accessory image (only when bumping Postgres major).
+# Rebuild + push the backup container image (only when bumping Postgres major).
 build-backup:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -99,7 +145,7 @@ build-backup:
     echo "Logging into GHCR..."
     printf "%s" "$TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
     echo "Building + pushing ghcr.io/$GHCR_USER/iedora-backup:18..."
-    docker buildx build --platform linux/amd64 \
+    docker buildx build --platform linux/arm64 \
       --tag "ghcr.io/$GHCR_USER/iedora-backup:18" --push backup
 
 # Rotate one BWS secret. Usage: just rotate-secret INFRA_POSTGRES_PASSWORD
@@ -113,14 +159,88 @@ rotate-secret key:
     [ -n "$NEW" ] || { echo "Empty value, aborting"; exit 1; }
     bws secret edit "$SECRET_ID" --value "$NEW" -o none
     echo "✓ {{key}} rotated in BWS"
-    echo "→ INFRA_POSTGRES_PASSWORD: 'kamal accessory reboot postgres' + redeploy menu + genkan"
+    echo "→ INFRA_POSTGRES_PASSWORD: 'just infra::deploy' recreates infra-postgres + zitadel + backups with new password; menu + genkan need their own redeploy"
     echo "→ INFRA_BACKUP_PASSPHRASE: invalidates ALL historical dumps; don't rotate casually"
-    echo "→ INFRA_OPENOBSERVE_ROOT_USER_PASSWORD: 'kamal accessory reboot openobserve' + redeploy every product (OTEL_EXPORTER_OTLP_HEADERS depends on it)"
+    echo "→ INFRA_OPENOBSERVE_ROOT_USER_PASSWORD: 'just infra::deploy' recreates infra-openobserve; every product needs a redeploy (OTEL_EXPORTER_OTLP_HEADERS depends on it)"
+    echo "→ INFRA_ZITADEL_MASTERKEY: requires 32-char value EXACTLY; rotating renders the encrypted projection table unreadable — DO NOT ROTATE without the documented re-key flow"
+    echo "→ INFRA_ZITADEL_FIRST_ADMIN_PASSWORD: only used on FIRST boot; rotate the live password via the Zitadel UI instead"
+    echo "→ INFRA_HCLOUD_TOKEN: regenerate in Hetzner console + push; 'just infra::deploy' next run uses the new token. Zero-downtime."
+
+# Fetch the zitadel-admin-sa JSON key minted by FirstInstance and upload
+# to BWS. Run ONCE after the first `just infra::deploy` (or after a
+# `just infra::zitadel-rebootstrap`). Subsequent `just infra::deploy`
+# runs see the SA key in BWS, activate the zitadel TF provider, and
+# import the iedora org + project declaratively.
+zitadel-fetch-sa-key:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    HOST=$({{tofu}} output -raw hetzner_ipv4)
+    echo "Waiting for FirstInstance to write /zitadel-bootstrap/zitadel-admin-sa.json..."
+    for i in $(seq 1 60); do
+      if ssh "root@$HOST" 'docker run --rm -v zitadel-bootstrap:/x busybox test -s /x/zitadel-admin-sa.json' 2>/dev/null; then
+        break
+      fi
+      [ $i -eq 60 ] && { echo "✗ Timeout — zitadel-admin-sa.json never appeared. Check infra-zitadel logs."; exit 1; }
+      sleep 5
+    done
+    KEY=$(ssh "root@$HOST" 'docker run --rm -v zitadel-bootstrap:/x busybox cat /x/zitadel-admin-sa.json')
+    [ -n "$KEY" ] || { echo "✗ Fetched key was empty"; exit 1; }
+    bin/with-secrets bash -c "
+      SECRET_ID=\$(bws secret list \"\$BWS_PROJECT_ID\" -o json \
+        | jq -r '.[] | select(.key==\"INFRA_ZITADEL_SA_KEY_JSON\") | .id')
+      if [ -n \"\$SECRET_ID\" ]; then
+        bws secret edit \"\$SECRET_ID\" --value '$KEY' -o none
+      else
+        bws secret create -o none -- INFRA_ZITADEL_SA_KEY_JSON '$KEY' \"\$BWS_PROJECT_ID\"
+      fi
+    "
+    echo "✓ INFRA_ZITADEL_SA_KEY_JSON in BWS. Next 'just infra::deploy' will land the zitadel.tf resources."
+
+# Drop + re-bootstrap Zitadel: wipes the `zitadel` Postgres DB and the
+# `zitadel-bootstrap` Docker volume, then runs apply → FirstInstance →
+# fetch-sa-key → apply (lands TF resources).
+zitadel-rebootstrap:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    printf 'Type REBOOTSTRAP to wipe Zitadel DB + bootstrap volume: '
+    read -r CONFIRM
+    [ "$CONFIRM" = REBOOTSTRAP ] || { echo "aborted"; exit 1; }
+    HOST=$({{tofu}} output -raw hetzner_ipv4)
+
+    bin/with-secrets bash -c '
+      SECRET_ID=$(bws secret list "$BWS_PROJECT_ID" -o json \
+        | jq -r ".[] | select(.key==\"INFRA_ZITADEL_SA_KEY_JSON\") | .id")
+      [ -n "$SECRET_ID" ] && bws secret delete "$SECRET_ID" -o none || true
+    '
+
+    ssh "root@$HOST" '
+      docker rm -f infra-zitadel-login infra-zitadel 2>/dev/null || true
+      docker exec infra-postgres psql -U postgres -c "DROP DATABASE IF EXISTS zitadel WITH (FORCE);"
+      docker exec infra-postgres psql -U postgres -c "CREATE DATABASE zitadel;"
+      docker volume rm zitadel-bootstrap 2>/dev/null || true
+    '
+
+    # Defensive state-rm — any zitadel_* resources point at IDs that no
+    # longer exist after the wipe.
+    bin/with-secrets bash -c '
+      {{tofu}} state list 2>/dev/null \
+        | grep "^zitadel_" \
+        | xargs -r -n1 {{tofu}} state rm
+    ' || true
+
+    just deploy
+    just zitadel-fetch-sa-key
+    just deploy
+    echo "✓ Zitadel re-bootstrapped. zitadel.tf resources landed declaratively."
 
 # Tail the live OpenObserve binary's logs (UI + OTLP receiver, port 5080).
 observability-logs:
-    bin/with-secrets bash -c 'cd kamal && PATH="{{kamal-bin}}$PATH" exec kamal accessory logs openobserve'
+    #!/usr/bin/env bash
+    HOST=$({{tofu}} output -raw hetzner_ipv4)
+    ssh "root@$HOST" "docker logs -f --tail=200 infra-openobserve"
 
-# psql-equivalent: drop into the OpenObserve container shell.
+# Drop into the OpenObserve container shell.
 observability-console:
-    bin/with-secrets bash -c 'cd kamal && PATH="{{kamal-bin}}$PATH" exec kamal accessory exec openobserve --interactive --reuse "/bin/sh"'
+    #!/usr/bin/env bash
+    HOST=$({{tofu}} output -raw hetzner_ipv4)
+    ssh -t "root@$HOST" "docker exec -it infra-openobserve /bin/sh"

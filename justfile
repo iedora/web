@@ -21,7 +21,6 @@
 mod infra 'infra'
 mod menu 'products/menu/infra'
 mod house 'products/house/infra'
-mod genkan 'products/genkan/infra'
 
 # Default: list modules + recipes.
 [private]

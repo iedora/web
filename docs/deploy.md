@@ -1,55 +1,37 @@
-# Deploy — homelab box or cloud VPS behind a Cloudflare Tunnel
+# Deploy — one `tofu apply` for the whole iedora estate
 
-End-to-end self-host: edit one config file, run one command, app live behind a Cloudflare Tunnel with TLS. Kamal 2 does the heavy lifting; the only "script" is the `products/menu/infra/justfile` (run via `just X` from anywhere in the repo).
+End-to-end self-host: edit one config file, run one command, the whole stack live behind Cloudflare TLS. Everything is Tofu-managed — the Hetzner VPS, every Cloudflare resource, the GitHub Actions config, and every Docker container on the box (including the menu app itself). The only "script" is `infra/justfile` (run via `just infra::<recipe>` from anywhere in the repo).
 
 ```
 Internet → Cloudflare edge (TLS)
-            ├─→ cloudflared accessory (outbound) → http://kamal-proxy → app:3000
-            └─→ R2 bucket via custom domain      → assets.<your-zone>
+            ├─→ menu.iedora.com         (grey-cloud A record) → Hetzner :443
+            │                                                 → infra-caddy → menu_web:3000
+            ├─→ auth.iedora.com         (grey-cloud A record) → Hetzner :443
+            │                                                 → infra-caddy → infra-zitadel:8080
+            ├─→ obs.iedora.com          → Cloudflare Tunnel    → infra-openobserve:5080
+            └─→ assets.iedora.com       → R2 bucket via custom domain
 ```
 
-The same flow works identically on a homelab Ubuntu box and a fresh cloud VPS (DigitalOcean, Hetzner, Linode, AWS). The only difference: cloud VPS images already ship with root SSH + your key; a homelab box needs the key copied to root once.
+The flow works on any cloud VPS with root SSH and a sane Docker install. The Hetzner CAX11 (ARM, Ampere Altra, 2 vCPU / 4 GB / €3.79/mo) is the reference target — `infra/tofu/hetzner.tf` provisions it from scratch via the `hcloud` provider.
 
 ---
 
 ## Step 1 — Local prerequisites (one-time, ever)
 
-Same tools on Mac and Linux; only the installers differ.
-
-**macOS** (Apple Silicon or Intel):
-
 ```bash
-brew install opentofu gh                 # IaC + GitHub CLI
-sudo gem install kamal -N                # Kamal is a Ruby gem, not a brew formula
+# macOS
+brew install opentofu gh just
 brew install --cask orbstack             # or docker desktop — anything that runs docker
 gh auth login
-```
 
-**Linux** (Debian/Ubuntu shown; adapt for Fedora/Arch):
-
-```bash
-# Tofu — official installer (apt repos are stale)
+# Linux
 curl -fsSL https://get.opentofu.org/install-opentofu.sh | sh -s -- --install-method standalone
-
-# Ruby + Kamal
-sudo apt install -y ruby-full build-essential
-sudo gem install kamal -N
-
-# Docker Engine
 curl -fsSL https://get.docker.com | sh
-sudo usermod -aG docker $USER && newgrp docker
-
-# GitHub CLI — official repo (apt's gh is often outdated)
-(type -p wget >/dev/null || sudo apt install -y wget) \
-  && sudo mkdir -p -m 755 /etc/apt/keyrings \
-  && wget -qO- https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg >/dev/null \
-  && sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
-  && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list \
-  && sudo apt update && sudo apt install -y gh
+sudo apt install -y gh
 gh auth login
 ```
 
-Verify each: `tofu version`, `kamal version`, `docker info`, `gh auth status`. All should succeed.
+Verify: `tofu version`, `docker info`, `gh auth status`. All should succeed.
 
 ---
 
@@ -59,56 +41,42 @@ Verify each: `tofu version`, `kamal version`, `docker info`, `gh auth status`. A
 gh auth refresh -s write:packages
 ```
 
-Kamal pushes the built image to `ghcr.io/<your-github-username>/menu` (and `…/genkan`). The scope is per-token, not per-package — do it once, ever. Confirm with `gh auth status` and look for `write:packages` in the scopes line.
+CI pushes the built menu image to `ghcr.io/<your-github-username>/menu`. Scope is per-token, not per-package — do it once, ever.
 
 ---
 
 ## Step 3 — One-time Cloudflare prep
 
-You need an existing zone (a domain you control, like `example.com`, added to your Cloudflare account). Then create a scoped API token:
+You need an existing zone (a domain you control, like `iedora.com`, added to your Cloudflare account). Create a scoped API token:
 
 1. `dash.cloudflare.com` → top-right profile → **API Tokens** → **Create Custom Token**
-2. Add permissions:
-   - **Account · Cloudflare Tunnel · Edit**
+2. Permissions:
+   - **Account · Cloudflare Tunnel · Edit** (the obs.iedora.com tunnel)
    - **Zone · DNS · Edit** (scope to the specific zone)
    - **Account · Account Settings · Read**
-   - **Account · Workers R2 Storage · Edit** (Tofu manages the backups bucket)
-   - **User · API Tokens · Edit** (Tofu creates the R2 S3 sub-token for the backups accessory)
-3. Copy the token — you'll paste it into `products/menu/infra/.env`.
+   - **Account · Workers R2 Storage · Edit** (backups + menu assets buckets)
+   - **User · API Tokens · Edit** (Tofu mints the R2 sub-tokens)
+3. Copy the token into BWS as `INFRA_CLOUDFLARE_API_TOKEN`.
 
-Also grab your **Account ID** and **Zone ID** from the right sidebar of any Cloudflare dashboard page.
+Also grab your **Account ID** and **Zone ID** from the right sidebar.
 
 ---
 
 ## Step 4 — Provision the box
 
-**Prerequisite: an SSH keypair on your dev machine.** If you don't already have one:
+The Hetzner VPS is provisioned by Tofu itself — you don't pre-create the box. Tofu only needs your `hcloud` API token (`INFRA_HCLOUD_TOKEN` in BWS) and an SSH public key on your laptop.
+
+If you don't already have a keypair on your dev machine:
 
 ```bash
 ls ~/.ssh/id_ed25519.pub 2>/dev/null || ssh-keygen -t ed25519 -N "" -f ~/.ssh/id_ed25519
 ```
 
-Then your public key is `~/.ssh/id_ed25519.pub`. View it with `cat ~/.ssh/id_ed25519.pub` — this is what you paste/copy in the two paths below.
+Tofu reads `~/.ssh/id_ed25519.pub`, registers it as `hcloud_ssh_key.operator`, and seeds it into `/root/.ssh/authorized_keys` on the freshly minted CAX11. After the first `just infra::deploy`, `ssh root@<hetzner-ipv4>` works immediately.
 
-**Cloud VPS (DigitalOcean / Hetzner / Linode / AWS):** when creating the droplet, paste the contents of `~/.ssh/id_ed25519.pub` into the "SSH keys" field. The image ships with `PermitRootLogin prohibit-password`, password auth off, your key in `/root/.ssh/authorized_keys`. **Nothing else to do** — `ssh root@<droplet-ip>` works immediately.
+For a cloud VPS that's NOT Hetzner (or an existing box you want to reuse): skip `hcloud_server.iedora` from the apply and set `INFRA_ONPREM_HOST` in BWS to your existing IP. The `kreuzwerker/docker` provider will SSH-attach to whatever's there.
 
-**Homelab box:** install Ubuntu 24.04+ Server, set up your sudo user during install (call them whatever — `eduardo`, `pwu`, etc.). Then from your dev machine:
-
-```bash
-# 4a. Install your SSH key for the sudo user (paste their password once).
-ssh-copy-id <sudo-user>@<box-ip>
-
-# 4b. Copy that key into /root/.ssh — this is the key Kamal will use.
-ssh -t <sudo-user>@<box-ip> 'sudo install -d -m 700 -o root -g root /root/.ssh && sudo cp ~/.ssh/authorized_keys /root/.ssh/authorized_keys && sudo chown root:root /root/.ssh/authorized_keys && sudo chmod 600 /root/.ssh/authorized_keys'
-
-# 4c. If Ubuntu's sshd disables root login entirely, flip it to "prohibit-password" (key-only, never "yes").
-ssh -t <sudo-user>@<box-ip> 'sudo sed -i "s/^PermitRootLogin.*/PermitRootLogin prohibit-password/" /etc/ssh/sshd_config && sudo systemctl reload ssh'
-
-# 4d. Verify root SSH works with your key (should print "root" instantly, no password prompt).
-ssh root@<box-ip> 'whoami'
-```
-
-> **Why root?** Kamal 2's canonical convention is `ssh.user: root` with **SSH-key-only** login. `kamal server bootstrap` curls `get.docker.com` which needs root; Kamal itself never runs `sudo`. The non-root path requires NOPASSWD-sudo (which has the same root blast radius without the simplicity). Key-only root login is what cloud images do by default — and is materially safer than NOPASSWD sudo. Keep your sudo human account for ad-hoc admin; Kamal's lane stays root-via-key.
+> **Why root?** SSH-key-only root login is the canonical Docker-over-SSH path — `kreuzwerker/docker` shells out to system SSH, which honors `~/.ssh/config`. The non-root path requires NOPASSWD-sudo (same root blast radius without the simplicity). Key-only root login is what cloud images ship with by default.
 
 ---
 
@@ -117,21 +85,15 @@ ssh root@<box-ip> 'whoami'
 ```bash
 git clone https://github.com/<you>/iedora.git
 cd iedora
-cp products/menu/infra/.env.example products/menu/infra/.env
+cp infra/.env.example infra/.env
 ```
 
-All production secrets live in Bitwarden Secrets Manager. `products/menu/infra/.env` holds only non-secret IDs + the BWS access token that unlocks the vault:
+All production secrets live in Bitwarden Secrets Manager. `infra/.env` holds only non-secret IDs + the BWS access token that unlocks the vault:
 
 ```bash
 # Cloudflare (from step 3)
 CLOUDFLARE_ACCOUNT_ID=your-account-id-from-dashboard
 CLOUDFLARE_ZONE_ID=your-zone-id-from-dashboard
-
-# The hostname your app lives at (must be a subdomain of your Cloudflare zone)
-PUBLIC_HOSTNAME=menu.example.com
-
-# The box (cloud VPS public IP or homelab LAN IP). Kamal connects as root.
-ONPREM_HOST=192.168.50.53
 
 # Your GitHub username — image will be pushed to ghcr.io/<this>/menu
 GHCR_USER=eduvhc
@@ -142,369 +104,254 @@ BWS_ACCESS_TOKEN=0.…
 BWS_PROJECT_ID=…uuid…
 ```
 
-Then populate BWS with 7 secrets — use the same machine to avoid pasting tokens around. `bws` CLI install: `brew install bitwarden/tap/bws` on macOS or download from https://github.com/bitwarden/sdk-sm/releases.
+Then populate BWS with the bootstrap secrets. `bws` CLI install: `brew install bitwarden/tap/bws` on macOS or download from https://github.com/bitwarden/sdk-sm/releases.
 
 ```bash
-source products/menu/infra/.env
+source infra/.env
 for KEY in INFRA_CLOUDFLARE_API_TOKEN INFRA_STATE_PASSPHRASE \
+           INFRA_HCLOUD_TOKEN INFRA_GITHUB_API_TOKEN \
            INFRA_POSTGRES_PASSWORD INFRA_BACKUP_PASSPHRASE INFRA_GHCR_TOKEN \
-           MENU_AUTH_SECRET GENKAN_AUTH_SECRET \
-           MENU_OAUTH_CLIENT_ID MENU_OAUTH_CLIENT_SECRET; do
+           INFRA_KAMAL_SSH_PRIVATE_KEY \
+           INFRA_ZITADEL_MASTERKEY INFRA_ZITADEL_FIRST_ADMIN_PASSWORD \
+           INFRA_OPENOBSERVE_ROOT_USER_PASSWORD \
+           MENU_AUTH_SECRET; do
   read -s -p "$KEY: " V && echo
   bws secret create "$KEY" "$V" "$BWS_PROJECT_ID" -o none
 done
 ```
 
-Generate each value with `openssl rand -hex 32`, except `INFRA_CLOUDFLARE_API_TOKEN` (from step 3) and `INFRA_GHCR_TOKEN` (https://github.com/settings/tokens — **classic PAT, `write:packages` scope** — see "Why classic for GHCR" below). For `MENU_OAUTH_CLIENT_ID` / `MENU_OAUTH_CLIENT_SECRET`, generate fresh random values and remember them — they get seeded into genkan's `oauth_client` table by genkan's `migrate.mjs` on first boot (driven by `TRUSTED_CLIENTS`).
+Generate each random value with `openssl rand -hex 32`, except: `INFRA_CLOUDFLARE_API_TOKEN` (from step 3); `INFRA_HCLOUD_TOKEN` (Hetzner console → Security → API tokens → R/W); `INFRA_GHCR_TOKEN` (classic PAT, `write:packages` scope — see "Why classic for GHCR"); `INFRA_GITHUB_API_TOKEN` (fine-grained PAT scoped to the repo); `INFRA_KAMAL_SSH_PRIVATE_KEY` (the contents of `~/.ssh/id_ed25519` — kept under the historical `KAMAL_` name to avoid a churn-cascade through BWS / GH variables); `INFRA_ZITADEL_MASTERKEY` (must be exactly 32 chars — `openssl rand -base64 24 | head -c 32`).
 
-**Why classic for GHCR (one declared exception to the fine-grained PAT preference).** Every other PAT in this stack is fine-grained — `INFRA_GITHUB_API_TOKEN` (Tofu repo config), etc. `INFRA_GHCR_TOKEN` is the exception, and stays classic because fine-grained PATs + personal accounts + GHCR is GitHub's worst-supported auth combination today: the "Packages" permission only reliably surfaces in the UI for org-scoped tokens with org-owned packages, and even when surfaced it requires packages to be pre-linked to the granted repo (chicken-and-egg on first push). Classic PAT with `write:packages` sidesteps both issues. The trade-off is mostly cosmetic for a single-repo solo account: classic `write:packages` covers all your account's GHCR images, but with one repo the practical blast radius equals a fine-grained PAT's anyway. Revisit if you ever move iedora into a GH org.
+> **Why the `INFRA_KAMAL_SSH_PRIVATE_KEY` name** — kept verbatim across the post-Kamal migration. It's load-bearing: GitHub Actions, BWS, the kreuzwerker/docker provider and the rotation playbook all reference this string. Renaming is a coordinated multi-system change with no upside. Treat the name as a tombstone.
 
-**Token + OAuth-client naming convention.** Every human-named credential follows the `iedora-<role>` shape so you can scan by name and know the credential's purpose without opening it — important for fast rotation.
+**Why classic for GHCR (one declared exception to the fine-grained PAT preference).** Every other PAT in this stack is fine-grained — `INFRA_GITHUB_API_TOKEN` (Tofu repo config), etc. `INFRA_GHCR_TOKEN` is the exception, and stays classic because fine-grained PATs + personal accounts + GHCR is GitHub's worst-supported auth combination today: the "Packages" permission only reliably surfaces in the UI for org-scoped tokens with org-owned packages. Classic PAT with `write:packages` sidesteps the issue. Revisit if iedora ever moves into a GH org.
 
-| Credential | Where it lives | Name / description |
-|---|---|---|
-| GitHub fine-grained PAT (Tofu repo config) | https://github.com/settings/personal-access-tokens?type=beta | `iedora-tofu-admin` |
-| GitHub classic PAT (GHCR push) | https://github.com/settings/tokens | `iedora-ghcr` (note: classic = the exception above) |
-| Tailscale OAuth bootstrap (Tofu auth) | https://login.tailscale.com/admin/settings/oauth | `iedora-tofu-admin` |
-| Tailscale CI runner auth (WIF) | Tofu-managed via `tailscale_federated_identity.ci` (description) | `iedora-gha-ci` (no client secret — see Network reachability for WIF details) |
-| CI SSH keypair (root@homelab) | local `~/.ssh/ci_ed25519` + BWS `INFRA_KAMAL_SSH_PRIVATE_KEY` | comment `ci@iedora-YYYYMMDD-HHMM` (date-stamped on creation) |
-
-Two `iedora-tofu-admin`s coexist in different systems (Tailscale and GitHub) — that's intentional: same role name + different lookup paths = easy to find the right one when rotating.
-
-Keep the BWS access token in your password manager — losing it means losing access to every other secret. `products/menu/infra/.env` is gitignored.
+Keep the BWS access token in your password manager — losing it means losing access to every other secret. `infra/.env` is gitignored.
 
 ---
 
 ## Step 6 — Deploy
 
 ```bash
-just infra::deploy       # FIRST — boots shared Postgres + backups accessory
-just menu::deploy        # then the products
-just genkan::deploy
+just infra::deploy
 ```
 
-The order matters on a fresh box: menu and genkan both connect to `infra-postgres:5432`, so the infra workspace MUST boot first.
+That's it. The recipe is a 3-pass dance, automated:
 
-`just infra::deploy` runs:
-1. **`tofu apply`** on `infra/tofu/` — creates the `iedora-backups` R2 bucket + its scoped R2 token.
-2. **`kamal accessory boot all`** on `infra/kamal/` — boots `infra-postgres` + `infra-backups` accessories.
+1. **Pass 1 — provision the Hetzner VPS only.** The `kreuzwerker/docker` provider needs a concrete `host` IP at plan time; while `hcloud_server.iedora.ipv4_address` is `(known after apply)` the full apply fails with "unable to parse docker host". Skipped if the box already exists.
+2. **Pass 2 — full apply.** Cloudflare R2 buckets + obs tunnel + GitHub Actions config + every `docker_container.infra-*` (postgres, backups, openobserve, openobserve-tunnel, zitadel, zitadel-login, caddy) + `docker_container.menu_web`. Tofu pulls each image lazily via `data.docker_registry_image + docker_image + pull_triggers` — for `menu_web` that pulls the latest GHCR digest.
+3. **Pass 3 — bootstrap the Zitadel SA key (FIRST run only).** Zitadel's FirstInstance step mints a service-account JSON key inside the `zitadel-bootstrap` volume; `just zitadel-fetch-sa-key` lifts it into BWS, then a second apply lands the zitadel TF resources (org import + project create). On subsequent runs, the SA key already lives in BWS and pass 3 is a no-op.
 
-`just menu::deploy` (and the genkan equivalent) runs:
-1. **`tofu apply`** on the product's `tofu/` — creates the Cloudflare Tunnel + ingress, DNS record, and (menu only) R2 assets bucket + its scoped token.
-2. **`kamal setup`** — Kamal's idempotent first-time-or-anytime command:
-   - `kamal server bootstrap` — installs Docker on the box if not already (no-op on subsequent runs).
-   - `kamal accessory boot all` — boots the product's `cloudflared` accessory (no-op if already running).
-   - `kamal deploy` — builds the image natively on the box (amd64, no QEMU on the Mac via `builder.remote`), pushes to GHCR, pulls on the box, starts the app container.
+Total time: **5–10 min** the first time. Subsequent applies are 30s–2min (each `infra-*` container only redeploys if its image digest or config changed; `menu_web` redeploys whenever a new image is pushed).
 
-Each app container's start command is `node scripts/migrate.mjs && node server.js` — Drizzle migrations run under a `pg_advisory_lock` (safe across multiple replicas) before the server boots. Menu's migrate creates the `menu` database; genkan's creates `genkan`. Both connect to the shared `infra-postgres` server.
-
-Total time: **5–10 min** the first time (cold image build for each product). Subsequent deploys are 1–2 min with the build cache.
-
-When it finishes, hit `https://$PUBLIC_HOSTNAME/up` — should return `{"ok":true,"db":"ok"}`.
+When it finishes, hit `https://menu.iedora.com/up` — should return `{"ok":true,"db":"ok"}`.
 
 ---
 
 ## Day-2 commands
 
-Run from the repo root (or `cd products/menu/infra` and drop the `menu::` namespace):
+Run from the repo root:
 
 ```bash
-just menu::deploy        # idempotent — tofu apply + kamal setup. Same on day-1 and day-N.
-just menu::logs          # tail app logs (rolling)
-just menu::console       # bash inside a fresh app container with env loaded
-just menu::rollback      # roll back to the previous version
-just infra::backup       # force a pg_dump now (cron runs daily)
-just infra::restore      # restore latest dump (interactive)
-just menu::destroy       # tofu destroy — removes the Cloudflare tunnel + DNS only; box untouched
+just infra::deploy           # idempotent — same recipe day-1 and day-N
+just infra::logs <svc>       # tail logs (defaults to backups; `just infra::logs menu_web` for the app)
+just infra::console          # psql shell into the live Postgres container
+just infra::backup           # force a pg_dump now (cron runs daily)
+just infra::restore          # restore latest dump (interactive)
+just infra::destroy          # tofu destroy — tears down the Hetzner VPS + everything
+just infra::wipe-postgres    # destructive — drops the data dir on the host (use after `infra::destroy`)
+just infra::rotate-secret X  # prompt-driven BWS secret rotation
 ```
 
-All are direct `kamal` (or `tofu`) calls — the justfile loads `products/menu/infra/.env` (`set dotenv-load`), runs each recipe through `bin/with-secrets`, and resolves the gem-bin PATH so subprocesses find `kamal`.
+All are wrappers around `tofu` or direct `ssh` calls. The justfile loads `infra/.env` (`set dotenv-load`) and runs each recipe through `bin/with-secrets`, which exports every BWS secret as `TF_VAR_*` aliases so Tofu sees them as variable inputs.
 
-**Why no `migrate` or `redeploy` recipe?** Migrations run on container start via the Kamal `servers.web.cmd` (`node scripts/migrate.mjs && node server.js`) — guarded by a pg_advisory_lock so multiple replicas don't race. And `redeploy` was just `deploy` minus a few idempotent steps (registry login, pruning); `deploy` itself is idempotent and only ~10s slower in the no-op case, so one verb is enough. Ad-hoc: `cd products/menu/infra/kamal && kamal app exec ...` for one-offs.
+**Why no `migrate` recipe?** Migrations run on container start via the menu container's `cmd`. Drizzle's migrator takes a `pg_advisory_lock` so multiple replicas don't race; with one replica it's a one-shot.
 
-For ad-hoc kamal commands (e.g. `kamal app stop`, `kamal accessory exec`), source `products/menu/infra/.env` first:
-
-```bash
-set -a; . products/menu/infra/.env; set +a
-kamal app stop
-```
+**Rolling back to a previous image** is `INFRA_MENU_IMAGE_TAG=<sha> just infra::deploy` (the variable threads into `docker_container.menu_web.image`). Image SHAs are tagged in GHCR by commit SHA on every push to main. Brief downtime (~5–10s while Tofu recreates the container) is acceptable pre-customer; once a customer cares, switch to the canonical `kamal-proxy` / `Caddy upstream switch` pattern.
 
 ---
 
 ## Continuous deployment via GitHub Actions
 
-Once the manual flow above works end-to-end, the same Kamal config runs from GitHub Actions. **Push to `main` → CI runs → green CI triggers deploy.** Local `just <product>::deploy` keeps working unchanged — it's the escape hatch for first-time setup, debugging, and the homelab-only Astro path.
+Once the manual flow above works end-to-end, every push to main rolls a new menu image automatically. **Push to `main` → Menu CI runs → green Menu CI triggers `infra-deploy.yml` → Tofu pulls the new image and rolls `menu_web`.** Local `just infra::deploy` keeps working unchanged — the escape hatch for first-time setup, Tofu changes, and debugging.
 
 ### How it's wired
 
 ```
 git push main
-   └─► .github/workflows/<product>.yml         (typecheck, lint, unit, e2e)
-        └─► .github/workflows/<product>-deploy.yml   (workflow_run: on success)
-             └─► .github/workflows/_kamal-deploy.yml (reusable)
-                  ├─► docker buildx build (cache: type=gha,mode=max,scope=<product>)
-                  ├─► docker push → ghcr.io/<user>/<product>:<sha>
-                  ├─► kamal deploy --version=<sha>
-                  └─► curl https://<hostname>/up   (smoke)
+   └─► .github/workflows/menu.yml         (typecheck, lint, unit, security)
+        └─► build + push image            (linux/arm64 → ghcr.io/eduvhc/menu:<sha>)
+             └─► .github/workflows/infra-deploy.yml   (workflow_run: on success)
+                  ├─► tofu init
+                  ├─► tofu apply -auto-approve
+                  │   └─► docker_image.menu pull_triggers fires → docker_container.menu_web recreates
+                  └─► curl https://menu.iedora.com/up   (smoke)
 ```
 
-The Kamal `deploy.yml` has an ERB toggle on `KAMAL_CI=true` that swaps `builder.remote: ssh://homelab` for `builder.local: true` + GHA cache. Local laptop deploys (no `KAMAL_CI`) take the remote-builder branch unchanged.
+No SSH from CI for image build (CI does buildx + push to GHCR; Tofu pulls from GHCR on the box). The only SSH path in CI is the `kreuzwerker/docker` provider talking to the Hetzner Docker daemon during `tofu apply` — that uses `INFRA_KAMAL_SSH_PRIVATE_KEY` from GH Secrets, written to `~/.ssh/id_ed25519` on the runner.
 
-House is simpler — `house-deploy.yml` is direct `push` paths-filtered → `cloudflare/wrangler-action@v3`. No Kamal, no SSH, no GHCR.
+House is simpler — `house-deploy.yml` is direct `push` paths-filtered → `cloudflare/wrangler-action@v3`. No Tofu, no SSH, no GHCR.
 
 ### One-time GitHub config (per repo)
 
-**Secrets** (`Settings → Secrets and variables → Actions → Secrets`):
+Every GH Actions secret + variable is Tofu-managed via `infra/tofu/github.tf` — the `integrations/github` provider's `for_each` over a locals map. You never run `gh secret set` directly; you set the BWS source value, then `just infra::deploy` reconciles GH from BWS.
 
-| Secret | What | Source |
+| Tofu-managed GH Secret | Source in BWS | Notes |
 |---|---|---|
-| `BWS_ACCESS_TOKEN` | Unlocks the BWS project. Same token as `products/menu/infra/.env`. | Bitwarden Secrets Manager machine account |
-| `KAMAL_SSH_PRIVATE_KEY` | Private key for `root@$ONPREM_HOST`. Use a **dedicated CI keypair** (`ci_ed25519`), not your personal `id_ed25519` — least-privilege so a GH leak doesn't expose your laptop's full SSH reach. | See "Minting the CI SSH key" below. |
+| `BWS_ACCESS_TOKEN` | `BWS_ACCESS_TOKEN` (lives in `.env`, passed to Tofu via `TF_VAR_bws_access_token`) | The runner uses it to authenticate to BWS for every other secret |
+| `KAMAL_SSH_PRIVATE_KEY` | `INFRA_KAMAL_SSH_PRIVATE_KEY` | The runner writes it to `~/.ssh/id_ed25519`; `kreuzwerker/docker` uses it to reach the Hetzner box |
+| `CLAUDE_CODE_OAUTH_TOKEN` | `INFRA_CLAUDE_CODE_OAUTH_TOKEN` | Powers `.github/workflows/claude.yml` |
 
-**Variables** (same screen, `Variables` tab — non-secret, visible in logs):
-
-| Variable | Example | Notes |
-|---|---|---|
-| `ONPREM_HOST` | `iedora-homelab` | Tailnet MagicDNS hostname for CI. **Different from the local `.env` value** (which keeps the LAN IP for fast laptop deploys). |
-| `BWS_PROJECT_ID` | UUID | Same as the local `.env`. |
-| `MENU_PUBLIC_HOSTNAME` | `menu.iedora.com` | Used for the post-deploy smoke check. |
-| `GENKAN_PUBLIC_HOSTNAME` | `genkan.iedora.com` | Same. |
-| `GHCR_USER` | `eduvhc` | Optional — falls back to `github.repository_owner` if unset. |
-
-Set them all at once via `gh`:
-
-```bash
-gh secret set BWS_ACCESS_TOKEN < <(echo "0...")
-gh secret set KAMAL_SSH_PRIVATE_KEY < ~/.ssh/id_ed25519
-gh variable set ONPREM_HOST --body "192.168.50.53"
-gh variable set BWS_PROJECT_ID --body "..."
-gh variable set MENU_PUBLIC_HOSTNAME --body "menu.iedora.com"
-gh variable set GENKAN_PUBLIC_HOSTNAME --body "genkan.iedora.com"
-```
+| Tofu-managed GH Variable | Notes |
+|---|---|
+| `BWS_PROJECT_ID` | UUID — same as the local `.env` value |
+| `ONPREM_HOST` | The Hetzner VPS public IPv4; written-through to BWS as `INFRA_ONPREM_HOST` by `just infra::deploy` |
+| `MENU_PUBLIC_HOSTNAME` | `menu.iedora.com` |
+| `CLOUDFLARE_ACCOUNT_ID` | Same as the local `.env` value |
+| `GHCR_USER` | `eduvhc` (optional — falls back to `github.repository_owner`) |
 
 **House workload token is auto-populated.** `just house::deploy` (locally, on first run) mints the narrow Workers workload token via Tofu and write-throughs it to BWS as `INFRA_HOUSE_WORKERS_TOKEN`. CI reads from BWS — no Tofu in CI. Rotate via `just house::rotate-token` (NEVER bare `tofu apply -replace=...`, or BWS goes stale and CI fails with 401).
 
 ### Minting the CI SSH key
 
-The GH `KAMAL_SSH_PRIVATE_KEY` secret is a **dedicated** ed25519 keypair, not your laptop's personal key. Blast radius if leaked: the homelab box, nothing else.
+The CI runner's SSH key is the same `~/.ssh/id_ed25519` you provisioned the Hetzner box with — written into BWS as `INFRA_KAMAL_SSH_PRIVATE_KEY`. If you want a dedicated CI-only keypair (smaller blast radius if a GH secret leaks):
 
 ```bash
 # 1. Mint a fresh keypair on your laptop. Empty passphrase — non-interactive use.
 ssh-keygen -t ed25519 -N "" -f ~/.ssh/ci_ed25519 -C "ci@iedora-$(date +%Y%m%d)"
 
-# 2. Authorize the public half on root@homelab (uses your existing key for auth).
-ssh-copy-id -i ~/.ssh/ci_ed25519.pub root@$ONPREM_HOST
+# 2. Authorize the public half on root@<hetzner-ip>.
+ssh-copy-id -i ~/.ssh/ci_ed25519.pub root@$(bws secret get-by-key INFRA_ONPREM_HOST "$BWS_PROJECT_ID" -o env | cut -d= -f2-)
 
-# 3. Confirm the new key works on its own.
-ssh -i ~/.ssh/ci_ed25519 -o BatchMode=yes root@$ONPREM_HOST 'whoami'   # → root
+# 3. Push the private half into BWS (Tofu reconciles GH from BWS on the next apply).
+bws secret edit "$(bws secret list "$BWS_PROJECT_ID" -o json | jq -r '.[] | select(.key=="INFRA_KAMAL_SSH_PRIVATE_KEY") | .id')" --value "$(cat ~/.ssh/ci_ed25519)" -o none
 
-# 4. Push the private half as the GH secret (file → stdin, never on the command line).
-gh secret set KAMAL_SSH_PRIVATE_KEY < ~/.ssh/ci_ed25519
+just infra::deploy   # propagates the new key to the GH secret
 ```
 
-To rotate later: regenerate, ssh-copy-id the new one, push it as the GH secret, then remove the old line from `/root/.ssh/authorized_keys` on the box. (No automation — happens too rarely to be worth wrapping.)
-
-### Network reachability — Tailscale tailnet
-
-GitHub-hosted runners can't route to a LAN IP (`192.168.50.53`). The repo solves this by joining the runner to the same tailnet as the homelab via `tailscale/github-action@v4`. OAuth mints a per-run ephemeral auth key; v4 also runs `tailscale logout` at job end, so the device disappears from the admin console within seconds. Tailscale's "Private connections for every GitHub Actions runner" pattern (their 2025 blog post) is what this implements verbatim.
-
-**Local-laptop deploys still use the LAN IP** (`products/menu/infra/.env` keeps `ONPREM_HOST=192.168.50.53`) — fast, no tailnet round-trip. **CI deploys use the tailnet hostname** (`vars.ONPREM_HOST=iedora-homelab`). Same Kamal config, different host string. The `ci_ed25519` key is authorized for both paths (it's keyed on the user `root`, not the IP).
-
-**One-time homelab setup** (already done if you followed `docs/scaling.md` § 6):
-
-```bash
-ssh root@$ONPREM_HOST 'curl -fsSL https://tailscale.com/install.sh | sh'
-ssh root@$ONPREM_HOST 'tailscale up --hostname=iedora-homelab'
-# Click the printed URL to authenticate the box on your Tailscale account.
-# Verify with `tailscale status` — should print iedora-homelab + 100.x.x.x.
-```
-
-**The ACL + CI federated identity are managed by Tofu.** `infra/tofu/tailscale.tf` declares both as resources; `just infra::deploy` applies them and write-throughs the federated-identity ID + audience to BWS as `INFRA_CI_TAILSCALE_FEDERATED_{ID,AUDIENCE}`. CI fetches those from BWS at deploy time and authenticates via GitHub's per-job OIDC JWT — **no client secret exists**. No GH secret/var lives for Tailscale separately.
-
-**One-time bootstrap** (chicken-and-egg: Tofu needs an OAuth client to manage OAuth clients, and the bootstrap client must already hold every scope it grants downstream — Tailscale's least-privilege model). Three steps, in this exact order; doing them out of order forces a two-run bootstrap.
-
-1. **Pre-seed the ACL** so `tag:ci` exists before any client tries to reference it. Tailscale admin → **Access Controls** → paste (or merge into) the policy:
-
-   ```jsonc
-   {
-     "tagOwners": {
-       "tag:ci": ["autogroup:owner"]
-     },
-     "acls": [
-       { "action": "accept", "src": ["*"], "dst": ["*:*"] }
-     ]
-   }
-   ```
-
-   This is the same content `infra/tofu/tailscale.tf` will reconcile on the first apply — Tofu's `overwrite_existing_content = true` makes the apply a no-op against this seed. Without this seed, step 2 fails because the OAuth-client UI rejects references to a non-existent tag.
-
-2. **Generate the bootstrap OAuth client** (Settings → OAuth clients → Generate):
-   - Description: `iedora-tofu-admin`
-   - Scopes (all four, write): **`policy_file`** + **`oauth_keys`** + **`auth_keys`** + **`federated_keys`**
-     - `policy_file` (write) — for Tofu to manage the ACL.
-     - `oauth_keys` (write) — historically required to mint a CI OAuth client; kept because Tofu still uses this scope class for some operations.
-     - `auth_keys` (write) — required because Tailscale only lets you GRANT scopes you HOLD; the CI client needs `auth_keys`, so this one does too.
-     - `federated_keys` (write) — required (since Tailscale WIF GA 2026-02-19) for Tofu to mint the `tailscale_federated_identity.ci` resource that CI authenticates as.
-   - Tags: `tag:ci` (auto-required when `auth_keys` is checked).
-
-   *Existing bootstrap missing a scope?* Tailscale supports editing in place — Settings → OAuth clients → click the client → add the missing scope. No need to recreate.
-
-3. **Push credentials to BWS and apply:**
-
-   ```bash
-   # Note the `-o none --` ordering — `--` ends clap flag parsing so values
-   # starting with `-` (or any other special prefix) are safe.
-   bws secret create -o none -- INFRA_TAILSCALE_OAUTH_CLIENT_ID     "<id>"     "$BWS_PROJECT_ID"
-   bws secret create -o none -- INFRA_TAILSCALE_OAUTH_CLIENT_SECRET "<secret>" "$BWS_PROJECT_ID"
-   just infra::deploy
-   ```
-
-   One `tofu apply` reconciles the ACL (no-op against the seed), mints `tailscale_federated_identity.ci`, and write-throughs the federated ID + audience to BWS as `INFRA_CI_TAILSCALE_FEDERATED_{ID,AUDIENCE}`. No CI-side secret material — GitHub's per-job OIDC JWT is the auth.
-
-After that, no GH secret/var for Tailscale exists — CI reads from BWS via the same `bws secret list` pattern as every other deploy-time value.
-
-**ACL drift warning.** `tailscale_acl.policy` is declared with `overwrite_existing_content = true` so Tofu can converge from the default Tailscale-shipped policy on first apply. The consequence: every subsequent `tofu apply` silently overwrites any UI edits to the policy. **Edit the ACL in `infra/tofu/tailscale.tf`, never in the admin console**, after the first apply.
-
-**Rotation.** With WIF there's nothing to rotate on the CI auth path — GitHub's OIDC JWT is short-lived per workflow run. If you ever need to alter the trust scope (e.g. lock to `main` only, change the subject pattern), `tofu apply -replace=tailscale_federated_identity.ci` re-mints the resource and the write-through pushes new federated ID/audience to BWS.
-
-**Pinning note** (workflow): `tailscale/github-action@v4`'s `version` input pins the Tailscale CLI installed on the runner. We hold a literal patch version (currently `1.98.2`) rather than `latest`, because `tailscale/github-action#284` documents `latest` resolving to different CLI versions across Linux/macOS/Windows at the same moment. Roll forward deliberately by bumping the pin.
-
-**If `ONPREM_HOST` is already a public IP** (cloud VPS): drop the Tailscale step entirely. The runner reaches the box directly over SSH. Hardening is then plain `sshd_config` (key-only login, no password, fail2ban).
+To rotate later: regenerate, ssh-copy-id the new one, BWS edit, `just infra::deploy`, then remove the old line from `/root/.ssh/authorized_keys` on the box.
 
 ### Manual operations
 
 ```bash
-gh workflow run menu-deploy.yml                       # re-deploy current main
-gh workflow run menu-deploy.yml -f sha=abc1234        # deploy a specific commit
-gh run watch                                          # tail the latest run
+gh workflow run infra-deploy.yml                  # re-roll latest main
+gh workflow run menu.yml --ref <branch>           # re-trigger Menu CI on a branch
+gh run watch                                      # tail the latest run
 ```
 
-Rollback: `gh workflow run menu-deploy.yml -f sha=<previous-good-sha>` re-rolls that image (which is still in GHCR, tagged by SHA). Or from a laptop: `just menu::rollback` (one version back, same as before).
+Rollback: `INFRA_MENU_IMAGE_TAG=<previous-good-sha> just infra::deploy` from a laptop. Image SHAs are still in GHCR, tagged by commit SHA.
 
 ### Caching map
 
 | Layer | Where | Key | Hit rate |
 |---|---|---|---|
-| Bun install (`~/.bun/install/cache`) | composite `setup/action.yml` | `bun-<os>-<bun.lock hash>` | ~95% (only invalidated by lockfile churn) |
-| Next/Turbopack (`.next/cache`) | `menu.yml` e2e job | `next-menu-<os>-<bun.lock + next.config.ts>` | ~90% (Turbopack invalidates per-module internally — coarse key is enough) |
-| Playwright browsers | `menu.yml` e2e job | `pw-<os>-<playwright version>` | ~99% (only invalidated when @playwright/test bumps) |
-| Docker buildx layers | `_kamal-deploy.yml` | `type=gha,mode=max,scope=<product>` | ~80% (mode=max exports every intermediate stage; per-product scope so menu + genkan don't trample) |
+| Bun install (`~/.bun/install/cache`) | composite `setup/action.yml` | `bun-<os>-<bun.lock hash>` | ~95% |
+| Next/Turbopack (`.next/cache`) | `menu.yml` build job | `next-menu-<os>-<bun.lock + next.config.ts>` | ~90% |
+| Docker buildx layers | `menu.yml` build job | `type=gha,mode=max,scope=menu` | ~80% |
 
-GHA caches are per-branch with base-branch fallback, evicted after 7 days untouched, capped at 10 GiB per repo (lift-able for paid orgs). A nightly cron pinging the cache via `actions/cache/restore --lookup-only` would keep hot keys warm if eviction starts biting; not needed today.
+GHA caches are per-branch with base-branch fallback, evicted after 7 days untouched, capped at 10 GiB per repo.
 
 ### When NOT to use CI for deploy
 
-- **First-ever setup on a fresh box.** GHA can't run `kamal server bootstrap` (which needs an interactive `known_hosts` confirmation and Docker install). Use `just <product>::deploy` from a laptop once; subsequent deploys can come from CI.
-- **Tofu changes.** `_kamal-deploy.yml` does NOT run `tofu apply` — only Kamal. If you edit `products/menu/infra/tofu/*.tf`, you still run `just menu::deploy` locally to reconcile Cloudflare resources. CI then takes over for app deploys.
-- **Anything destructive.** `kamal rollback`, `kamal app stop`, `kamal accessory remove` — local only. The CI flow is one-way (forward roll + smoke check).
+- **First-ever setup on a fresh laptop.** Bootstrapping BWS + the bootstrap CF token + the Hetzner box is local-only. Once `just infra::deploy` works once locally, CI takes over.
+- **Tofu changes.** `infra-deploy.yml` DOES run `tofu apply`, but you should rehearse a substantial Tofu change locally first (you'd see the plan; CI auto-approves). Editing `.tf` and pushing without a local rehearsal is fine for small, reviewed changes (image tag bumps, container env additions).
+- **Anything destructive.** `tofu destroy`, `wipe-postgres`, `zitadel-rebootstrap` — local only. The CI flow is one-way (forward apply + smoke check).
 
 ### Supply-chain verification on a deployed image
 
-Every successful CI deploy mints two Sigstore-signed attestations attached to the GHCR image: SLSA build provenance + SBOM. Verify them client-side without needing repo metadata:
+Every successful `menu.yml` build mints two Sigstore-signed attestations attached to the GHCR image: SLSA build provenance + SBOM. Verify them client-side without needing repo metadata:
 
 ```bash
-# Build provenance — "this digest was built by our CI from this commit"
 gh attestation verify oci://ghcr.io/eduvhc/menu:<sha> --owner eduvhc
-
-# SBOM attestation — "this SBOM is cryptographically bound to that digest"
 gh attestation verify oci://ghcr.io/eduvhc/menu:<sha> --owner eduvhc --type sbom
 ```
 
-Verification failures = either the image is from outside our CI (someone with a stolen GHCR push token), the registry returned the wrong content, or the attestations were stripped. The post-deploy Trivy image scan + SARIF upload populates the Security tab with any CVE findings in the OS layer — see `docs/security-audit.md` § Supply-chain perimeter.
-
----
-
-## Adding a second box / a cloud VPS later
-
-Same five steps — only step 4 (provisioning) differs. For a cloud VPS, **nothing** is needed in step 4 because the image ships with root SSH already. For a second box, you'd typically use Kamal's multi-host config — bump `servers.web.hosts` in `products/menu/infra/kamal/config/deploy.yml` to a list, and Kamal load-balances behind kamal-proxy.
+Verification failures = either the image is from outside our CI (stolen GHCR push token), the registry returned the wrong content, or attestations were stripped. The post-deploy Trivy image scan + SARIF upload populates the Security tab with any CVE findings — see `docs/security-audit.md`.
 
 ---
 
 ## How values flow
 
-- **`products/menu/infra/.env`** → justfile `set dotenv-load` → visible to every `tofu`/`kamal` subprocess that the recipe spawns.
-- **Tunnel token** → generated by `tofu apply` in `products/menu/infra/tofu/`, read at deploy time by `products/menu/infra/kamal/.kamal/secrets` via `$(tofu -chdir=../tofu output -raw tunnel_token)` (paths are relative to Kamal's cwd, `products/menu/infra/kamal/`). No manual copy step.
-- **Registry password** → `$(gh auth token)` evaluated when Kamal logs into ghcr.io.
-- **App + infra secrets** (`MENU_AUTH_SECRET`, `INFRA_POSTGRES_PASSWORD`, etc.) → `.kamal/secrets` extracts them by BWS key name via the `bitwarden-sm` adapter, then exposes them under the in-container env-var names the apps expect (e.g. `BETTER_AUTH_SECRET`, `POSTGRES_PASSWORD`).
+- **`infra/.env`** → justfile `set dotenv-load` → visible to every `tofu` subprocess that the recipe spawns.
+- **App + infra secrets** (`MENU_AUTH_SECRET`, `INFRA_POSTGRES_PASSWORD`, etc.) → `bin/with-secrets` extracts them from BWS by key name, then exports them as `TF_VAR_*` aliases that Tofu reads as variable inputs. Tofu sets them as container env in `docker_container.menu_web.env` (or the matching infra container).
+- **Registry pull** → `docker_registry_image.menu` uses `INFRA_GHCR_TOKEN` (from BWS) as the registry auth.
+- **Tunnel tokens** → minted by Tofu inside `module.observability_tunnel`; flow directly into the corresponding `docker_container.*-tunnel.env`. No manual copy step.
 
-`.kamal/secrets` is checked into git — it contains **only references**, never values.
-
----
-
-## Updating the Cloudflare tunnel (adding routes, etc.)
-
-`products/menu/infra/tofu/menu.tf` defines ingress + DNS for the menu app. Edit it (e.g. add a third ingress rule for a new accessory), then `just menu::deploy` — `tofu apply` (against `tofu/menu/`) runs first and pushes the change. DNS + ingress propagate in seconds. The brand-level iedora.com site (Astro on Workers Static Assets) is a separate root (`products/house/infra/tofu/`) with its own state and own deploy recipe (`just house::deploy`).
+The full chain is declarative end-to-end: every secret has exactly one source (BWS), one consumer (a Tofu resource or container env), and zero hops where a human pastes a value between systems.
 
 ---
 
-## Why one Tofu root per product (and not one shared root)
+## Updating the menu hostname / adding routes
 
-Each product owns its own Tofu root under `products/<name>/infra/tofu/` with its own encrypted state file. The shared bits (Cloudflare provider, encryption envelope, zone data source) are duplicated per root — that's deliberate.
+`infra/tofu/main.tf` and `infra/tofu/containers.tf` together own menu's DNS + ingress. `menu.iedora.com` is a direct A record (grey cloud) pointing at the Hetzner IPv4; the box terminates TLS via `infra-caddy` and reverse-proxies to `menu_web:3000`. To add a new public hostname (e.g. a marketing subdomain that bypasses the app): add a `cloudflare_dns_record` in `main.tf` and a matching Caddy route in `infra/postgres/Caddyfile` (or the per-service one) and `just infra::deploy`.
 
-**The benefits paid for by that duplication:**
+The brand-level iedora.com site (Astro on Workers Static Assets) is a separate root (`products/house/infra/tofu/`) with its own state and own deploy recipe (`just house::deploy`).
 
-1. **Blast radius.** `tofu apply` in `products/house/infra/tofu/` literally cannot plan a change against the menu tunnel — the state isn't there. A typo in house resources can't accidentally destroy R2 buckets.
-2. **Lifecycles.** The menu app changes weekly; the house site changes maybe once a quarter. Splitting state means routine menu deploys don't even read the house config, and a stuck Workers-custom-domain provisioning doesn't block `just menu::deploy`.
-3. **Secrets surface.** The narrow `workers_deploy` token (see `docs/secrets.md` — Token tiers) lives only in the house state. wrangler reads it via `tofu -chdir=tofu output`, never seeing the menu tunnel or R2 keys.
-4. **Adding a 3rd product is mechanical** — `mkdir products/<name>/`, copy the shape of `products/house/infra/` as a starting point, append `mod <name> 'products/<name>/infra'` to the root `justfile`. No edits to existing products.
+---
 
-**The cost.** ~30 lines duplicated per root: `versions.tf` (provider + encryption), `variables.tf` for the credentials each root happens to need (api_token, account_id, state_passphrase), and a `data.cloudflare_zone "this"` lookup. The Terraform monorepo articles ([Spacelift](https://spacelift.io/blog/terraform-monorepo), [Cloud Posse, Scalr]) all call this out as the trade-off the pattern asks for; the alternative (one root, multiple `.tf` files, shared state) puts everything inside one blast radius.
+## Why one Tofu root per blast-radius unit
+
+The shared root (`infra/`) owns every cross-product resource AND the menu app container. Per-product roots (`products/menu/infra/tofu/`, `products/house/infra/tofu/`) own only product-local resources — for menu, that's the assets R2 bucket + `assets.iedora.com`; for house, the narrow `workers_deploy` token.
+
+1. **Blast radius.** A typo in `products/house/infra/tofu/` literally cannot plan a change against the menu container — the state isn't there.
+2. **Lifecycles.** The menu container changes per-push; the assets bucket changes once a quarter. Splitting state means routine container rolls don't even read the bucket config.
+3. **Secrets surface.** The narrow `workers_deploy` token (see `docs/secrets.md` — Token tiers) lives only in the house state.
+
+The cost: ~30 lines duplicated per root (versions.tf, the credentials each root happens to need, a `data.cloudflare_zone "this"` lookup). The Terraform monorepo articles all call this out as the trade-off; the alternative (one root, multiple `.tf` files, shared state) puts everything inside one blast radius.
 
 ---
 
 ## Why `just` (not Make)
 
-The entry point is `<repo>/justfile`, a tiny forwarder that uses `mod menu 'products/menu/infra'` + `mod house 'products/house/infra'` to expose per-product recipes as `just menu::deploy` / `just house::deploy` / etc. Each product has its own self-contained `infra/justfile`. Switched from Make in May 2026 for three reasons:
+The entry point is `<repo>/justfile`, a tiny forwarder that uses `mod infra 'infra'` + `mod menu 'products/menu/infra'` + `mod house 'products/house/infra'` to expose per-workspace recipes as `just infra::deploy` / `just menu::infra` / `just house::deploy`. Switched from Make in May 2026 for three reasons:
 
-1. **Modules.** `just` has first-class module support — `mod <name> '<path>'` namespaces an entire justfile under a prefix. Adding a 3rd product is one line in the root forwarder; Make would need per-target forwarders or a parameterized convention that gets brittle fast.
-2. **Auto-help.** `just` (no args) lists every recipe with the comment line above it as the description. The Make version had a 30-line `@echo` block in the `help:` target that had to be kept in sync by hand.
-3. **No escape pain.** Shebang recipes (`#!/usr/bin/env bash`) let multi-step recipes (`deploy`, `rotate-secret`, `build-backup`) be plain bash scripts inside the recipe body — no `&&` chains, no `\` line continuations, no `$$` doubling for shell vars.
+1. **Modules.** `just` has first-class module support — adding a new workspace is one line in the root forwarder.
+2. **Auto-help.** `just` (no args) lists every recipe with the comment line above it as the description.
+3. **No escape pain.** Shebang recipes (`#!/usr/bin/env bash`) let multi-step recipes be plain bash scripts.
 
-Install: `brew install just` (macOS) or `cargo install just` (Linux). Single Rust binary, no daemon, ~10ms cold start.
+Install: `brew install just` (macOS) or `cargo install just` (Linux).
 
 ---
 
 ## File structure
 
 ```
-.env.example                         dev template — copy to .env.local (Next.js dev)
-products/menu/infra/.env.example                  infra template — copy to products/menu/infra/.env (Tofu + Kamal; NOT loaded by Next)
-products/menu/infra/kamal/config/deploy.yml                    Kamal config — app + 3 accessories (postgres, cloudflared, backups)
-products/menu/infra/kamal/.kamal/secrets           shell-evaluated references; committed, no values
-products/menu/infra/tofu/                    menu.iedora.com — Cloudflare tunnel + DNS + R2 (encrypted state)
-products/house/infra/tofu/              iedora.com root — narrow workers_deploy token (worker itself + DNS + cert created by `wrangler deploy`) (encrypted state)
-justfile + products/menu/infra/justfile            entry point (root forwards into infra/, where recipes live)
-products/menu/infra/Dockerfile                     multi-stage build for the Next app (Bun install, Node build, standalone)
-scripts/migrate.mjs                  Drizzle migrator with pg_advisory_lock
+.env.example                                      dev template — copy to .env.local (Next.js dev)
+infra/.env.example                                infra template — copy to infra/.env (Tofu; NOT loaded by Next)
+infra/justfile                                    every infra recipe (deploy, backup, restore, …)
+infra/bin/with-secrets                            BWS wrapper — exports every secret as TF_VAR_*
+infra/tofu/                                       shared Tofu root (encrypted state)
+  versions.tf                                     providers: hcloud, cloudflare, github, kreuzwerker/docker
+  hetzner.tf                                      hcloud_server.iedora + firewall + SSH key
+  containers.tf                                   every docker_container (infra-* accessories + menu_web)
+  main.tf                                         Cloudflare R2 + obs tunnel + DNS (menu.iedora.com, auth.iedora.com)
+  github.tf                                       integrations/github — every GH Actions secret/variable
+  zitadel.tf                                      zitadel orgs/projects (lands after SA key bootstrap)
+products/menu/infra/Dockerfile                    multi-stage build for the menu app (Bun install, Node build, standalone)
+products/menu/infra/tofu/                         menu's assets bucket + assets.iedora.com (encrypted state)
+products/house/infra/tofu/                        iedora.com — narrow workers_deploy token (encrypted state)
 ```
 
 ---
 
 ## Troubleshooting
 
-**`just menu::deploy` errors with `key not found` early on** — `products/menu/infra/.env` is missing or a required key isn't filled. Copy `products/menu/infra/.env.example` and fill in every value.
+**`just infra::deploy` errors with `key not found` early on** — `infra/.env` is missing or a required key isn't filled. Copy `infra/.env.example` and fill in every value.
 
-**`ssh root@host` asks for a password** — root SSH isn't accepting your key. Three causes: (a) key isn't in `/root/.ssh/authorized_keys` (re-run step 4b); (b) `/root/.ssh` perms are wrong (must be `700`, file `600`, both owned by `root`); (c) sshd disables root login (re-run step 4c to set `PermitRootLogin prohibit-password`).
+**Tofu plan fails with "unable to parse docker host"** — the Hetzner box hasn't been provisioned yet, but the `kreuzwerker/docker` provider is trying to connect anyway. This is what Pass 1 of the deploy recipe handles automatically. If you hit it directly (running raw `tofu apply`), run `tofu apply -target=hcloud_server.iedora` first, then a full apply.
 
-**`kamal server bootstrap` hangs or fails** — root SSH isn't working. Re-check step 4: `ssh root@$ONPREM_HOST 'whoami'` must print `root` instantly. If it doesn't, your key isn't in `/root/.ssh/authorized_keys` or sshd is set to `PermitRootLogin no`.
+**`ssh root@<hetzner-ip>` asks for a password** — `~/.ssh/id_ed25519.pub` wasn't registered as `hcloud_ssh_key.operator`. Check `tofu state list | grep hcloud_ssh_key` and re-apply.
 
-**GHCR push returns "denied"** — `gh auth status` must show `write:packages` in the scopes line. Re-run step 2.
+**GHCR push returns "denied"** — `gh auth status` must show `write:packages` in the scopes line. Re-run step 2. Or `INFRA_GHCR_TOKEN` in BWS is expired — regenerate the classic PAT and `bws secret edit` it.
 
-**`cloudflared` reports 1033 or restart-loops after `just menu::destroy && just menu::deploy`** — `kamal accessory boot` (called inside `kamal setup`) is idempotent but skips containers that already exist, even Exited ones. The cloudflared container with the dead tunnel token sits there. Fix: `kamal accessory reboot cloudflared` (force-recreate). One-shot, not a recurring problem.
+**`menu.iedora.com` returns 530 / connection refused** — symptom: the A record resolves but TLS fails. Root cause: either `infra-caddy` is down (`just infra::logs caddy`) or `menu_web` is unhealthy (`just infra::logs menu_web`). The container's healthcheck is the canonical signal — `docker inspect menu_web --format '{{.State.Health.Status}}'` over SSH.
 
-**A product's hostname returns 530 / origin unreachable** — symptom: app container is healthy (`docker ps` shows `<product>-web` Up), but no `<product>-cloudflared`, and the Cloudflare tunnel for that hostname has no active connections. Root cause: `kamal deploy` (chosen by the recipe when `kamal-proxy` already exists on the box) doesn't boot accessories, so if the product's `cloudflared` was never created during a prior `kamal setup`, it stays missing. The deploy recipe runs `kamal accessory boot all` unconditionally to prevent this, plus a post-deploy `curl /up` smoke check that surfaces it loudly if it ever recurs. Manual recovery: `cd products/<product>/infra/kamal && bin/with-secrets bash -c 'exec kamal accessory boot cloudflared'`.
+**Healthcheck flaps on first deploy** — the app starts slower than the configured `interval`. Raise it in `infra/tofu/containers.tf` (the `healthcheck` block on `docker_container.menu_web`).
 
-**502 from the tunnel** — `docker network inspect kamal` on the box should list 5 containers (kamal-proxy + 4 accessories + the app). If one's missing: `kamal accessory boot <name>` for that accessory, or check `kamal logs` for the app.
+**`unable to find image` on the server** — GHCR pull failed. `INFRA_GHCR_TOKEN` in BWS is wrong; regenerate the classic PAT.
 
-**Healthcheck flaps on first deploy** — app starts slower than `interval`. Raise `proxy.healthcheck.interval` in `products/menu/infra/kamal/config/deploy.yml`.
+**Build-time warnings about `BETTER_AUTH_SECRET`** — Better Auth reads `process.env` during `next build`. `products/menu/infra/Dockerfile` sets placeholder values for build-only; runtime values from Tofu's container env override them. If warnings come back after a Dockerfile change, the placeholders got removed — re-add the `ENV BETTER_AUTH_SECRET=…` / `ENV BETTER_AUTH_URL=…` lines before `RUN node --run build`.
 
-**`unable to find image` on the server** — registry push failed. `gh auth status` must show `write:packages`; if the smoketest `echo $(gh auth token) | docker login ghcr.io -u <user> --password-stdin` fails, the token is wrong.
+**`tofu destroy` prints `Warning: Resource Destruction Considerations` for `cloudflare_zero_trust_tunnel_cloudflared_config` and `cloudflare_r2_bucket_cors`** — harmless, expected, no action needed. The Cloudflare provider can't delete these two resource types via API because Cloudflare doesn't expose a separate delete endpoint — they're subresources of their parents (the tunnel and the bucket respectively), deleted automatically when the parent goes. Tofu only removes them from local state.
 
-**Build-time warnings about `BETTER_AUTH_SECRET`** — Better Auth reads `process.env` during `next build`. `products/menu/infra/Dockerfile` sets placeholder values for build-only; runtime values from Kamal's `--env-file` override them. If the warnings come back after a Dockerfile change, the placeholders got removed — re-add the `ENV BETTER_AUTH_SECRET=…` / `ENV BETTER_AUTH_URL=…` lines before `RUN node --run build`.
-
-**`tofu destroy` prints `Warning: Resource Destruction Considerations` for `cloudflare_zero_trust_tunnel_cloudflared_config` and `cloudflare_r2_bucket_cors`** — harmless, expected, no action needed. The Cloudflare provider can't delete these two resource types via API because Cloudflare doesn't expose a separate delete endpoint for them — they're subresources of their parents:
-
-- `cloudflare_zero_trust_tunnel_cloudflared_config` — the tunnel's ingress rules. Lives inside the tunnel; deleted automatically when the parent `cloudflare_zero_trust_tunnel_cloudflared.menu` is destroyed (which **does** work).
-- `cloudflare_r2_bucket_cors` — the bucket's CORS policy. Lives inside the R2 bucket; deleted automatically when the parent `cloudflare_r2_bucket.assets` is destroyed.
-
-Tofu only removes them from local state — that's all the warning is saying. Verified after a real `tofu destroy`: tunnel and buckets are gone from the Cloudflare dashboard along with their orphaned configs. On the next `tofu apply` the parents get recreated and Tofu provisions the configs anew. If you ever DO end up with a real orphan (e.g. you delete the tunnel out-of-band but the config sticks), `tofu apply` will reconcile by creating a new tunnel with new config and the old config disappears with its dead parent.
+**Zitadel `FirstInstance` step never produces `zitadel-admin-sa.json`** — the bootstrap volume has stale perms from a previous attempt. Run `just infra::zitadel-rebootstrap` to wipe + retry. Confirms via `just infra::logs zitadel`.

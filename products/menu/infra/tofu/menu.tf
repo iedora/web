@@ -1,21 +1,19 @@
 # Menu product (menu.iedora.com) — its own root module with its own state.
 #
 # Owns:
-#   - Tunnel + ingress for the app (1 route: kamal-proxy)
-#   - DNS CNAME for the menu hostname
-#   - R2 assets bucket (public via custom domain) + scoped R2 token
+#   - R2 assets bucket (public via custom domain at assets.iedora.com)
+#   - The scoped R2 API token the app uses for presigned uploads
+#   - CORS rules on the bucket for browser-direct PUTs from menu.iedora.com
 #
-# Does NOT own the backups bucket — that lives in `infra/tofu/` since
-# backups cover every product's database (menu + genkan + future).
+# Does NOT own:
+#   - The DNS record / TLS for menu.iedora.com itself — that's a direct
+#     A record (grey-cloud, proxied=false) to the Hetzner VPS, managed
+#     in `infra/tofu/` at the repo root alongside the VPS itself. Caddy
+#     on the box terminates TLS and forwards to the menu container.
+#   - The backups bucket — that lives in `infra/tofu/` since backups cover
+#     every product's database.
 #
-# The Cloudflare zone is also looked up in sibling product roots (e.g.
-# `../../../house/infra/tofu/`) — same zone (`iedora.com`), one data source
-# per root. That duplication is the price of keeping each product's state
-# independently appliable; well worth the blast-radius isolation.
-#
-# Assets are served directly from R2 via a custom domain on Cloudflare's CDN
-# — no tunnel hop, no Starlink uplink involved on hot paths. The tunnel only
-# carries app traffic.
+# The Cloudflare zone is looked up live (no redundant ZONE_ID env var).
 
 locals {
   # The zone is everything after the first dot in public_hostname:
@@ -34,31 +32,12 @@ data "cloudflare_zone" "this" {
   }
 }
 
-# ── Cloudflare Tunnel + ingress + DNS ─────────────────────────────────────────
-# Delegated to the shared cloudflare-tunnel-app module — every iedora product
-# that fronts an HTTP app on the homelab uses the same shape (menu + genkan).
-# Adding a 4th product = a `module "tunnel" { source = ... }` block in five
-# lines.
-#
-# Asset traffic skips the tunnel entirely — R2 is served via its custom domain
-# on Cloudflare's edge (see the R2 resources below). The module's ingress
-# catch-all (`http_status:404`) covers anything that isn't `kamal-proxy`.
-
-module "tunnel" {
-  source = "../../../../infra/modules/cloudflare-tunnel-app"
-
-  account_id      = var.account_id
-  zone_id         = data.cloudflare_zone.this.id
-  tunnel_name     = var.tunnel_name
-  public_hostname = var.public_hostname
-}
-
 # ── R2 buckets ────────────────────────────────────────────────────────────────
 # Cloudflare's R2 S3 API accepts a regular Cloudflare API token as credentials:
 #   Access Key ID    = the token's ID
 #   Secret Access Key = SHA-256(token value)
 # Docs: https://developers.cloudflare.com/r2/api/tokens/
-# Single `tofu apply` provisions both buckets + their scoped tokens.
+# Single `tofu apply` provisions the bucket + its scoped token.
 
 resource "cloudflare_r2_bucket" "assets" {
   account_id = var.account_id
@@ -97,7 +76,7 @@ resource "cloudflare_r2_bucket_cors" "assets" {
 }
 
 resource "cloudflare_api_token" "assets_r2" {
-  name = "${var.tunnel_name}-assets-r2"
+  name = "${var.token_name_prefix}-assets-r2"
 
   policies = [{
     effect = "allow"

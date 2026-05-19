@@ -1,28 +1,22 @@
 # Menu product (menu.iedora.com) — infra entry point.
 #
-# Layout: one Tofu root (tofu/ — Cloudflare tunnel + DNS + R2), one Kamal
-# config (kamal/) for the app, one self-built backup accessory (backup/),
-# one Dockerfile, and a Bitwarden Secrets Manager hookup that injects every
-# production secret via `bin/with-secrets`.
+# Menu's APPLICATION deploy lives at the repo-root `infra/` workspace
+# now (Tofu-managed `docker_container.menu_web` on the Hetzner VPS):
+#
+#     just infra::deploy            # boots / updates the menu container
+#
+# This product-local `infra/` only owns menu's R2 assets bucket + the
+# `assets.iedora.com` custom-domain DNS — things that don't belong in
+# the shared VPS root. The Dockerfile in this directory is consumed by
+# the `menu.yml` CI workflow (image build + push to GHCR).
 #
 # Sibling products live at ../../<name>/infra/ (e.g. ../../house/infra/).
 # Each product is self-contained — its own tofu state, its own justfile,
-# its own .env. The repo-root justfile forwards into the right product.
+# its own .env.
 #
 # `just` (no args) lists every recipe.
 
 set dotenv-load := true
-
-# Kamal is a Ruby gem. On macOS with brew-Ruby the binary lands outside PATH;
-# probe the usual places. On Linux with `sudo gem install` it lands in
-# /usr/local/bin (already on PATH), the probe finds nothing, and we fall back
-# to bare `kamal` on PATH. Trailing colon makes the recipes' PATH prefix safe
-# to concatenate even when the probe returns nothing.
-kamal-bin := `
-  for d in /opt/homebrew/lib/ruby/gems/*/bin /usr/local/lib/ruby/gems/*/bin "$HOME"/.gem/ruby/*/bin "$HOME"/.rbenv/versions/*/bin; do
-    [ -d "$d" ] && { printf '%s:' "$d"; exit 0; }
-  done
-`
 
 tofu := "bin/with-secrets tofu -chdir=tofu"
 
@@ -30,29 +24,19 @@ tofu := "bin/with-secrets tofu -chdir=tofu"
 _default:
     @just --list --unsorted
 
-# Deploy is CI-driven: triggers the menu-deploy.yml workflow which builds the
-# image on a tailnet-joined GHA runner and rolls Kamal on the homelab. Single
-# mutation surface, auditable in GH run history.
-#
-# Cloudflare resources (tunnel + DNS + R2 buckets) are still applied locally
-# via Tofu — they change rarely, and Tofu state is canonically a local concern.
-# When CF state needs to change: `bin/with-secrets tofu -chdir=tofu apply` from
-# this dir, then `just menu::deploy` to roll the new values.
-deploy:
-    @gh workflow run menu-deploy.yml --ref "$(git rev-parse --abbrev-ref HEAD)"
-    @echo "→ menu deploy triggered. Watch: gh run watch  (or: gh run list --workflow=menu-deploy.yml --limit 1)"
-
-# Local-only Tofu apply for Cloudflare resources (tunnel, DNS, R2). Writes
-# fresh tunnel + R2 token values into BWS so the CI deploy reads the new
-# values on its next run. Rare — only needed when CF resources change.
+# Tofu apply for the R2 assets bucket + assets.iedora.com custom domain.
+# Writes the resulting R2 credentials + public URL into BWS so the app
+# container (booted by the repo-root `infra` workspace) reads the fresh
+# values on its next roll. Rare — only needed when the bucket itself or
+# its CORS / custom-domain configuration changes.
+[doc("apply R2 + assets-DNS Tofu, write outputs to BWS")]
 infra:
     #!/usr/bin/env bash
     set -euo pipefail
     {{tofu}} init -upgrade -input=false >/dev/null
     {{tofu}} apply -auto-approve
     echo "[infra] writing tofu outputs to BWS …"
-    for PAIR in "tunnel_token:INFRA_MENU_TUNNEL_TOKEN" \
-                "assets_endpoint:INFRA_MENU_ASSETS_ENDPOINT" \
+    for PAIR in "assets_endpoint:INFRA_MENU_ASSETS_ENDPOINT" \
                 "assets_bucket_name:INFRA_MENU_ASSETS_BUCKET" \
                 "assets_r2_access_key_id:INFRA_MENU_ASSETS_ACCESS_KEY" \
                 "assets_r2_secret_access_key:INFRA_MENU_ASSETS_SECRET_KEY" \
@@ -67,53 +51,11 @@ infra:
         bws secret create -o none -- "$KEY" "$VAL" "$BWS_PROJECT_ID" >/dev/null
       fi
     done
-    echo "[infra] ✓ done. Now run 'just menu::deploy' to roll the new values."
+    echo "[infra] ✓ done. The repo-root infra workspace will pick up the new R2 creds on the next 'just infra::deploy'."
 
-# Tear down menu's Cloudflare resources (does NOT touch the box).
-# Stops the local cloudflared accessory first + force-flushes Cloudflare's
-# active-connection registry, both of which can otherwise make `tofu destroy`
-# fail with "This tunnel has active connections" — even after the local
-# container is gone, Cloudflare keeps the connection slot for ~30-60s.
+# Tear down menu's Cloudflare-owned resources (R2 bucket + custom domain
+# + scoped token). Does NOT touch the VPS or the menu container — those
+# live in the repo-root infra workspace.
+[doc("destroy menu's R2 bucket + assets DNS (Cloudflare side only)")]
 destroy:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    bin/with-secrets bash -c \
-      'cd kamal && PATH="{{kamal-bin}}$PATH" kamal accessory stop cloudflared 2>/dev/null || true'
-    TUNNEL_ID=$({{tofu}} output -raw tunnel_id 2>/dev/null || true)
-    if [ -n "$TUNNEL_ID" ]; then
-      bin/with-secrets bash -c '
-        curl -s -X DELETE \
-          -H "Authorization: Bearer $INFRA_CLOUDFLARE_API_TOKEN" \
-          "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/cfd_tunnel/'"$TUNNEL_ID"'/connections" >/dev/null
-      '
-    fi
     {{tofu}} destroy -auto-approve
-
-# Tail app logs.
-logs:
-    bin/with-secrets bash -c 'cd kamal && PATH="{{kamal-bin}}$PATH" exec kamal app logs -f'
-
-# Bash inside the app container.
-console:
-    bin/with-secrets bash -c 'cd kamal && PATH="{{kamal-bin}}$PATH" exec kamal app exec --interactive --reuse bash'
-
-# Roll back to the previous version.
-rollback:
-    bin/with-secrets bash -c 'cd kamal && PATH="{{kamal-bin}}$PATH" exec kamal rollback'
-
-# Rotate one Bitwarden Secrets Manager secret. Usage: just rotate-secret MENU_AUTH_SECRET
-rotate-secret key:
-    #!/usr/bin/env bash
-    # Prompts (no echo) for the new value, edits BWS, reminds to redeploy.
-    # NOTE: MENU_AUTH_SECRET rotation invalidates every menu session;
-    # INFRA_POSTGRES_PASSWORD also needs `kamal accessory reboot postgres` after.
-    set -euo pipefail
-    SECRET_ID=$(bws secret list "$BWS_PROJECT_ID" -o json | jq -r '.[] | select(.key=="{{key}}") | .id')
-    [ -n "$SECRET_ID" ] || { echo "No BWS secret named {{key}} in project"; exit 1; }
-    printf "New value for {{key}} (no echo): "
-    stty -echo; read -r NEW; stty echo; printf "\n"
-    [ -n "$NEW" ] || { echo "Empty value, aborting"; exit 1; }
-    bws secret edit "$SECRET_ID" --value "$NEW" -o none
-    echo "✓ {{key}} rotated in BWS"
-    echo "→ run 'just redeploy' to roll the new value out"
-

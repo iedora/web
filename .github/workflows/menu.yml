@@ -1,10 +1,24 @@
-# Menu CI.
+# Menu CI + image build/push.
 #
-# Runs the full menu pipeline (typecheck + lint + Vitest + Playwright e2e)
-# whenever menu source or one of its dependencies changes.
+# Runs the menu gates (typecheck + lint + Vitest + Trivy/SBOM) on every push +
+# PR. On push to main, after the gates pass, builds the menu image for
+# linux/arm64, pushes it to GHCR (`ghcr.io/eduvhc/menu:latest` + commit SHA),
+# then triggers the infra deploy workflow to roll the Tofu-managed container
+# on the Hetzner CAX11 box.
+#
+# Architecture note (2026-05-20): the menu container is now a Tofu-managed
+# `docker_container` on a Hetzner CAX11 in Falkenstein. The CAX11 is ARM64
+# (Ampere Altra). Tofu pulls the image lazily via
+# `data.docker_registry_image.menu + docker_image.menu + pull_triggers`, so
+# CI's job is reduced to: build + push + dispatch the infra deploy. No SSH
+# from CI, no Kamal, no Tailscale.
+#
+# E2E (Playwright) is intentionally omitted: the auth-testkit shim was deleted
+# alongside genkan, the Zitadel adapter is pending (issue #19 Phase 3+), and
+# the auth-coupled specs no longer compile. Will be rebuilt once the Zitadel
+# adapter lands.
 #
 # Self-contained on purpose: one file is the entire menu CI surface.
-# Genkan's pipeline lives in genkan.yml and runs independently.
 
 name: Menu
 
@@ -17,7 +31,6 @@ on:
       - 'packages/eslint-config/**'
       - 'packages/iedora-identity/**'
       - 'packages/iedora-observability/**'
-      - 'packages/iedora-auth-testkit/**'
       - 'bun.lock'
       - 'package.json'
       - 'tsconfig*.json'
@@ -31,7 +44,6 @@ on:
       - 'packages/eslint-config/**'
       - 'packages/iedora-identity/**'
       - 'packages/iedora-observability/**'
-      - 'packages/iedora-auth-testkit/**'
       - 'bun.lock'
       - 'package.json'
       - 'tsconfig*.json'
@@ -47,7 +59,9 @@ concurrency:
   group: menu-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# Workflow-level permissions — least privilege. CI does checkout + test only.
+# Workflow-level permissions — least privilege. The build job below escalates
+# (packages:write for GHCR push, id-token:write for Sigstore attestations,
+# actions:write for the infra-deploy dispatch).
 permissions:
   contents: read
 
@@ -129,176 +143,100 @@ jobs:
           path: menu-sbom.spdx.json
           retention-days: 90
 
-  e2e:
-    name: E2E (Playwright)
+  build:
+    name: Build + push image
     needs: [typecheck, lint, unit, security]
+    # Only on push to main — PRs run the gates only. workflow_dispatch on main
+    # still triggers a build for the "re-roll latest" flow.
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
-    defaults:
-      run:
-        working-directory: products/menu
+    timeout-minutes: 30
 
-    services:
-      # Service container starts with the default `postgres` admin DB.
-      # globalSetup connects there to CREATE `menu_test` before
-      # migrations run.
-      postgres:
-        image: postgres:18.4-alpine
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        ports: ['5432:5432']
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-
-      # LocalStack stands in for MinIO/S3 in CI: GH Actions services don't
-      # accept `command:` overrides (so `minio/minio` can't boot), and both
-      # `minio/minio` and `bitnami/minio` public images were removed from
-      # Docker Hub in 2025. LocalStack auto-boots S3 on :4566; the SDK
-      # works because `forcePathStyle: true` is set in s3.ts.
-      localstack:
-        image: localstack/localstack:4
-        env:
-          SERVICES: s3
-          DEFAULT_REGION: us-east-1
-          AWS_DEFAULT_REGION: us-east-1
-        ports:
-          - '4566:4566'
-        options: >-
-          --health-cmd "curl -fsS http://localhost:4566/_localstack/health | grep -q 's3'"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 20
-          --health-start-period 10s
-
-    env:
-      # --- Database + auth ---
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/menu_test
-      # The cookie-injection fast path (tests/e2e/helpers/sign-in.ts) pre-signs
-      # session cookies with this exact literal. playwright.config.ts:14 sets
-      # the same string on the webServer's env. Pinning it here means the
-      # `next build` step ALSO sees this value — without that, the build was
-      # baking in whatever was in the `BETTER_AUTH_SECRET` GH secret, and
-      # signInAs's cookie signatures didn't validate at runtime → every
-      # signed-in spec bounced to genkan login. This is a fixture value, not
-      # a real secret; the literal lives in source already.
-      BETTER_AUTH_SECRET: test-secret-do-not-use-in-prod-test-secret-do-not-use-in-prod
-      BETTER_AUTH_URL: http://localhost:3000
-      DISABLE_AUTH_RATE_LIMIT: 'true'
-      DISABLE_RATE_LIMIT: 'true'
-
-      # --- S3 (LocalStack) ---
-      S3_ENDPOINT: http://localhost:4566
-      S3_REGION: us-east-1
-      S3_ACCESS_KEY: test
-      S3_SECRET_KEY: test
-      S3_BUCKET: menu-test
-
-      # --- Genkan (the auth-testkit shim) ---
-      # Next 16's "collect page data" build pass executes module-level env
-      # validation (src/shared/env.ts), so GENKAN_* must be present at
-      # BUILD time. NEXT_PUBLIC_GENKAN_URL is also inlined into the client
-      # bundle at build time via src/shared/brand.ts::GENKAN_URL, so it
-      # MUST be the final testkit URL the browser hits. SHIM_PORT in
-      # playwright.config.ts must match the port suffix here.
-      GENKAN_OAUTH_CLIENT_ID: menu
-      GENKAN_OAUTH_CLIENT_SECRET: menu-secret
-      GENKAN_ISSUER_URL: http://127.0.0.1:4444
-      NEXT_PUBLIC_GENKAN_URL: http://127.0.0.1:4444
-
-      # --- Misc ---
-      NEXT_TELEMETRY_DISABLED: '1'
-      CI: 'true'
+    permissions:
+      contents: read
+      packages: write         # `docker push ghcr.io/eduvhc/menu`
+      id-token: write         # Sigstore attestations (SLSA provenance + SBOM)
+      attestations: write     # attach attestations to the GHCR image
+      actions: write          # dispatch the infra-deploy workflow
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+      # QEMU registers binfmt handlers so buildx can cross-build arm64
+      # binaries on the amd64 GHA runner. Without it, `--platform linux/arm64`
+      # fails with `exec format error` the moment any RUN line fires under
+      # the arm64 target.
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@5306bad0baa6b616b9934712d4b9d8a82c3d6b8c # v3
         with:
-          node-version: '24'
+          platforms: arm64
 
-      - uses: ./.github/actions/setup
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
 
-      - name: Resolve installed Playwright version
-        # Source of truth = the version Bun actually resolved into node_modules,
-        # not a hard-coded literal. A stale literal here is precisely what
-        # broke the previous CI run: the cache key matched an older Playwright
-        # whose chromium-headless-shell version didn't match the binary the
-        # newer @playwright/test was looking for at launch time.
-        # See: https://playwright.dev/docs/ci#caching-browsers
-        id: pw-version
-        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
-
-      - name: Cache Next.js build output
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+      - name: Log in to GHCR
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4
         with:
-          # Turbopack's persistent cache. Key hashes ONLY deps + config —
-          # Turbopack does per-module invalidation internally, so hashing
-          # source files defeats incremental builds (every commit = cold
-          # cache). Vercel's stale 2023 doc still says to hash sources;
-          # that guidance pre-dates Turbopack's persistent cache.
-          path: products/menu/.next/cache
-          key: next-menu-${{ runner.os }}-${{ hashFiles('products/menu/bun.lock', 'products/menu/next.config.ts') }}
-          restore-keys: |
-            next-menu-${{ runner.os }}-
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Cache Playwright browsers
-        id: pw-cache
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+      # Image refs:
+      #   - `:latest` is what Tofu's `data.docker_registry_image.menu` resolves
+      #     against; bumping it triggers `pull_triggers` on the next apply.
+      #   - `:<sha>` is the immutable handle for rollbacks + attestations.
+      - name: Build and push image (linux/arm64)
+        id: build
+        # Build context is the REPO ROOT (Bun workspace) — Dockerfile copies
+        # in `package.json`, `bun.lock`, `tsconfig.base.json`, and every
+        # workspace under `packages/` + `products/`. See
+        # products/menu/infra/Dockerfile for the multi-stage layout.
+        #
+        # `--platform linux/arm64`: the target host is a Hetzner CAX11
+        # (Ampere Altra ARM64) in Falkenstein. Building amd64 here would
+        # produce an image Tofu can pull but `docker run` would reject with
+        # `exec format error`. Single-platform on purpose — building both
+        # arches doubles CI time and the amd64 variant has no consumer.
+        #
+        # GHA cache: `mode=max` caches every intermediate stage (deps +
+        # builder + runner), `scope=menu` isolates from any future per-arch
+        # or per-product builds in the same repo.
+        uses: docker/build-push-action@1dc73863535b631f98b2378be8619f83b136f4a0 # v6
         with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ steps.pw-version.outputs.version }}
+          context: .
+          file: products/menu/infra/Dockerfile
+          platforms: linux/arm64
+          push: true
+          provenance: true
+          sbom: true
+          tags: |
+            ghcr.io/eduvhc/menu:latest
+            ghcr.io/eduvhc/menu:${{ github.sha }}
+          cache-from: type=gha,scope=menu
+          cache-to: type=gha,mode=max,scope=menu
 
-      - name: Install Playwright browsers (cold cache)
-        if: steps.pw-cache.outputs.cache-hit != 'true'
-        run: bunx playwright install --with-deps chromium
+      # ── Supply-chain attestations (SLSA build provenance + SBOM) ──────────
+      # Same shape as the old _kamal-deploy.yml: keyless Cosign signature via
+      # Sigstore + GitHub OIDC, pushed to GHCR alongside the image so
+      # `gh attestation verify oci://...` works without repo metadata.
+      - name: Attest SLSA build provenance
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4
+        with:
+          subject-name: ghcr.io/eduvhc/menu
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
 
-      - name: Install Playwright system deps (warm cache)
-        if: steps.pw-cache.outputs.cache-hit == 'true'
-        run: bunx playwright install-deps chromium
-
-      - name: Create test database
-        run: |
-          PGPASSWORD=postgres psql -h localhost -U postgres -d postgres \
-            -c "CREATE DATABASE menu_test;"
-
-      - name: Bootstrap S3 bucket
-        # LocalStack starts with zero buckets. `aws` CLI v2 is preinstalled
-        # on ubuntu-24.04 runners; no install step needed.
+      # ── Trigger infra deploy ──────────────────────────────────────────────
+      # Fires `infra-deploy.yml` (separate workflow, owned by the infra
+      # workspace) which runs `tofu apply` to roll the docker_container.
+      # The `--field` payload lets the infra workflow pin to the exact SHA
+      # we just pushed instead of racing against a second push to main.
+      - name: Trigger infra deploy
         env:
-          AWS_ACCESS_KEY_ID: test
-          AWS_SECRET_ACCESS_KEY: test
-          AWS_DEFAULT_REGION: us-east-1
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          aws --endpoint-url=http://localhost:4566 s3 mb s3://menu-test
-          aws --endpoint-url=http://localhost:4566 s3api put-bucket-acl \
-            --bucket menu-test --acl public-read
-
-      - name: Build Next.js
-        # Node, not Bun — production runtime parity + AGENTS.md guidance.
-        # `node --run` is the Node 22+ way to invoke a package.json script.
-        run: node --run build
-
-      - name: Run Playwright
-        # playwright.config.ts skips its own `build` step when CI=true,
-        # so this only launches `next start` + runs the suite.
-        run: bunx playwright test
-
-      - name: Upload Playwright HTML report
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: playwright-report
-          path: products/menu/playwright-report/
-          retention-days: 7
-
-      - name: Upload traces, screenshots, and videos on failure
-        if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: playwright-test-results
-          path: products/menu/test-results/
-          retention-days: 14
+          set -euo pipefail
+          gh workflow run infra-deploy.yml \
+            --ref main \
+            --field product=menu \
+            --field image_sha=${{ github.sha }}
