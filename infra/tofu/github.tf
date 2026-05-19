@@ -31,8 +31,9 @@ locals {
   # the values flow into GH-encrypted-secrets and never persist in
   # plaintext beyond the apply.
   github_secrets = {
-    BWS_ACCESS_TOKEN      = var.bws_access_token
-    KAMAL_SSH_PRIVATE_KEY = var.kamal_ssh_private_key
+    BWS_ACCESS_TOKEN        = var.bws_access_token
+    KAMAL_SSH_PRIVATE_KEY   = var.kamal_ssh_private_key
+    CLAUDE_CODE_OAUTH_TOKEN = var.claude_code_oauth_token
   }
 }
 

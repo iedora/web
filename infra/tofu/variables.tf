@@ -116,6 +116,12 @@ variable "kamal_ssh_private_key" {
   sensitive   = true
 }
 
+variable "claude_code_oauth_token" {
+  description = "Claude Code Action OAuth token (Pro/Max, minted by `claude setup-token`). TF_VAR_claude_code_oauth_token (set by bin/with-secrets from INFRA_CLAUDE_CODE_OAUTH_TOKEN)."
+  type        = string
+  sensitive   = true
+}
+
 variable "ci_onprem_host" {
   description = "Tailnet hostname (MagicDNS) the GHA runner SSHes to. Differs from local-laptop ONPREM_HOST (which uses LAN IP)."
   type        = string

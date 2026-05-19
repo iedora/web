@@ -15,7 +15,7 @@
 | `infra/tofu/terraform.tfstate` (encrypted) | `cloudflare_api_token.backups_r2` + `tailscale_federated_identity.ci` (no secret — WIF) | Cross-product shared infra; write-through to BWS via `just infra::deploy` |
 | `products/menu/infra/tofu/terraform.tfstate` (encrypted) | Tunnel token + R2 sub-token (`assets_r2`) for the menu product | Created by Tofu; rotate via `tofu apply -replace=<resource>` |
 | `products/house/infra/tofu/terraform.tfstate` (encrypted) | Narrow `workers_deploy` token (Workers Scripts: Write + DNS: Write + Workers Routes: Write) | Created by Tofu; write-through to BWS as `INFRA_HOUSE_WORKERS_TOKEN`; rotate via `just house::rotate-token` |
-| **GitHub Actions secrets/variables** (Tofu-managed via `integrations/github`) | `BWS_ACCESS_TOKEN`, `KAMAL_SSH_PRIVATE_KEY` (secrets); `BWS_PROJECT_ID`, `ONPREM_HOST`, `MENU_PUBLIC_HOSTNAME`, `GENKAN_PUBLIC_HOSTNAME` (variables) | Drives CI deploys; declared in `infra/tofu/github.tf`, values flow through from BWS |
+| **GitHub Actions secrets/variables** (Tofu-managed via `integrations/github`) | `BWS_ACCESS_TOKEN`, `KAMAL_SSH_PRIVATE_KEY`, `CLAUDE_CODE_OAUTH_TOKEN` (secrets); `BWS_PROJECT_ID`, `ONPREM_HOST`, `MENU_PUBLIC_HOSTNAME`, `GENKAN_PUBLIC_HOSTNAME` (variables) | Drives CI deploys + the Claude Code Action; declared in `infra/tofu/github.tf`, values flow through from BWS |
 
 `BWS_ACCESS_TOKEN` is the keys-to-the-kingdom: it unlocks every other secret. Treat it as if it were the master password.
 
@@ -104,6 +104,7 @@ Organized by class (bootstrap / app / Tofu write-through) so it's clear who crea
 | `MENU_AUTH_SECRET` | Signs menu's session cookies (HMAC) | Attacker can forge menu sessions for any user | **`BETTER_AUTH_SECRETS` plural** — see Zero-downtime patterns below |
 | `GENKAN_AUTH_SECRET` | Signs genkan's session cookies + JWTs | Attacker can forge genkan sessions | Same — switch to plural array; rotation becomes zero-downtime |
 | `MENU_OAUTH_CLIENT_ID` + `_SECRET` | Menu's OAuth client identity at genkan | Lets attacker impersonate menu in the OAuth handshake | Register `menu-v2` at genkan with new secret → deploy menu with new id/secret pair → delete old client. Better Auth 1.6's OAuth provider doesn't yet support multi-secret on one client; new-client-then-cutover is the only path. Track upstream — `private_key_jwt` (asymmetric, no shared secret) is the better long-term answer |
+| `INFRA_CLAUDE_CODE_OAUTH_TOKEN` | Claude Code Action's Pro/Max OAuth token; Tofu pushes it to GH as the `CLAUDE_CODE_OAUTH_TOKEN` secret the `.github/workflows/claude.yml` job reads | Attacker can run the Claude Code Action (code-writing runs) against the subscription | `claude setup-token` → BWS edit → `just infra::deploy`. Revoke the OAuth grant in the Anthropic account if leaked. See `docs/ai.md` |
 
 ### Tofu-managed write-throughs
 

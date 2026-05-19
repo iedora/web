@@ -60,16 +60,23 @@ logs when asked to debug CI).
 ### Auth — CLAUDE_CODE_OAUTH_TOKEN
 
 The action authenticates with a Pro/Max **OAuth token**, not an
-Anthropic API key. It is a manually-set GitHub Actions secret —
-**not** in BWS and **not** Tofu-managed (it's tied to a personal
-subscription login, so it can't be a Tofu write-through; this is the
-documented exception to `docs/secrets.md` "GitHub Actions
-secrets/variables are Tofu-managed").
+Anthropic API key. It is BWS-managed and Tofu-written-through, the same
+shape as every other GitHub Actions secret in this repo (`docs/secrets.md`
+§ Tofu-managed write-throughs). Only *minting* the token is interactive
+(`claude setup-token`); *storing* it is a static string, so it fits the
+write-through pattern with no exception.
 
-One-time setup (repo admin):
+The chain: `INFRA_CLAUDE_CODE_OAUTH_TOKEN` in BWS (`iedora-deploy`
+project) → `infra/bin/with-secrets` exports `TF_VAR_claude_code_oauth_token`
+→ `variable "claude_code_oauth_token"` (`infra/tofu/variables.tf`) →
+`local.github_secrets["CLAUDE_CODE_OAUTH_TOKEN"]` (`infra/tofu/github.tf`)
+→ `just infra::deploy` reconciles the GitHub Actions secret the workflow
+reads as `${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}`.
+
+One-time setup:
 
 1. **Install the Claude GitHub app:** https://github.com/apps/claude —
-   grant it this repo.
+   grant it this repo (repo admin).
 2. **Mint the token** locally (interactive; opens a browser for the
    Pro/Max login). In a Claude Code session you can run it inline:
 
@@ -78,40 +85,30 @@ One-time setup (repo admin):
    ```
 
    It prints a token starting with `sk-ant-oat…`.
-3. **Store it as a repo secret** via `gh`. Never pass the token as a
-   CLI argument (shell history / process list leak). Either pipe it:
+3. **Put it in BWS** as `INFRA_CLAUDE_CODE_OAUTH_TOKEN` in the
+   `iedora-deploy` project (`bws secret create`, or the Bitwarden UI).
+   The value never goes near the GitHub UI or shell history.
+4. **Write it through:** `just infra::deploy`. Tofu reconciles the
+   `CLAUDE_CODE_OAUTH_TOKEN` GitHub Actions secret from BWS,
+   *overwriting* any value already there — so a previously hand-set
+   `gh secret set` value is cleanly superseded on the first apply (no
+   `gh secret delete` needed; the secret name is the same).
 
-   ```powershell
-   "sk-ant-oat…" | gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo eduvhc/iedora
-   ```
-
-   …or let `gh` prompt for it hidden (value never touches the command
-   line):
-
-   ```powershell
-   gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo eduvhc/iedora
-   ```
-
-4. **Verify** (prints name + update time, never the value):
-
-   ```powershell
-   gh secret list --repo eduvhc/iedora
-   ```
-
-This is a default-scope **Actions** secret — exactly what
-`${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}` in the workflow reads. No
-`--app` flag.
+Do not edit the GitHub secret in the UI or with `gh secret set` once
+it's Tofu-managed — the next `just infra::deploy` silently clobbers it
+(infra hard rule 1). Change the value in BWS instead.
 
 ### Rotation / revocation
 
-- **Rotate:** re-run `claude setup-token`, repeat step 3 (overwrites).
-- **Revoke:** delete it — `gh secret delete CLAUDE_CODE_OAUTH_TOKEN
-  --repo eduvhc/iedora` — and/or revoke the OAuth grant in your
-  Anthropic account. The workflow then fails closed (auth error), it
-  does not run unauthenticated.
-- No expiry discipline entry in `docs/secrets.md` because it's not a
-  BWS/Tofu credential; treat its lifecycle as "rotate on suspicion,
-  revoke when the Action is removed".
+- **Rotate:** re-run `claude setup-token`, update
+  `INFRA_CLAUDE_CODE_OAUTH_TOKEN` in BWS, `just infra::deploy`. Same
+  recipe as every other write-through (or `just infra::rotate-secret`).
+- **Revoke:** revoke the OAuth grant in your Anthropic account and
+  remove the BWS key + the `github.tf` map entry, then
+  `just infra::deploy`. The workflow then fails closed (auth error) —
+  it does not run unauthenticated.
+- Treat its lifecycle as "rotate on suspicion, revoke when the Action
+  is removed" — see `docs/secrets.md` § Expiration discipline.
 
 ## MCP servers (local Claude Code)
 
