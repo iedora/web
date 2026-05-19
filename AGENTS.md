@@ -363,5 +363,6 @@ To pause Renovate for a specific dependency: add an entry to
 13. `docs/observability.md` — OpenTelemetry wiring (every product), OpenObserve operational notes, sampling, tenant-attribute conventions, query recipes.
 14. `docs/terraform-style.md` — 10-bullet LLM-safe HCL conventions for every Tofu root + shared module in the repo. Apply before editing any `.tf`.
 15. `docs/infra-declarative-roadmap.md` — what's declarative today vs. what's queued for migration; rationale for tiered priorities.
+16. `docs/ai.md` — Claude Code GitHub Action (`.github/workflows/claude.yml`) + its `CLAUDE_CODE_OAUTH_TOKEN`, the `eduvhc/iedora` repo-slug gotcha, and the `.mcp.json` server inventory.
 
 The bundled docs match installed versions — trust them over recall.
