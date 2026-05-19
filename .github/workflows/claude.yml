@@ -1,14 +1,20 @@
 # Claude Code — interactive assistant.
 #
 # Responds when you mention `@claude` in an issue or PR comment, in an
-# issue body, or in a PR review comment — and when an issue or PR is
-# assigned to the Claude GitHub app. Claude reads the thread, works in a
-# checkout of the repo, and pushes a branch / opens a PR as needed.
+# issue body, or in a PR review comment — and when an *issue* is
+# assigned to `claude` (see `assignee_trigger` below). Claude reads the
+# thread, works in a checkout of the repo, and pushes a branch / opens
+# a PR as needed.
+#
+# PR entry point is `@claude` mention only: the action's
+# `assignee_trigger` is documented as issue-assignment-only, so
+# assigning a *pull request* does NOT activate it. Comment `@claude`
+# on the PR instead.
 #
 # Why no `paths:` filter: this is conversation-triggered, not code-
 # triggered — the relevant signal is "a human asked", not "a file
-# changed". The action itself decides whether `@claude` (or an
-# assignment) is present and no-ops otherwise, so an unfiltered `on:`
+# changed". The action itself decides whether `@claude` (or a matching
+# assignee) is present and no-ops otherwise, so an unfiltered `on:`
 # block is correct and cheap.
 #
 # Auth: CLAUDE_CODE_OAUTH_TOKEN (Pro/Max subscription token minted via
@@ -56,3 +62,7 @@ jobs:
       - uses: anthropics/claude-code-action@24492741e0ccfdef4c1d19da8e11e0f373d07494 # v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Without this, `issues: [assigned]` fires the workflow but the
+          # action no-ops (assignee_trigger has no default). Issue-only
+          # per the action docs — does not apply to PR assignment.
+          assignee_trigger: claude

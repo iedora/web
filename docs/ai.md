@@ -32,11 +32,19 @@ present):
 | Event | What fires it |
 |---|---|
 | `issue_comment` / `pull_request_review_comment` | A comment containing `@claude` |
-| `issues` (`opened`, `assigned`, `labeled`) | `@claude` in the body, or assigning the issue to the Claude app |
+| `issues` (`opened`, `assigned`, `labeled`) | `@claude` in the body, or **assigning the issue to `claude`** |
 | `pull_request_review` (`submitted`) | `@claude` in a review |
 
-So you interact two ways: **mention** `@claude` in any issue/PR thread,
-or **assign** an issue/PR to the Claude GitHub app.
+Two entry points, with one asymmetry:
+
+- **Mention** — comment `@claude` in any issue or PR thread (or PR
+  review). Works everywhere.
+- **Assign** — assigning an **issue** to `claude` triggers it, but
+  only because the workflow sets `assignee_trigger: claude` (the input
+  has no default; without it `issues: [assigned]` fires the workflow
+  yet the action no-ops). Per the action docs `assignee_trigger` is
+  **issue-assignment-only** — **assigning a pull request does not
+  activate Claude**. Comment `@claude` on the PR instead.
 
 **Permissions** granted to the job (least-privilege): `contents: write`
 (branch/push), `pull-requests: write` + `issues: write` (comment back),
