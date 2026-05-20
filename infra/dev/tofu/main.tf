@@ -32,6 +32,12 @@ terraform {
       source  = "hashicorp/random"
       version = "~> 3.6"
     }
+    # Drives the `null_resource` that local-execs the iedora-admin grant
+    # helper. See iedora-admin block below.
+    null = {
+      source  = "hashicorp/null"
+      version = "~> 3.2"
+    }
   }
 }
 
@@ -436,6 +442,60 @@ resource "zitadel_application_oidc" "menu" {
   }
 }
 
+# ── iedora-admin role + grants ──────────────────────────────────────────────
+# Mirrors prod's infra/tofu/zitadel.tf. Declarative cross-product staff role
+# defined on the iedora project; grants resolved at plan time by the Go
+# helper at infra/cmd/zitadel-lookup-users.
+#
+# Unresolved emails (user hasn't signed in yet) are silently skipped — they
+# land on the next apply after Zitadel auto-provisions the user via OIDC.
+
+variable "iedora_admin_emails" {
+  description = <<-EOT
+    Emails granted the iedora-admin Zitadel project role on every `just dev`.
+    User must have signed in via menu locally at least once before they
+    resolve — Zitadel auto-provisions on first OIDC login.
+  EOT
+  type    = list(string)
+  default = ["dev@iedora.local"]
+}
+
+resource "zitadel_project_role" "iedora_admin" {
+  org_id       = zitadel_org.iedora.id
+  project_id   = zitadel_project.iedora.id
+  role_key     = "iedora-admin"
+  display_name = "Iedora Admin"
+  group        = "iedora"
+
+  lifecycle {
+    enabled = local.seed_active
+  }
+}
+
+resource "null_resource" "iedora_admin_grants" {
+  count = local.seed_active ? 1 : 0
+
+  triggers = {
+    emails  = join(",", var.iedora_admin_emails)
+    role_id = zitadel_project_role.iedora_admin.id
+  }
+
+  provisioner "local-exec" {
+    command = "${path.module}/../../bin/zitadel-grant-iedora-admins"
+    environment = {
+      # Local Zitadel runs plaintext on :8080 — the helper routes via
+      # http:// instead of https://.
+      ZG_HOSTNAME   = "localhost:8080"
+      ZG_SCHEME     = "http"
+      ZG_TOKEN      = zitadel_personal_access_token.menu_sa.token
+      ZG_ORG_ID     = zitadel_org.iedora.id
+      ZG_PROJECT_ID = zitadel_project.iedora.id
+      ZG_ROLE_KEY   = zitadel_project_role.iedora_admin.role_key
+      ZG_EMAILS     = jsonencode(var.iedora_admin_emails)
+    }
+  }
+}
+
 # Menu service account — same shape as prod's infra/tofu/zitadel.tf.
 # The `zitadel-admin-sa` JSON key is for TF-provider auth only; the
 # menu app itself runs with a separate PAT under `menu-sa`, scoped
@@ -649,9 +709,4 @@ output "env_dynamic_file" {
   description = "Real values for the dynamic keys — printed by dev.go for copy-paste into products/menu/.env.local. Empty before the seed runs."
   value       = local.seed_active ? module.menu_env_host.env_dynamic_file : ""
   sensitive   = true
-}
-
-output "env_dynamic_keys" {
-  description = "Sorted list of dynamic key names. dev.go uses this to schema-sync .env.local."
-  value       = local.seed_active ? module.menu_env_host.env_dynamic_keys : []
 }

@@ -41,7 +41,6 @@ const (
 
 	outputEnvCommittable = "env_committable_file"
 	outputEnvDynamic     = "env_dynamic_file"
-	outputEnvDynamicKeys = "env_dynamic_keys"
 
 	tfVarZitadelJWT = "TF_VAR_zitadel_jwt_profile"
 
