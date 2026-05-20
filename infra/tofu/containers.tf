@@ -127,16 +127,25 @@ resource "docker_container" "openobserve" {
   image   = "public.ecr.aws/zinclabs/openobserve:v0.80.3"
   restart = "unless-stopped"
 
-  # ZO_LOCAL_MODE = everything on the VPS disk; mirrors dev/docker-compose.yml.
-  # Span volume at this scale (solo + pre-customer) easily fits in the bind
-  # mount; default lifecycle GCs files past ~30 days. When span volume grows
-  # past disk, re-introduce an R2 cold tier with prefix `o2/` under
-  # `cloudflare_r2_bucket.data` — 5 min of TF.
+  # Cold tier on R2: parquet shards roll from local disk into the shared
+  # `iedora-data` bucket under the `o2/` prefix (backups sibling-prefix
+  # under `pg/`). One bucket, one token — `cloudflare_api_token.data_r2`
+  # writes both via `S3_PREFIX` separation.
+  #
+  # Dev (`infra/dev/docker-compose.yml::services.openobserve`) keeps
+  # ZO_LOCAL_MODE=true — no S3 mock to maintain, span volume tiny.
   env = [
-    "ZO_LOCAL_MODE=true",
     "ZO_DATA_DIR=/data",
     "ZO_HTTP_PORT=5080",
     "ZO_GRPC_PORT=5081",
+    "ZO_S3_PROVIDER=aws",
+    "ZO_S3_REGION_NAME=auto",
+    "ZO_S3_BUCKET_NAME=${cloudflare_r2_bucket.data.name}",
+    "ZO_S3_BUCKET_PREFIX=o2",
+    "ZO_S3_SERVER_URL=https://${var.account_id}.r2.cloudflarestorage.com",
+    "ZO_S3_FEATURE_FORCE_PATH_STYLE=true",
+    "ZO_S3_ACCESS_KEY=${cloudflare_api_token.data_r2.id}",
+    "ZO_S3_SECRET_KEY=${sha256(cloudflare_api_token.data_r2.value)}",
     "ZO_ROOT_USER_EMAIL=${var.infra_openobserve_root_user_email}",
     "ZO_ROOT_USER_PASSWORD=${var.infra_openobserve_root_user_password}",
   ]
