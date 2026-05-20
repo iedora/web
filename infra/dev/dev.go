@@ -56,10 +56,11 @@ var allServices = []service{
 	{name: "zitadel", tfVar: "enable_zitadel", deps: []string{"postgres"}, cat: catInfra},
 	{name: "openobserve", tfVar: "enable_openobserve", deps: []string{"localstack"}, cat: catInfra},
 	{name: "house", tfVar: "enable_house", cat: catProducts},
-	// `menu` is a preset — selecting it expands to its dep set. It
-	// has no TF resource itself (menu runs host-side via `bun run
-	// dev` in products/menu/, where HMR works).
-	{name: "menu", deps: []string{"postgres", "localstack", "zitadel", "openobserve"}, cat: catProducts, hostRun: true},
+	// `menu` runs in a docker container (same image shape as prod).
+	// For HMR, opt out via `--except menu` and `cd products/menu && bun run dev`
+	// — `.env` + `.env.local` are written with localhost-DNS for that
+	// path. Default path is the container: no HMR, but identical to prod.
+	{name: "menu", tfVar: "enable_menu", deps: []string{"postgres", "localstack", "zitadel", "openobserve"}, cat: catProducts},
 }
 
 func serviceByName(n string) (service, bool) {
@@ -186,6 +187,10 @@ func main() {
 		"-target=module.openobserve",
 		"-target=docker_image.house",
 		"-target=module.house",
+		// docker_image.menu builds in parallel with the other resources
+		// during the first apply (~30s). The container itself can't come
+		// up yet (depends on the zitadel seed) — it lands in pass 2.
+		"-target=docker_image.menu",
 	}
 	applyArgs = append(applyArgs, enableVars...)
 	runIn(devTofuDir, "tofu", applyArgs...)
@@ -316,11 +321,12 @@ func printNextSteps(selected []string, repoRoot, tofuDir string) {
 	fmt.Println()
 	fmt.Println("[dev] infra is up.")
 	if contains(selected, "menu") {
-		url := readEnvVar(filepath.Join(repoRoot, "products/menu/.env"), "MENU_PUBLIC_URL")
-		fmt.Printf("  host:      cd products/menu && bun run dev   # %s\n", url)
+		fmt.Printf("  menu (container):  %s   # same image as prod\n",
+			composePort(tofuDir, "infra-menu-web", "3000"))
+		fmt.Println("                     for HMR: just dev --except menu  && cd products/menu && bun run dev")
 	}
 	if contains(selected, "house") {
-		fmt.Printf("  container: %s              # Astro static (busybox httpd)\n",
+		fmt.Printf("  house (container): %s   # Astro static (busybox httpd)\n",
 			composePort(tofuDir, "infra-house", "80"))
 	}
 	if !contains(selected, "menu") && !contains(selected, "house") {

@@ -63,6 +63,10 @@ variable "enable_house" {
   type    = bool
   default = true
 }
+variable "enable_menu" {
+  type    = bool
+  default = true
+}
 
 # Dev knobs that the user might twist between runs.
 
@@ -126,9 +130,9 @@ module "postgres" {
   postgres_password = "postgres"
   data_path         = docker_volume.postgres_data.name
   expose_host_port  = 5432
-  # Pre-create `zitadel` DB. Menu's own DB is auto-created by its
-  # migrate.mjs on first run, same as prod's flow.
-  init_sql = "CREATE DATABASE zitadel;\n"
+  # Same canonical init.sql prod uses — creates every known product DB
+  # (currently `menu` + `zitadel`). Single source of truth.
+  init_sql = file("${path.module}/../../postgres/init.sql")
 }
 
 module "localstack" {
@@ -356,44 +360,163 @@ resource "random_password" "menu_session_secret" {
   special = false
 }
 
-module "menu_env" {
+# Shared inputs to both menu_env calls — secrets + identifiers that
+# don't depend on where menu runs (container vs host).
+locals {
+  menu_env_shared = local.seed_active ? {
+    menu_session_secret         = random_password.menu_session_secret[0].result
+    zitadel_oauth_client_id     = zitadel_application_oidc.menu[0].client_id
+    zitadel_oauth_client_secret = zitadel_application_oidc.menu[0].client_secret
+    zitadel_management_token    = zitadel_personal_access_token.menu_sa[0].token
+    s3_region                   = "us-east-1"
+    s3_access_key               = "test"
+    s3_secret_key               = "test"
+    s3_bucket                   = "iedora-assets"
+    otel_headers                = "Authorization=Basic%20${base64encode("dev@iedora.local:dev-password")}"
+    # Browser-facing URLs — same in both variants (browser only ever
+    # talks to host-published ports).
+    menu_public_url             = "http://localhost:3000"
+    zitadel_issuer_url          = "http://localhost:8080"
+    s3_public_url               = "http://localhost:4566/iedora-assets"
+    } : {
+    menu_session_secret = ""
+    zitadel_oauth_client_id     = ""
+    zitadel_oauth_client_secret = ""
+    zitadel_management_token    = ""
+    s3_region                   = ""
+    s3_access_key               = ""
+    s3_secret_key               = ""
+    s3_bucket                   = ""
+    otel_headers                = ""
+    menu_public_url             = ""
+    zitadel_issuer_url          = ""
+    s3_public_url               = ""
+  }
+}
+
+# Variant 1 — runtime env for the menu container. Uses docker-network
+# DNS (`infra-postgres`, `infra-localstack`, `infra-openobserve`) for
+# internal calls. Mirrors prod's `module "menu_env"` call shape.
+module "menu_env_container" {
   count  = local.seed_active ? 1 : 0
   source = "../../modules/menu_env"
 
-  node_env        = "development"
-  database_url    = "postgresql://postgres:postgres@localhost:5432/menu"
-  menu_public_url = "http://localhost:3000"
-
-  menu_session_secret         = random_password.menu_session_secret[0].result
-  zitadel_issuer_url          = "http://localhost:8080"
-  zitadel_oauth_client_id     = zitadel_application_oidc.menu[0].client_id
-  zitadel_oauth_client_secret = zitadel_application_oidc.menu[0].client_secret
-  zitadel_management_token    = zitadel_personal_access_token.menu_sa[0].token
-
-  s3_endpoint   = "http://localhost:4566"
-  s3_region     = "us-east-1"
-  s3_access_key = "test"
-  s3_secret_key = "test"
-  s3_bucket     = "iedora-assets"
-  s3_public_url = "http://localhost:4566/iedora-assets"
-
-  otel_exporter_otlp_endpoint = "http://localhost:5080/api/default"
-  otel_exporter_otlp_headers  = "Authorization=Basic%20${base64encode("dev@iedora.local:dev-password")}"
+  node_env                    = "production"
+  database_url                = "postgres://postgres:postgres@infra-postgres:5432/menu"
+  menu_public_url             = local.menu_env_shared.menu_public_url
+  menu_session_secret         = local.menu_env_shared.menu_session_secret
+  zitadel_issuer_url          = local.menu_env_shared.zitadel_issuer_url
+  zitadel_oauth_client_id     = local.menu_env_shared.zitadel_oauth_client_id
+  zitadel_oauth_client_secret = local.menu_env_shared.zitadel_oauth_client_secret
+  zitadel_management_token    = local.menu_env_shared.zitadel_management_token
+  s3_endpoint                 = "http://infra-localstack:4566"
+  s3_region                   = local.menu_env_shared.s3_region
+  s3_access_key               = local.menu_env_shared.s3_access_key
+  s3_secret_key               = local.menu_env_shared.s3_secret_key
+  s3_bucket                   = local.menu_env_shared.s3_bucket
+  s3_public_url               = local.menu_env_shared.s3_public_url
+  otel_exporter_otlp_endpoint = "http://infra-openobserve:5080/api/default"
+  otel_exporter_otlp_headers  = local.menu_env_shared.otel_headers
 }
 
+# Variant 2 — drives products/menu/.env + .env.local for the opt-out
+# path: `just dev --except menu` + `cd products/menu && bun run dev`.
+# All internal URLs flip to `localhost:<published_port>` because the
+# Next dev server runs on the host (outside the docker network).
+module "menu_env_host" {
+  count  = local.seed_active ? 1 : 0
+  source = "../../modules/menu_env"
+
+  node_env                    = "development"
+  database_url                = "postgresql://postgres:postgres@localhost:5432/menu"
+  menu_public_url             = local.menu_env_shared.menu_public_url
+  menu_session_secret         = local.menu_env_shared.menu_session_secret
+  zitadel_issuer_url          = local.menu_env_shared.zitadel_issuer_url
+  zitadel_oauth_client_id     = local.menu_env_shared.zitadel_oauth_client_id
+  zitadel_oauth_client_secret = local.menu_env_shared.zitadel_oauth_client_secret
+  zitadel_management_token    = local.menu_env_shared.zitadel_management_token
+  s3_endpoint                 = "http://localhost:4566"
+  s3_region                   = local.menu_env_shared.s3_region
+  s3_access_key               = local.menu_env_shared.s3_access_key
+  s3_secret_key               = local.menu_env_shared.s3_secret_key
+  s3_bucket                   = local.menu_env_shared.s3_bucket
+  s3_public_url               = local.menu_env_shared.s3_public_url
+  otel_exporter_otlp_endpoint = "http://localhost:5080/api/default"
+  otel_exporter_otlp_headers  = local.menu_env_shared.otel_headers
+}
+
+# ── Menu container (build local, mirror of prod's docker_container.menu_web) ──
+
+resource "docker_image" "menu" {
+  count = var.enable_menu ? 1 : 0
+  name  = "iedora-menu:dev"
+  build {
+    context    = abspath("${path.module}/../../..")
+    dockerfile = "products/menu/Dockerfile"
+  }
+}
+
+resource "docker_container" "menu" {
+  count   = (var.enable_menu && local.seed_active) ? 1 : 0
+  name    = "infra-menu-web"
+  image   = docker_image.menu[0].image_id
+  restart = "unless-stopped"
+
+  # Same command as prod (infra/tofu/containers.tf::docker_container.menu_web):
+  # migrate then serve. migrate.mjs is idempotent (pg_advisory_lock).
+  command = [
+    "sh",
+    "-c",
+    "node scripts/migrate.mjs && node server.js",
+  ]
+
+  env = module.menu_env_container[0].env_list
+
+  networks_advanced {
+    name    = docker_network.iedora.name
+    aliases = ["infra-menu-web"]
+  }
+
+  # Browser hits localhost:3000.
+  ports {
+    internal = 3000
+    external = 3000
+  }
+
+  # ZITADEL_ISSUER_URL is `http://localhost:8080` so that the `iss`
+  # claim Zitadel emits matches what browsers see. From inside this
+  # container, `localhost` would point at itself; mapping it to the
+  # host gateway lets the container reach Zitadel via its published
+  # :8080 port. Same trick the zitadel-login container uses.
+  host {
+    host = "localhost"
+    ip   = "host-gateway"
+  }
+
+  log_opts = {
+    max-size = "10m"
+  }
+
+  depends_on = [
+    module.postgres,
+    module.zitadel,
+  ]
+}
+
+# Outputs feed the .env files written by dev.go (host bun-run-dev path).
 output "env_committable_file" {
   description = "Body of products/menu/.env. Empty before the seed runs (first apply)."
-  value       = local.seed_active ? module.menu_env[0].env_committable_file : ""
+  value       = local.seed_active ? module.menu_env_host[0].env_committable_file : ""
   sensitive   = true
 }
 
 output "env_dynamic_file" {
   description = "Real values for the dynamic keys — printed by dev.go for copy-paste into products/menu/.env.local. Empty before the seed runs."
-  value       = local.seed_active ? module.menu_env[0].env_dynamic_file : ""
+  value       = local.seed_active ? module.menu_env_host[0].env_dynamic_file : ""
   sensitive   = true
 }
 
 output "env_dynamic_keys" {
   description = "Sorted list of dynamic key names. dev.go uses this to schema-sync .env.local."
-  value       = local.seed_active ? module.menu_env[0].env_dynamic_keys : []
+  value       = local.seed_active ? module.menu_env_host[0].env_dynamic_keys : []
 }
