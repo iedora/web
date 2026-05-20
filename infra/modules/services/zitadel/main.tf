@@ -204,6 +204,13 @@ resource "docker_container" "this" {
   log_opts = {
     max-size = "10m"
   }
+
+  # No docker healthcheck declared — the Zitadel image is distroless
+  # (no /bin/sh, no curl/wget) so a CMD-SHELL probe traps the container
+  # in `starting` forever. dev.go's waitForZitadelReady probes /debug/
+  # ready from the HOST (the dev expose_host_port publishes :8080 to
+  # localhost) with a tight TCP-dial loop — push-not-poll feel without
+  # needing a binary inside the container.
 }
 
 output "container_name" { value = docker_container.this.name }

@@ -35,11 +35,7 @@ terraform {
   }
 }
 
-provider "docker" {
-  # macOS: Docker Desktop / OrbStack expose the daemon socket at
-  # `unix:///var/run/docker.sock`. Linux: same path. Override via
-  # DOCKER_HOST env if your setup differs.
-}
+provider "docker" {}
 
 # ── Toggles — what the user selected ────────────────────────────────────────
 
