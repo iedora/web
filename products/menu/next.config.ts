@@ -18,7 +18,7 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     // Workaround: Turbopack standalone não rastreia drizzle-orm/postgres
     // automaticamente porque a app importa-os mas o `scripts/migrate.mjs`
-    // (executado via `kamal app exec`) também precisa deles em disco.
+    // (executado no container start) também precisa deles em disco.
     // Ref: vercel/next.js#88844
     '/*': [
       './node_modules/drizzle-orm/**/*',

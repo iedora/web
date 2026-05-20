@@ -44,7 +44,7 @@ const DEFAULT_METRIC_EXPORT_INTERVAL_MS = 60_000;
  * Spans whose name matches any of these regexes are dropped at sampling
  * time — never recorded, never exported. Two big sources of noise:
  *
- *   - `/up` health checks: hit by Kamal's proxy + uptime checks. One per
+ *   - `/up` health checks: hit by Caddy + uptime checks. One per
  *     second per host. Useless in traces, would dominate the budget.
  *   - `/api/track/[slug]` view beacon: every public-menu visit fires one.
  *     Same volume problem; the metric is already counted via the row
@@ -161,7 +161,7 @@ export type RegisterOptions = {
  *
  *   service.namespace          = "iedora" (constant)
  *   service.name               = opts.serviceName
- *   service.version            = $GIT_SHA (Kamal injects on container build)
+ *   service.version            = $GIT_SHA (CI passes on container build)
  *   deployment.environment     = $DEPLOYMENT_ENV ?? NODE_ENV
  *   host.name                  = $HOST_NAME (Tofu injects per fleet.tf)
  */

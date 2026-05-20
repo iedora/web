@@ -32,10 +32,9 @@ terraform {
       source  = "hashicorp/null"
       version = "~> 3.2"
     }
-    # Manages the always-on infrastructure containers (postgres, openobserve,
-    # zitadel, backups, caddy, tunnels) on the Hetzner box. Per-product app
-    # rollouts (menu) still go through Kamal — this provider only owns the
-    # always-on infra layer.
+    # Manages every container on the Hetzner box (postgres, openobserve,
+    # zitadel, backups, caddy, tunnels, plus the menu app itself). The
+    # provider talks to the Docker daemon over SSH.
     docker = {
       source  = "kreuzwerker/docker"
       version = "~> 3.7"
@@ -94,8 +93,9 @@ provider "hcloud" {
 # Docker — talks to the Hetzner box's Docker daemon over SSH. The IP comes
 # from `hcloud_server.iedora.ipv4_address` (output of the hcloud provider),
 # so the docker provider is implicitly downstream of the Hetzner one. Same
-# SSH key `INFRA_KAMAL_SSH_PRIVATE_KEY` that Kamal uses (registered as
-# `hcloud_ssh_key.operator` so cloud-init drops it into root's authorized_keys).
+# SSH key `INFRA_KAMAL_SSH_PRIVATE_KEY` (name kept as a tombstone from the
+# Kamal era; registered as `hcloud_ssh_key.operator` so cloud-init drops it
+# into root's authorized_keys).
 #
 # `registry_auth` covers ghcr.io because the self-built backup image
 # (ghcr.io/eduvhc/iedora-backup) is private. Everything else

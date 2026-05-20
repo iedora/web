@@ -11,7 +11,7 @@
 # (Ampere Altra). Tofu pulls the image lazily via
 # `data.docker_registry_image.menu + docker_image.menu + pull_triggers`, so
 # CI's job is reduced to: build + push + dispatch the infra deploy. No SSH
-# from CI, no Kamal, no Tailscale.
+# from CI, no Tailscale.
 #
 # E2E (Playwright) is intentionally omitted: the auth-testkit shim was deleted
 # alongside genkan, the Zitadel adapter is pending (issue #19 Phase 3+), and
@@ -165,11 +165,11 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
 
-      # The `ghcr.io/eduvhc/menu` package was originally created by Eduardo's
-      # personal PAT during the Kamal era, so GITHUB_TOKEN (scoped to the
-      # iedora repo) can't push to it. INFRA_GHCR_TOKEN is the same PAT,
-      # mirrored to BWS + GHA secrets via Tofu. Fetch from BWS to keep it
-      # off the repo's plaintext secrets list.
+      # The `ghcr.io/eduvhc/menu` package was originally created under
+      # Eduardo's personal PAT, so GITHUB_TOKEN (scoped to the iedora repo)
+      # can't push to it. INFRA_GHCR_TOKEN is the same PAT, mirrored to
+      # BWS + GHA secrets via Tofu. Fetch from BWS to keep it off the
+      # repo's plaintext secrets list.
       - name: Install bws CLI
         env:
           BWS_VERSION: '2.0.0'
@@ -224,9 +224,9 @@ jobs:
           cache-to: type=gha,mode=max,scope=menu
 
       # ── Supply-chain attestations (SLSA build provenance + SBOM) ──────────
-      # Same shape as the old _kamal-deploy.yml: keyless Cosign signature via
-      # Sigstore + GitHub OIDC, pushed to GHCR alongside the image so
-      # `gh attestation verify oci://...` works without repo metadata.
+      # Keyless Cosign signature via Sigstore + GitHub OIDC, pushed to GHCR
+      # alongside the image so `gh attestation verify oci://...` works
+      # without repo metadata.
       - name: Attest SLSA build provenance
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4
         with:

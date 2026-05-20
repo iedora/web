@@ -8,9 +8,7 @@
 #   - Every always-on Docker container on the Hetzner box (postgres,
 #     openobserve, zitadel + login, backups, caddy, observability tunnel)
 #   - Zitadel orgs/projects (after one-shot SA-key bootstrap, see below)
-#
-# Kamal still rolls out per-product apps (menu, genkan) against the Hetzner
-# Docker daemon — but this workspace owns 100% of the always-on layer.
+#   - The menu app container (docker_container.menu_web)
 
 set dotenv-load := true
 
@@ -37,7 +35,7 @@ _default:
 # Steady state (every subsequent call): exactly one `tofu apply`.
 #
 # Write-through to BWS after apply:
-#   - INFRA_ONPREM_HOST = hetzner_ipv4 — per-product Kamal configs read it
+#   - INFRA_ONPREM_HOST = hetzner_ipv4 — used by ad-hoc ssh + secret-rotation tooling
 deploy:
     #!/usr/bin/env bash
     set -euo pipefail

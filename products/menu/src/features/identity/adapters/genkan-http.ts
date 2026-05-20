@@ -19,7 +19,7 @@ import type { IdentityGateway, Organization } from '../ports'
  * Errors are coerced to friendly return values (null / empty list / false)
  * because the call sites are server actions and page DAL guards — they
  * already branch on missing data. We log unexpected failures so they show
- * up in Kamal's container logs.
+ * up in the container logs.
  */
 async function getAccessToken(userId: string): Promise<string | null> {
   const rows = await db

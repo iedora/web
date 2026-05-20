@@ -37,7 +37,7 @@ In scope:
 - the three product surfaces above and their auth / data flows
 - the genkan IdP (OIDC server, OAuth provider, audit chain, JWKS rotation)
 - the iedora-identity webhook envelope (signing, replay protection, SSRF)
-- the CI/CD supply chain (GitHub Actions, Kamal deploy, GHCR image build)
+- the CI/CD supply chain (GitHub Actions, Tofu deploy, GHCR image build)
 
 Out of scope:
 - denial-of-service findings that require flooding (the homelab is rate-

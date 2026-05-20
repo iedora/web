@@ -34,9 +34,9 @@ export type DB = typeof db
 
 /**
  * Graceful pool drain. Called from `instrumentation.ts` on SIGTERM/SIGINT
- * (Kamal rolling deploys). `timeout` is seconds, matching postgres-js's
- * `sql.end({ timeout })` semantics — pending queries get that long to
- * finish before sockets are closed.
+ * (container restart on `tofu apply` with a new image SHA). `timeout` is
+ * seconds, matching postgres-js's `sql.end({ timeout })` semantics —
+ * pending queries get that long to finish before sockets are closed.
  */
 export async function closeDb(opts: { timeout?: number } = {}): Promise<void> {
   await conn.end({ timeout: opts.timeout ?? 5 })

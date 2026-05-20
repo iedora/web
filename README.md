@@ -19,9 +19,9 @@ bun run dev
 - **[`AGENTS.md`](AGENTS.md)** — tech stack, hard rules, file layout, conventions (loaded by AI assistants too).
 - **[`docs/architecture.md`](docs/architecture.md)** — vertical-slice + hexagonal playbook, how to add a feature.
 - **[`docs/testing.md`](docs/testing.md)** — Vitest + PGLite unit tests, Playwright e2e.
-- **[`docs/deploy.md`](docs/deploy.md)** — single-box self-host: Kamal 2 + Cloudflare Tunnel, brand-new-machine walkthrough.
+- **[`docs/deploy.md`](docs/deploy.md)** — single-box self-host: Tofu-managed Docker + Cloudflare Tunnel, brand-new-machine walkthrough.
 - **[`docs/scaling.md`](docs/scaling.md)** — when one box isn't enough: vertical, Hetzner migration, multi-host via Tailscale.
-- **[`docs/backups.md`](docs/backups.md)** — daily Postgres dumps to Cloudflare R2 via a Kamal accessory + recovery procedures.
+- **[`docs/backups.md`](docs/backups.md)** — daily Postgres dumps to Cloudflare R2 via a Tofu-managed backup container + recovery procedures.
 - **[`docs/secrets.md`](docs/secrets.md)** — where every credential lives (BWS + .env + Tofu state), rotation procedures, leak-response playbook.
 
 ## License

@@ -1,9 +1,9 @@
 # Shared infra — R2 backup bucket + its scoped S3-compatible token.
 #
-# Scope: ONE bucket + ONE narrow token. The Postgres accessory itself
-# lives in Kamal (no Cloudflare resource needed). The token's permission
-# scope is the single backup bucket — a leak can't reach the assets
-# bucket or any other R2 on the account.
+# Scope: ONE bucket + ONE narrow token. The Postgres container itself is
+# declared in containers.tf (no Cloudflare resource needed). The token's
+# permission scope is the single backup bucket — a leak can't reach the
+# assets bucket or any other R2 on the account.
 
 # Permission group UUID for "Workers R2 Storage Bucket Item Write". Global
 # (not per-account), stable. Found via:

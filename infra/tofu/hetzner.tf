@@ -9,10 +9,10 @@
 # everything else. See infra/CLAUDE.md hard rule #3 (BWS → Tofu → write-through).
 
 # ── SSH key (derived from the BWS-stored private key) ────────────────────────
-# Single source of truth: the SAME key Kamal uses for app rollouts. The
-# operator's laptop has it in ssh-agent; CI loads it from BWS into a
-# tempfile per job. Deriving the public key via `tls_public_key` avoids
-# storing it in a second BWS secret.
+# Single source of truth: the operator's laptop has it in ssh-agent; CI
+# loads it from BWS into a tempfile per job. Deriving the public key via
+# `tls_public_key` avoids storing it in a second BWS secret. (The variable
+# name `kamal_ssh_private_key` is a tombstone — see variables.tf.)
 
 data "tls_public_key" "operator" {
   private_key_openssh = var.kamal_ssh_private_key

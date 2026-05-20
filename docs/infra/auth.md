@@ -310,11 +310,10 @@ ssh root@$ONPREM_HOST 'docker restart infra-zitadel infra-zitadel-login'
 # → log in to auth.iedora.com → Profile → Password
 ```
 
-Zitadel + its tunnel reboot independently of menu and genkan because
-they're separate Tofu-managed containers — `docker restart` works
-without disturbing the per-product Kamal app containers on the same
-`kamal` Docker network. No app redeploy is needed because no product
-currently federates to Zitadel — that lands in Phase 3.
+Zitadel + its tunnel reboot independently of the menu app — `docker
+restart` works without disturbing other containers on the `kamal`
+Docker network. No app redeploy is needed because no product currently
+federates to Zitadel — that lands in Phase 3.
 
 ## OIDC client integration (forward-looking)
 

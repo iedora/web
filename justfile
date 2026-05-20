@@ -5,7 +5,7 @@
 #
 #   just infra::deploy          → cd infra/ && just deploy (shared Postgres + backups)
 #   just menu::deploy           → cd products/menu/infra/ && just deploy
-#   just menu::logs             → same, kamal app logs
+#   just menu::logs             → docker logs for the menu container
 #   just house::deploy          → cd products/house/infra/ && just deploy
 #   just menu                   → list menu's recipes
 #   just                        → list this file (and the modules below)

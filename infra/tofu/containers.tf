@@ -1,26 +1,12 @@
-# Homelab infrastructure containers — postgres, openobserve, zitadel, the
-# backups job, and the two cloudflared sidecars. End-app deploys (menu)
-# still go through Kamal; this file owns the always-on layer.
-#
-# Why Tofu and not Kamal:
-#   - Kamal's accessory model is built around per-product rollouts (one
-#     service, one image, one cmd). The infra layer is multi-service +
-#     long-lived, and we want declarative drift detection (infra/CLAUDE.md
-#     hard rule #1). Kamal's accessory secrets file is one-shell-namespace
-#     which makes two cloudflared sidecars awkward; Tofu reads tunnel
-#     tokens directly from `module.*.token` and writes them to env.
-#   - One workspace, one apply. Adding a new service is one resource block.
-#
-# Data preservation across the Kamal → Tofu cutover:
-#   Postgres + OpenObserve keep their data via the SAME bind-mount paths
-#   Kamal used (/root/infra-postgres/data, /root/infra-openobserve/data).
-#   Tofu creates new containers, mounts the same paths → cluster boots
-#   with menu + zitadel DBs already there.
+# Every container on the Hetzner box — postgres, openobserve, zitadel, the
+# backups job, the cloudflared sidecars, and the menu app itself. One
+# `tofu apply` boots the lot.
 #
 # Network:
-#   `docker_network.kamal` keeps the name "kamal" so menu's Kamal-managed
-#   app container (which auto-creates that network) still resolves
-#   `infra-postgres`, `infra-openobserve`, `infra-zitadel` by name.
+#   `docker_network.kamal` keeps the legacy name "kamal" — renaming would
+#   force a recreate of every container on the box. Treat the network
+#   name as a tombstone. Container-DNS resolution (`infra-postgres`,
+#   `infra-openobserve`, `infra-zitadel`) is unaffected.
 
 # ── Network ──────────────────────────────────────────────────────────────────
 
@@ -28,13 +14,10 @@ resource "docker_network" "kamal" {
   name   = "kamal"
   driver = "bridge"
 
-  # Kamal would create this lazily on first app boot. We declare it
-  # explicitly here so Tofu owns the lifecycle; Kamal sees a network of
-  # the same name already exists and uses it.
   lifecycle {
-    # Don't destroy the network on `tofu destroy` — the menu-web app
-    # container may still be attached and Docker refuses.
-    # Manual cleanup if ever needed: `docker network rm kamal`.
+    # Don't destroy the network on `tofu destroy` — containers may still
+    # be attached and Docker refuses. Manual cleanup if ever needed:
+    # `docker network rm kamal`.
     prevent_destroy = true
   }
 
@@ -101,9 +84,8 @@ resource "docker_container" "zitadel_bootstrap_chmod" {
 
 # ── Postgres ─────────────────────────────────────────────────────────────────
 # Bind-mounts `/root/infra-postgres/data` on the host so the data dir
-# survives the Kamal-to-Tofu cutover. The dir was created by Kamal's
-# `directories: - data:/var/lib/postgresql` convention and currently holds
-# the menu and zitadel databases.
+# survives container recreation. Currently holds the menu and zitadel
+# databases.
 
 resource "docker_container" "postgres" {
   name    = "infra-postgres"
@@ -379,7 +361,7 @@ resource "docker_container" "zitadel_login" {
 # DDoS protection still valuable). If we ever want to drop CF for those too,
 # add more route blocks to the Caddyfile + DNS records here.
 
-# ── Menu app (Next.js SaaS — was Kamal-managed until 2026-05-20) ─────────────
+# ── Menu app (Next.js SaaS) ─────────────────────────────────────────────────
 # SHA-pinned image. CI writes `${{ github.sha }}` to BWS as MENU_IMAGE_SHA
 # after each successful build; bin/with-secrets exports it as
 # TF_VAR_menu_image_sha. When the SHA changes, the image resource's `name`
@@ -421,11 +403,15 @@ resource "docker_container" "menu_web" {
     "BETTER_AUTH_URL=https://${var.menu_public_hostname}",
     "BETTER_AUTH_SECRET=${var.menu_auth_secret}",
     "DATABASE_URL=postgres://postgres:${var.infra_postgres_password}@infra-postgres:5432/menu",
-    # OIDC client — points at the Zitadel-issued credentials. During the
-    # genkan→Zitadel transition window (Phase 3 of #19) menu's OIDC flow is
-    # not functional; values are passed so the container boots cleanly.
-    "ZITADEL_OAUTH_CLIENT_ID=${var.menu_oauth_client_id}",
-    "ZITADEL_OAUTH_CLIENT_SECRET=${var.menu_oauth_client_secret}",
+    # OIDC client. Menu's env.ts (Zod schema in src/shared/env.ts) still
+    # validates GENKAN_OAUTH_CLIENT_* + GENKAN_ISSUER_URL — that wiring
+    # gets ripped out in issue #20 (drop Better Auth, native Zitadel OIDC).
+    # Until then we pass the Zitadel-flavoured values under the legacy
+    # GENKAN_* env names so the container's env validation passes + it boots.
+    # The auth flow won't complete until #20 lands; that's accepted scope.
+    "GENKAN_OAUTH_CLIENT_ID=${var.menu_oauth_client_id}",
+    "GENKAN_OAUTH_CLIENT_SECRET=${var.menu_oauth_client_secret}",
+    "GENKAN_ISSUER_URL=https://${var.zitadel_hostname}",
     # R2 assets bucket — Tofu-managed in products/menu/infra/tofu/.
     "S3_ENDPOINT=${var.infra_menu_assets_endpoint}",
     "S3_REGION=us-east-1",

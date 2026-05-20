@@ -15,12 +15,10 @@ output "backups_r2_secret_access_key" {
 }
 
 # ── OpenObserve outputs ──────────────────────────────────────────────────────
-# Used to be read by infra/kamal/.kamal/secrets; now flow directly into
-# the docker_container envs in containers.tf. Keeping the outputs around
-# because the menu workspace still reads `observability_tunnel_token`
-# if/when it wires its own observability tunnel in the future. No
-# write-through to BWS: deploys for shared infra always run locally where
-# Tofu state is available.
+# Flow directly into the docker_container envs in containers.tf. Kept as
+# named outputs so future per-product wiring (e.g. a product reading
+# `observability_tunnel_token`) can reach them. No write-through to BWS:
+# deploys for shared infra always run locally where Tofu state is available.
 
 output "observability_bucket_name" {
   description = "R2 bucket holding OpenObserve's parquet cold-tier shards."
@@ -39,11 +37,10 @@ output "observability_r2_secret_access_key" {
 }
 
 # ── Hetzner outputs ──────────────────────────────────────────────────────────
-# IPv4 is the source of truth for: the docker provider host, every per-product
-# Kamal `.env` ONPREM_HOST, the zitadel-rebootstrap SSH commands, and the
-# A records pointed at the box. Outputting it here means `just infra::deploy`
-# can write through to BWS as INFRA_ONPREM_HOST so the per-product workspaces
-# don't need their own hcloud provider.
+# IPv4 is the source of truth for: the docker provider host, the
+# zitadel-rebootstrap SSH commands, and the A records pointed at the box.
+# Outputting it here means `just infra::deploy` can write through to BWS as
+# INFRA_ONPREM_HOST so ad-hoc tooling can resolve it without a Tofu state read.
 
 output "hetzner_ipv4" {
   description = "Public IPv4 of the Hetzner CAX11 box. A records + SSH targets resolve here."

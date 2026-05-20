@@ -1,90 +1,85 @@
 # Shared infra — `infra/`
 
-Cross-product infrastructure: declarative resources via OpenTofu + container accessories via Kamal 2. Applied BEFORE any product deploy (the `infra-postgres` container has to be live before menu can connect). The root `AGENTS.md` covers cross-cutting conventions; Claude Code auto-loads both when working under this subtree.
+The single deploy entry point. One Tofu root provisions the Hetzner VPS, every Cloudflare resource, the GitHub Actions config, and every Docker container on the box. Root `AGENTS.md` covers cross-cutting conventions.
 
 ## What this owns
 
-**OpenTofu state (`infra/tofu/`)** — the cross-product declarative resources:
+**Tofu state (`infra/tofu/`):**
 
-- `cloudflare_r2_bucket.backups` + `cloudflare_api_token.backups_r2` — encrypted Postgres dump destination, R2 token scoped to that one bucket.
-- `cloudflare_r2_bucket.observability` + `cloudflare_api_token.observability_r2` — OpenObserve cold-tier parquet shards. Scoped token, same shape as backups.
-- `module.observability_tunnel` — Cloudflare Tunnel + DNS for `obs.iedora.com`. Bypasses kamal-proxy (`primary_service = "http://infra-openobserve:5080"`) because OpenObserve owns its own request lifecycle.
-- `github_actions_secret.secrets[*]` + `github_actions_variable.vars[*]` — the GH Actions config CI depends on. Values flow from BWS via `TF_VAR_*` aliases.
+- **Hetzner VPS** (`hetzner.tf`) — `hcloud_server.iedora` (CPX22, Falkenstein, x86_64) + SSH key + firewall.
+- **Cloudflare resources** (`main.tf`) — 3 R2 buckets (`backups`, `observability`, menu assets minted in the menu-local root), their scoped tokens, DNS records for `menu.iedora.com` + `auth.iedora.com` + `obs.iedora.com` (all grey-cloud A records pointing directly at the VPS IPv4; Caddy terminates TLS on-box).
+- **GitHub Actions config** (`github.tf`) — `github_actions_secret.secrets[*]` + `github_actions_variable.vars[*]`, `for_each` over a locals map; values flow from BWS via `TF_VAR_*` aliases.
+- **Zitadel resources** (`zitadel.tf`) — `zitadel_org.iedora` + `zitadel_project.iedora`. Lands after the FirstInstance SA-key bootstrap.
 
-**Tofu-managed containers (`infra/tofu/containers.tf`)** — Every always-on Docker container on the Hetzner VPS is declared here via the `kreuzwerker/docker` provider talking to the daemon over SSH. Containers: `infra-postgres` (Postgres 18, shared by every product's database), `infra-backups` (daily `pg_dumpall` → R2, GPG-encrypted with `INFRA_BACKUP_PASSPHRASE`), `infra-openobserve` (single-binary observability backend — OTLP receiver + UI on port 5080, R2 cold tier, local hot disk), `infra-openobserve-tunnel` (cloudflared sidecar for `obs.iedora.com`), `infra-zitadel` (issue #19 Phase 1: ZITADEL v4 IdP on port 8080, talks to the shared Postgres on database `zitadel`), `infra-zitadel-login` (Next.js v2 login UI sharing a `zitadel-bootstrap` named volume with `infra-zitadel`), and `infra-caddy` (TLS termination + reverse proxy for `auth.iedora.com`, directly bound to the VPS's public IPv4 — no Cloudflare Tunnel in front). Container names are deliberately `infra-*` because they serve every product.
+**Tofu-managed containers (`containers.tf`):** every always-on Docker container on the VPS is declared here via `kreuzwerker/docker` over SSH:
 
-**Kamal stays for end apps only** — `infra/` no longer ships any Kamal config. The per-product workspace (`products/menu/infra/kamal/`) still uses Kamal for rolling deploys, and the menu app container joins the `kamal` Docker network alongside the Tofu-managed `infra-*` containers (Tofu owns the network too — see `containers.tf`). Migrating infra to Tofu happened because Kamal's accessory model is one-shot per-product rollouts; the always-on infra layer wanted multi-service declarative drift detection and a shared volume between Zitadel and its login companion — none of which the accessory shape handles cleanly.
+- `infra-postgres` — Postgres 18, shared by menu + zitadel databases.
+- `infra-backups` — daily `pg_dumpall` → R2, GPG-encrypted.
+- `infra-openobserve` — OTLP receiver + UI on `:5080`, R2 cold tier.
+- `infra-zitadel` + `infra-zitadel-login` — Zitadel IdP + its login UI (share the `zitadel-bootstrap` named volume).
+- `infra-caddy` — TLS termination + reverse proxy, bound to the VPS public IPv4.
+- `menu_web` — the menu app container; image pulled from GHCR.
 
-**Reusable Tofu modules (`infra/modules/`)** — `cloudflare-tunnel-app/` is the per-product tunnel+ingress+DNS pattern, used today by menu. Adding another product = `module "tunnel" { source = "../../../../infra/modules/cloudflare-tunnel-app"; ... }` in 5 lines.
+Container names are deliberately `infra-*` for everything that serves both products / lives across cutovers. The menu app is `menu_web`.
 
-**Self-built images (`infra/backup/`)** — Dockerfile + `backup.sh` / `restore.sh` / `run.sh`. Built rarely (only when bumping Postgres major), pushed to `ghcr.io/$GHCR_USER/iedora-backup:18`.
+> **Why the network is still called `kamal`** — `docker_network.kamal` is a tombstone from the pre-2026-05-20 Kamal era. Renaming would recreate every container on the box; the upside is zero. Leave it.
+
+**Self-built images (`infra/backup/`):** Dockerfile + `backup.sh` / `restore.sh` / `run.sh`. Rebuilt only when bumping Postgres major.
 
 ## Hard rules
 
-1. **Declarative-first.** Every resource here is Tofu-managed. **Edit `.tf` files, never the upstream UI** — Tofu's unconditional reconciliation (GitHub Actions secrets/variables) will silently clobber your UI edits on the next `just infra::deploy`. If you find yourself reaching for the GitHub or Cloudflare console to change something this workspace owns, stop and edit the HCL instead.
-
-2. **Tofu-managed credentials write through to BWS, not the other way around.** For resources like `cloudflare_api_token.workers_deploy`, the value is generated by Tofu and pushed to BWS by `just infra::deploy`. Editing the BWS entry directly is wasted work — the next apply restores Tofu's state value. See `docs/secrets.md` § Tofu-managed write-throughs for the full list.
-
-3. **Bootstrap order is BWS → Tofu → write-through.** First-time setup populates the bootstrap secrets in BWS (`INFRA_CLOUDFLARE_API_TOKEN`, `INFRA_GITHUB_API_TOKEN`, `INFRA_KAMAL_SSH_PRIVATE_KEY`); `just infra::deploy` then provisions everything else AND writes any Tofu-minted CI credentials back to BWS. See `docs/deploy.md` § Continuous deployment for the full one-shot flow.
-
-4. **Follow `docs/terraform-style.md` when editing any `.tf`.** Pessimistic `~>` version pins, `for_each` over `count`, `validation` blocks on inputs, predictable `<provider>_<noun>.<role>_<qualifier>` naming. The 10 LLM-safe HCL conventions exist precisely because this workspace will be edited by LLMs.
-
-5. **State file is encrypted in git.** `terraform.tfstate` is PBKDF2 + AES-GCM encrypted (`infra/tofu/versions.tf` config block, passphrase from `INFRA_STATE_PASSPHRASE`). Decrypting locally requires the passphrase. Rotating the passphrase uses the `fallback` block migration — see `docs/secrets.md` § Tofu state passphrase.
-
-6. **One Tofu root per blast-radius unit.** This shared workspace, plus per-product workspaces. Don't consolidate. Modules in `infra/modules/` are how code is DRY'd up; state stays segmented. See `docs/deploy.md` § Why one Tofu root per product.
+1. **Declarative-first.** Every resource here is Tofu-managed. **Edit `.tf` files, never the upstream UI** — Tofu's unconditional reconciliation will silently clobber UI edits on the next `just infra::deploy`.
+2. **Tofu-managed credentials write through to BWS.** For resources like `cloudflare_api_token.workers_deploy`, the value is generated by Tofu and pushed to BWS by `just infra::deploy`. Editing BWS directly is wasted work — the next apply restores Tofu's value. See `docs/secrets.md` § Tofu-managed write-throughs.
+3. **Bootstrap order is BWS → Tofu → write-through.** Populate the bootstrap secrets in BWS, then `just infra::deploy` provisions everything else AND writes any Tofu-minted credentials back to BWS. See `docs/deploy.md`.
+4. **Follow `docs/terraform-style.md` when editing any `.tf`.** Pessimistic `~>` pins, `for_each` over `count`, `validation` blocks, predictable naming.
+5. **State file is encrypted in git.** PBKDF2 + AES-GCM, passphrase from `INFRA_STATE_PASSPHRASE`. Rotation via the `fallback` block migration — see `docs/secrets.md`.
 
 ## File layout
 
 ```
 infra/
   justfile                              deploy / backup / restore / wipe-postgres / build-backup / rotate-secret
-  .env.example                          template — copy to .env (gitignored): CF account + BWS access + ONPREM_HOST + GHCR_USER
-  bin/
-    with-secrets                        BWS wrapper — loads every secret as env, exports TF_VAR_* aliases for Tofu
-  tofu/                                 SHARED Tofu root (encrypted state)
-    versions.tf                         providers: cloudflare ~> 5.19, github ~> 6.12,
-                                        kreuzwerker/docker ~> 3.7 (over SSH to the VPS) + encryption block
+  .env.example                          template (BWS access + CF account + GHCR_USER + ONPREM_HOST)
+  bin/with-secrets                      BWS wrapper — exports every secret as TF_VAR_*
+  tofu/                                 single encrypted root
+    versions.tf                         providers: hcloud, cloudflare ~> 5.19, github ~> 6.12,
+                                        kreuzwerker/docker ~> 3.7, zitadel ~> 2.12 + encryption block
     variables.tf                        bootstrap creds + GH config + hostnames + container secrets
-    main.tf                             cloudflare_r2_bucket.{backups,observability} + tokens + tunnel modules
-    containers.tf                       docker_network.kamal + docker_volume.zitadel_bootstrap + docker_container
-                                        (postgres, openobserve, openobserve-tunnel, backups, zitadel,
-                                         zitadel-login, caddy)
-    github.tf                           github_actions_secret.secrets + github_actions_variable.vars (for_each over locals)
+    hetzner.tf                          hcloud_server.iedora + firewall + SSH key
+    main.tf                             R2 buckets + DNS (menu/auth/obs) + zitadel_tunnel-equivalent
+                                        only if needed (obs.iedora.com is direct now)
+    containers.tf                       docker_network.kamal + docker_volume.zitadel_bootstrap +
+                                        every docker_container (postgres, backups, openobserve,
+                                        zitadel, zitadel-login, caddy, menu_web)
+    github.tf                           Tofu-managed GH Actions secrets + variables
+    zitadel.tf                          zitadel_org.iedora + zitadel_project.iedora
     outputs.tf                          backup-bucket coords (sensitive)
-  modules/
-    cloudflare-tunnel-app/              shared module for product tunnel+ingress+DNS pattern
-      main.tf, variables.tf, outputs.tf, versions.tf, README.md
   postgres/
-    init.sql                            initial `CREATE DATABASE menu / zitadel` (runs once on
-                                        the cluster's first init; uploaded into infra-postgres via the
-                                        docker_container `upload` block)
+    init.sql                            CREATE DATABASE menu / zitadel (runs once on first init)
   backup/                               self-built Postgres-backup image
-    Dockerfile                          postgres:18-alpine + aws-cli + gnupg + tini; LABEL → eduvhc/iedora
-    run.sh, backup.sh, restore.sh       cron + pg_dumpall + GPG + R2 upload + retention
+    Dockerfile, run.sh, backup.sh, restore.sh
 ```
 
 ## Commands
 
 ```
-just infra::deploy        # tofu apply (R2 + observability tunnel + GitHub + the VPS infra containers)
-just infra::destroy       # tofu destroy — tears down R2 + tunnels + every infra-* container
-                          # (Postgres data dir on the host survives unless you also `wipe-postgres`)
-just infra::wipe-postgres # destructive — `docker rm -f infra-postgres` + `rm -rf /root/infra-postgres`
-                          # (confirmation gate; menu + zitadel databases all gone after)
-just infra::logs <svc>    # ssh + `docker logs -f infra-<svc>`; defaults to `backups`
-just infra::console       # ssh + `docker exec -it infra-postgres psql -U postgres`
-just infra::backup        # ssh + `docker exec infra-backups sh /backup.sh`
-just infra::restore       # ssh + `docker exec -it infra-backups sh /restore.sh`
-just infra::build-backup  # rebuild + push the backup image (only when bumping Postgres major)
+just infra::deploy        # tofu apply — VPS + Cloudflare + GitHub + every container
+just infra::destroy       # tofu destroy — tears down the VPS + every resource
+just infra::wipe-postgres # destructive — drops the data dir on the host (use after destroy)
+just infra::logs <svc>    # ssh + docker logs -f infra-<svc> (or menu_web)
+just infra::console       # ssh + docker exec -it infra-postgres psql -U postgres
+just infra::backup        # force a pg_dump now
+just infra::restore       # restore latest dump (interactive)
+just infra::build-backup  # rebuild + push the backup image (only on Postgres major bump)
 just infra::rotate-secret # prompt-driven BWS secret rotation
 ```
 
-`bin/with-secrets <cmd>` wraps any command with BWS env + `TF_VAR_*` aliases loaded — used internally by the justfile recipes. Run it directly when you need to invoke `tofu` outside a recipe (e.g. ad-hoc `tofu state` operations).
+`bin/with-secrets <cmd>` wraps any command with BWS env + `TF_VAR_*` aliases loaded. Used by the justfile recipes; run it directly for ad-hoc `tofu state` operations.
 
 ## See also
 
-- **[`docs/deploy.md`](../docs/deploy.md)** — first-time-setup walkthrough, GitHub bootstrap, CI/CD wiring.
-- **[`docs/secrets.md`](../docs/secrets.md)** — every credential's location, rotation recipe, cadence, and the zero-downtime patterns (Better Auth plural secrets, Postgres dual-role, Tofu state fallback, BWS blue/green).
-- **[`docs/terraform-style.md`](../docs/terraform-style.md)** — the 10 LLM-safe HCL conventions. Apply before editing any `.tf` in this workspace.
-- **[`docs/infra-declarative-roadmap.md`](../docs/infra-declarative-roadmap.md)** — what's declarative today vs. what's queued; per-tier rationale.
-- **[`docs/scaling.md`](../docs/scaling.md)** — what changes when this workspace grows to N>1 hosts (multi-host Postgres options, per-host cloudflared).
+- **[`docs/deploy.md`](../docs/deploy.md)** — first-time setup, GitHub bootstrap, CI/CD wiring.
+- **[`docs/secrets.md`](../docs/secrets.md)** — every credential's location, rotation cadence, zero-downtime patterns.
+- **[`docs/terraform-style.md`](../docs/terraform-style.md)** — LLM-safe HCL conventions.
+- **[`docs/infra/auth.md`](../docs/infra/auth.md)** — Zitadel deploy + bootstrap + day-2 ops.
+- **[`docs/scaling.md`](../docs/scaling.md)** — what changes when this workspace grows to N>1 hosts.

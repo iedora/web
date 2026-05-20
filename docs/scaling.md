@@ -1,265 +1,126 @@
-# Scaling — what to do when one homelab box isn't enough
+# Scaling — what to do when one VPS isn't enough
 
-**TL;DR.** A single homelab box on Starlink is fine until you hit either ~100 concurrent users or your first sustained outage. Then migrate the whole stack to the cheapest Hetzner VPS (€4/mo · €48/yr) — same `just menu::deploy`, just a different `ONPREM_HOST`. Don't add a second box for redundancy until you have paying customers who care, and even then prefer two Hetzner boxes over a hybrid homelab+VPS pair — the latency budget on Starlink CGNAT (40–150 ms per DB round-trip via Tailscale) eats your page render time faster than the €48/yr saves you. The one zero-cost thing worth doing today: install Tailscale on the homelab so future east-west joins are two lines, not a one-hour networking project.
+**TL;DR.** A single Hetzner CPX22 (€5/mo, EU datacenter, public IPv4) handles ~100 concurrent users + 99.9% uptime. Don't add a second box for redundancy until paying customers care — prefer vertical scaling first (CAX21 / CPX31), then multi-host shared-DB once HA actually matters.
 
-See [`deploy.md`](./deploy.md) for the current single-host flow this builds on.
+See [`deploy.md`](./deploy.md) for the current single-host flow.
 
 ---
 
-## 1. Current — single homelab box
+## 1. Current — single Hetzner VPS
 
-Stack as deployed today: one Ubuntu box, Kamal 2, Cloudflare Tunnel outbound, four containers (`app`, `postgres`, `cloudflared`, `backups`) on the same Docker network. Image uploads + backups both live in Cloudflare R2 (zero egress, served from the edge), not on the box. No inbound ports open. See [`deploy.md`](./deploy.md).
+One CPX22 in Falkenstein. Every container declared in `infra/tofu/containers.tf`: `infra-postgres`, `infra-backups`, `infra-openobserve`, `infra-zitadel` + login, `infra-caddy`, `menu_web`. Caddy terminates TLS on port 443. Image uploads + backups live in R2 (zero egress, served from CF edge), not on the box.
 
-**Natural ceiling.** Three independent limits, whichever bites first:
+**Natural ceiling.** Whichever bites first:
 
 | Limit | Threshold | Why |
 |---|---|---|
-| Concurrent users | ~50–100 simultaneous public-menu viewers | Node single-process + Postgres on same CPU. Public menu is `unstable_cache`'d per slug (hard rule #12), so steady-state load is mostly the `/api/track/[slug]` beacon — image fetches go direct to R2's edge, not through the box. |
-| Upstream bandwidth | ~10 Mbps real-world on Starlink residential ([plans](https://www.starlink.com/business/plans)) | Symmetric-ish on paper, but residential tier is best-effort and uplink dips hardest under contention. A page with 6 dish photos at 200 KB each = 1.2 MB; ~8 concurrent first-paint loads saturates uplink. |
-| Reliability | ~99.0–99.5% / month realistic | Residential ISP + consumer-grade power. Starlink itself publishes no SLA for residential ([Starlink terms](https://www.starlink.com/legal/documents/DOC-1134-89405-69)). One thunderstorm = one outage. |
+| Concurrent users | ~100 simultaneous public-menu viewers | Node single-process + Postgres on same CPU. Public menu is `unstable_cache`'d per slug, so steady-state load is mostly `/api/track/[slug]` beacon — images go direct to R2 edge |
+| Memory pressure | ~80% of 4 GB used | Zitadel + login (~150 MB) + Postgres + menu_web + openobserve + caddy. Headroom shrinks as data grows |
+| Reliability | 99.9% / month ([Hetzner SLA](https://www.hetzner.com/legal/cloud)) | Single AZ, single disk. Fine for pre-revenue + early customers |
 
 **When to upgrade.** First of these to be true:
-- A real (paying) customer complains about an outage you can't explain.
-- The admin upload flow becomes painful (presigned PUTs go to R2 directly, but Server Actions still round-trip through the box).
-- You start serving customers outside Western Europe and the Cloudflare edge can't hide the round-trip to your box anymore.
-
-Until then: stay here. It's free.
-
-**When this makes sense.** Always, as the starting point. Pre-revenue + EU + low traffic = this is the right answer.
+- A paying customer complains about an outage you can't explain.
+- p95 latency on the admin builder degrades (Postgres CPU-bound under user load).
+- The next product lands and the 4 GB RAM ceiling bites.
 
 ---
 
-## 2. Vertical — bigger homelab box
+## 2. Vertical — bigger Hetzner box
 
-Buy more box, same address. Cheapest scaling motion.
+Same Tofu, bigger `server_type`. Cheapest scaling motion.
 
-**What it fixes.** CPU-bound rendering, Postgres memory pressure. A modern N100 mini-PC (€150–250 one-off) or a used Xeon E-2278G tower off eBay (€200–400) gets you ~4× the current single-box throughput.
+| Tier | Spec | Cost/mo | When |
+|---|---|---|---|
+| CPX22 | 2 vCPU x86 / 4 GB / 80 GB | €5 | Today |
+| CAX21 | 4 vCPU ARM / 8 GB / 80 GB | €7 | ARM-friendly workload; cheap throughput boost |
+| CPX31 | 4 vCPU x86 / 8 GB / 160 GB | €10 | Memory pressure or admin builder feels sluggish |
+| CPX41 | 8 vCPU x86 / 16 GB / 240 GB | €19 | Multiple products live; Postgres CPU-bound |
 
-**What it does NOT fix:**
-- Starlink uplink cap (~10 Mbps) — still the ceiling for outbound bandwidth.
-- Starlink CGNAT — no inbound IP, you still go out via Cloudflare Tunnel (which is fine, but means you can't ever expose a non-HTTP service to the public internet directly).
-- Single power circuit, single ISP, single physical location. One thunderstorm still = one outage.
+Edit `hcloud_server.iedora.server_type` in `infra/tofu/hetzner.tf`. `tofu apply` recreates with the new size — Hetzner takes ~2 min, brief downtime. Data dir survives (separate `hcloud_volume`).
 
-**Cost.** €150–400 one-off, amortized = €30–80/yr if the box lasts five years. Cheaper per year than Hetzner (€48/yr) *if* you already trust your power + ISP, *if* you don't value off-site location, and *if* the box doesn't die in year two.
+**What it fixes:** CPU-bound rendering, Postgres memory pressure.
 
-**When this makes sense.** You're hitting CPU/memory limits on the current box but bandwidth and uptime are still fine, and you genuinely enjoy homelab tinkering. Otherwise, skip straight to scenario 3 — the marginal cost over a used minipc is small and the operational simplicity is worth it.
+**What it doesn't fix:** Single-AZ availability — a Hetzner regional incident still = downtime.
 
 ---
 
-## 3. Migration — move entirely to a Hetzner VPS
+## 3. Multi-host shared-DB
 
-Single command-flow change. Same `just menu::deploy`, different IP.
+Two web boxes, one DB. Caddy on each web host; Cloudflare DNS round-robins or fronts a CF load balancer (€5/mo).
 
-**Box.** Hetzner Cloud CX22 (x86, 2 vCPU, 4 GB, 40 GB SSD) is **€4.51/mo · €54.12/yr** as of May 2026; CAX11 (Ampere ARM, 2 vCPU, 4 GB) is **€3.79/mo · €45.48/yr** ([Hetzner Cloud pricing](https://www.hetzner.com/cloud)). ARM is the cheapest viable tier; both run the same Docker image fine (the `Dockerfile` builds for `linux/amd64` today, swap to `arm64` for CAX11 — one line in `builder.arch`).
+```
+       Cloudflare DNS (A records → both web boxes)
+              ├──────────────────┐
+              ▼                  ▼
+         Hetzner-1          Hetzner-2
+         menu_web           menu_web
+         caddy              caddy
+              │                  │
+              └────── Postgres ──┘
+                  (on Hetzner-1, accessed
+                   via private network)
+```
 
-**Cutover steps** (~30 min wall-clock):
+**Hetzner private networks (Tofu-managed):** `hcloud_network` + `hcloud_network_subnet` + `hcloud_server_network`. ~10 ms intra-DC latency, no public traffic.
+
+**Postgres still single-host.** A failed DB box = downtime. Shared-DB is NOT HA for Postgres — see scenario 4 for that.
+
+**Cost.** 2× CPX22 = €10/mo. Or CPX22 (web) + CPX31 (DB) = €15/mo.
+
+**What you gain.** Roll deploys without a blip (one box at a time). Survives one web box dying.
+
+**What you give up.** Operational complexity — two boxes to patch, two `docker logs` to grep. A failed DB box is still downtime.
+
+For controlled rollouts, deploy one host's container at a time:
 
 ```bash
-# 1. Provision Hetzner box, paste ~/.ssh/id_ed25519.pub during creation.
-# 2. ssh root@<new-ip> 'whoami'  → "root" instantly. No host-init needed.
-
-# 3. On the OLD box: dump postgres. Assets live in R2 already — no migration needed.
-ssh root@$OLD_HOST 'docker exec infra-postgres pg_dump -U postgres menu | gzip' > db.sql.gz
-
-# 4. Edit products/menu/infra/.env: ONPREM_HOST=<new-ip>
-# 5. just menu::deploy   → tofu re-points the tunnel ingress, kamal boots fresh stack on new box.
-
-# 6. Restore data on the new box.
-gunzip < db.sql.gz | ssh root@$NEW_HOST 'docker exec -i infra-postgres psql -U postgres menu'
-
-# 7. Hit https://$PUBLIC_HOSTNAME/up — should be {"ok":true,"db":"ok"}.
+INFRA_MENU_IMAGE_TAG=<new-sha> tofu apply -target='docker_container.menu_web["a"]'
+# verify, then:
+tofu apply -target='docker_container.menu_web["b"]'
 ```
 
-DNS doesn't change — the Cloudflare Tunnel ingress is rewritten by `tofu apply`, the user-facing hostname stays put, no TTL wait.
-
-**What you gain.** 99.9%+ uptime ([Hetzner SLA](https://www.hetzner.com/legal/cloud)), gigabit symmetric, real EU datacenter latency (Falkenstein/Helsinki/Nuremberg = 20–40 ms to most EU users), nightly snapshots for €1/mo extra.
-
-**What you lose.** €48/yr. That's it.
-
-**When this makes sense.**
-- First paying customer, especially if they're not in your physical region.
-- You're spending more than ~1 hr/quarter on homelab reliability issues — the VPS cost is cheaper than your time.
-- Latency-sensitive users in a specific EU region (pick the matching Hetzner location).
-
-This is the recommended next step. Do not skip it to chase multi-host.
+Shape: introduce a `web_hosts` variable + `for_each` over it on `docker_container.menu_web` (each instance pinned to a different `host =` daemon). Migrations move into a one-shot `docker_container.menu_migrate` (image-pinned, `must_run = false`, `start = false`) triggered before the rolling app apply — every replica still has `pg_advisory_lock` so it's safe, just wasteful.
 
 ---
 
-## 4. Multi-host shared-DB — Tailscale east-west
+## 4. Postgres HA
 
-Two web boxes, one DB. The DHH-endorsed pattern ([X post](https://x.com/dhh/status/1919681760532586706)): join all hosts to a Tailscale tailnet, address the DB by its tailnet IP, let WireGuard handle the encrypted east-west link.
+Logical replication ([docs](https://www.postgresql.org/docs/current/logical-replication.html)) or a managed Postgres (Neon, Supabase). The complexity cliff: replication lag, conflict resolution, cache invalidation.
 
-```yaml
-# products/menu/infra/kamal/config/deploy.yml — multi-host snippet
-servers:
-  web:
-    hosts:
-      - <%= ENV.fetch("WEB_HOST_1") %>     # e.g. Hetzner Falkenstein
-      - <%= ENV.fetch("WEB_HOST_2") %>     # e.g. Hetzner Helsinki, or homelab
+**Cost floor.** 2× CPX31 (web + primary + replica) = €30/mo plus engineering. Or managed Postgres = €20-50/mo for small tiers.
 
-accessories:
-  postgres:
-    image: postgres:18-alpine
-    host: <%= ENV.fetch("DB_HOST") %>       # one box, addressed by tailnet IP
-    # e.g. DB_HOST=100.64.10.5  (MagicDNS: db.tail-xxxx.ts.net also works)
-```
-
-App containers reach Postgres over the tailnet (`DATABASE_URL=postgres://...@100.64.10.5:5432/menu`). Kamal-proxy on each web host load-balances locally; Cloudflare Tunnel ingress points to the kamal-proxy on either box (or both via two `cloudflared` accessories). R2 assets + backups stay on Cloudflare, accessed identically from each web host.
-
-**Latency reality.** Tailscale picks the lowest-latency path it can:
-- **Direct WireGuard** EU↔EU: typically 15–40 ms. Possible when at least one peer has a public IP (any Hetzner box does). Per DB round-trip.
-- **DERP-relayed** (Frankfurt/Paris/Amsterdam relays — see [Tailscale DERP map](https://tailscale.com/kb/1232/derp-servers)): 40–150 ms. This is what you get when **both** peers are CGNAT'd — which is exactly the Starlink homelab case. Starlink CGNAT means the homelab cannot do direct WireGuard with another CGNAT peer; with a Hetzner peer it usually can (Hetzner side has a public IP), so direct is achievable.
-
-**Performance budget.** Public menu page renders ~5–20 DB queries (snapshot loader + i18n fanout). At 30 ms direct east-west that's 150–600 ms of pure RTT in the render path. At 100 ms DERP-relayed, you're at 500–2000 ms — visibly slow. The `unstable_cache` snapshot mostly hides this on the public menu, but the admin builder isn't cached and *will* feel sluggish.
-
-Realistic page-render budgets:
-- Both boxes in same Hetzner region: 200–400 ms total. Fine.
-- Hetzner + homelab over direct WireGuard: 300–600 ms. Acceptable.
-- Hetzner + homelab over DERP relay: 500–1500 ms. Don't.
-
-**Cost.** Tailscale Free tier covers up to 100 devices and 3 users ([Tailscale pricing](https://tailscale.com/pricing)) — well above what you'd ever hit here. Adding one Hetzner CX22 = **€4.51/mo · €54.12/yr**. So multi-host = €48/yr more than scenario 3, for redundancy.
-
-**What you gain.** One box can die without taking the app down (assuming DB box is the survivor; otherwise you're degraded). Lets you roll deploys without a blip.
-
-**What you give up.** The latency penalty above. Operational complexity: now you have two boxes to patch, two `docker logs` to grep, and a tailnet to keep healthy. A failed DB box still means downtime — shared-DB is **not** HA for Postgres.
-
-**Not Cloudflare Tunnel TCP for east-west.** CF Tunnel works for app↔Postgres in theory, but routes through the Cloudflare edge — adds 30–80 ms per hop on top of geographic latency, doesn't do MagicDNS, and isn't the maintained Kamal idiom. Tailscale is what DHH and the Kamal community use; stick with it.
-
-**Not Docker Swarm overlay.** Kamal explicitly rejects Swarm — [`Kamal Handbook`](https://kamal-deploy.org/docs/) is built around a flat "containers on hosts" model, no orchestrator overlay. Don't fight it.
-
-### Kamal config changes that come with N>1
-
-Three concrete diffs land the moment you go past one host or one replica. Skipping them in advance is fine — none matter on a single box — but bake them in the day you add a second.
-
-**1. Throttle the rolling deploy.** Without `boot.limit`, Kamal rolls every host in parallel (SSHKit threads); a bad image takes the whole fleet at once. Pin one-at-a-time with a short settle window so kamal-proxy can drain:
-
-```yaml
-servers:
-  web:
-    hosts: [...]
-    boot:
-      limit: 1
-      wait: 10
-```
-
-**2. Move migrations to a pre-deploy hook with `--primary`.** Today `scripts/migrate.mjs` runs in `servers.web.cmd` and is safe under N replicas because of its `pg_advisory_lock` ([rule 2 in genkan's hard rules](../AGENTS.md) and menu's `migrate.mjs`). At N>1 it's still safe but wasteful — every replica boots, every replica grabs the lock, only one wins. Replace with a `.kamal/hooks/pre-deploy` script that runs exactly once against the freshly-built image:
-
-```bash
-#!/usr/bin/env bash
-# .kamal/hooks/pre-deploy
-set -euo pipefail
-kamal app exec --primary --version="$KAMAL_VERSION" "node scripts/migrate.mjs"
-```
-
-And drop the migrate from `cmd:` (just `node server.js`). `--version=$KAMAL_VERSION` is load-bearing — without it Kamal would run the migration against the *current* image, before the new code is rolled. Pinned by `basecamp/kamal#526`.
-
-**3. Per-host cloudflared accessory, same tunnel token.** Cloudflare Tunnel connectors are inherently HA: same token on N connectors = N registered connections, CF load-balances across them automatically. No LB on your side. The single-host snippet:
-
-```yaml
-accessories:
-  cloudflared:
-    host: <%= ENV.fetch("ONPREM_HOST") %>
-```
-
-becomes:
-
-```yaml
-accessories:
-  cloudflared:
-    hosts:
-      - <%= ENV.fetch("WEB_HOST_1") %>
-      - <%= ENV.fetch("WEB_HOST_2") %>
-```
-
-`TUNNEL_TOKEN` is unchanged — Tofu still mints exactly one tunnel. Each connector picks up the same secret and registers independently. If one host dies, CF stops routing to its connector within ~30s; existing connections drop, new ones land on the survivor.
-
-These three together are what makes Kamal "scale to N hosts" actually mean zero-downtime rolling deploys with surviving-host failover, not just "two boxes running the same image".
-
-**When this makes sense.**
-- You have paying customers who notice an outage within minutes.
-- You're willing to spend €48/yr extra AND accept the per-page latency penalty above.
-- You're deploying on a rhythm fast enough that zero-downtime matters.
-
-If you're not yet at all three: don't.
+**When this makes sense.** Several thousand active tenants AND a real customer noticing region-specific p95. Not pre-revenue.
 
 ---
 
-## 5. Multi-region with separate DBs
+## 5. Multi-region
 
-Postgres logical replication ([docs](https://www.postgresql.org/docs/current/logical-replication.html)) or write-region routing (one primary, read replicas in other regions). The complexity cliff: now you're reasoning about replication lag, conflict resolution if you ever go multi-primary, and cache invalidation across regions.
+When a single EU region's latency to non-EU users hurts. Logical replication across regions + write-region routing.
 
-**Cost floor.** 2× Hetzner CX22 = **€9/mo · €108/yr**, plus the engineering cost of getting replication right (non-trivial).
-
-**When this makes sense.** Several thousand active tenants, real geographic spread (US + EU + APAC), and a specific reason the single-region latency from scenario 3 isn't good enough. Not pre-revenue. Probably not even at €10k MRR. Reassess when you have enough customers to notice region-specific p95 latencies in your metrics.
+**When.** Real geographic spread (US + EU + APAC), several thousand tenants, specific latency complaints. Reassess when metrics show it.
 
 ---
 
-## 6. Recommended preparation today (zero cost)
+## 6. External uptime monitoring (today, zero cost)
 
-Install Tailscale as a host service on the homelab. Takes 2 minutes, costs nothing, makes scenario 4 a 2-line change later instead of a networking project. **Also unlocks CI deploys** (the GitHub Actions runner joins the tailnet via `tailscale/github-action@v4` and reaches the homelab over MagicDNS — see `docs/deploy.md` § Network reachability).
-
-```bash
-# On the homelab box, as root:
-curl -fsSL https://tailscale.com/install.sh | sh
-tailscale up --hostname=iedora-homelab
-# Authenticate via the printed URL (one-time, your Tailscale account).
-
-# Note the MagicDNS hostname Tailscale assigns (e.g. iedora-homelab.tail-xxxx.ts.net).
-# Local `just <product>::deploy` keeps using the LAN IP in products/<product>/infra/.env
-# (fast, no detour); the CI runner uses the tailnet MagicDNS name via the
-# `ONPREM_HOST` GitHub Variable.
-```
-
-**`--ssh` is optional and orthogonal to reachability.** Adding `--ssh` to `tailscale up` enables [Tailscale SSH](https://tailscale.com/kb/1193/tailscale-ssh) — `tailscaled` claims port 22 on the tailnet IP and authenticates connections using tailnet identity instead of `authorized_keys`. Useful if you want to retire SSH keys for interactive admin access. **Not required** for either Kamal deploys or the CI runner; standard OpenSSH continues to work whether the flag is set or not. Default to off; flip on later if you want the centralized auth model.
-
-Why on the host, not in a container: Tailscale-as-container forces you to share its netns or run sidecars per accessory. Host-level means every container's outbound traffic can reach the tailnet via the host's routing table, no Kamal config changes today.
-
-No `products/menu/infra/kamal/config/deploy.yml` change required now. When you eventually add a second box, the diff is exactly:
-
-```yaml
-servers:
-  web:
-    hosts:
--     - <%= ENV.fetch("ONPREM_HOST") %>
-+     - <%= ENV.fetch("ONPREM_HOST") %>     # tailnet IP or MagicDNS
-+     - <%= ENV.fetch("VPS_HOST") %>        # tailnet IP or MagicDNS
-```
-
-That's the entire "prep for multi-host" investment. Do it next time you SSH to the box for something else.
-
----
-
-## 7. External uptime monitoring (zero cost, off-box)
-
-Every product exposes a `/up` endpoint (`HEALTHCHECK` in each Dockerfile, also reachable publicly). Three [Better Stack](https://betterstack.com/) monitors are live against them at 3-min cadence; alerts route to Eduardo's email.
+Every product exposes `/up`. [Better Stack](https://betterstack.com/) free tier: 10 monitors at 3-min cadence; alerts to email.
 
 | Product | URL | Cadence |
 |---|---|---|
-| Menu   | `https://menu.iedora.com/up`   | 3 min |
-| Genkan | `https://genkan.iedora.com/up` | 3 min |
-| House  | `https://iedora.com/`          | 3 min |
+| Menu | `https://menu.iedora.com/up` | 3 min |
+| Auth (Zitadel) | `https://auth.iedora.com/debug/healthz` | 3 min |
+| House | `https://iedora.com/` | 3 min |
 
-Better Stack's free tier covers 10 monitors at 3-min cadence — well under our usage. Configuration lives in their UI (no Tofu provider on the free tier), so the only state is in Eduardo's Better Stack account.
-
-**Why off-box matters.** The check must run **outside the homelab** — a self-hosted monitor (Uptime Kuma on the same box) dies with the host it monitors, defeating the point. That's why Better Stack / UptimeRobot / Cloudflare Health Checks all sit in someone else's PoP.
-
-**Adding a new monitor** when a fourth product ships: log in → Monitors → Create monitor → paste URL + expected `200` + 3-min cadence + email notification. ~30s, same shape as the existing three.
-
-**Considered alternatives:**
-
-- **UptimeRobot** — free, 5 min cadence (vs. Better Stack's 3 min on free), simpler UI. Equivalent if Better Stack ever drops the free tier.
-- **Cloudflare Health Checks** — already paying for Cloudflare; checks origin from multiple PoPs. Requires Pro plan for useful notification channels.
-
-**Upgrade path** when uptime isn't enough (metrics + traces): Grafana Cloud free tier + Node OpenTelemetry SDK in each Next app. Out of scope until paying users exist.
+**Why off-box matters.** A self-hosted monitor on the same VPS dies with the host. Better Stack / UptimeRobot / CF Health Checks all run from someone else's PoP.
 
 ---
 
 ## Comparison
 
-| Scenario | Added cost/yr | Added latency/page | Added complexity | Best fit |
-|---|---|---|---|---|
-| 1. Single homelab | €0 | 0 (baseline) | None | Today. Pre-revenue, EU-local, ≤100 concurrent. |
-| 2. Bigger homelab | €30–80 (amortized) | 0 | Low | CPU-bound but uplink+power still fine. Skip if undecided. |
-| 3. Migrate to Hetzner | €48 | -10 to -50 ms (faster) | None — same `just menu::deploy` | First paying customer, or any reliability complaint. **Default next step.** |
-| 4. Multi-host shared-DB (Tailscale) | €48 (one extra Hetzner) | +30 to +150 ms (east-west DB) | Medium — two hosts, tailnet, partial HA only | Paying users + zero-downtime deploys mandatory. Both boxes in same Hetzner region. |
-| 5. Multi-region separate DBs | €108+ | depends — usually -50 to -150 ms for far users | High — replication, conflicts, cache invalidation | Thousands of tenants, real geographic spread. Not soon. |
+| Scenario | Cost/yr | Added complexity | Best fit |
+|---|---|---|---|
+| 1. Single CPX22 | €60 | None | Today. Pre-revenue, <100 concurrent |
+| 2. Bigger Hetzner | €90-230 | None — same `just infra::deploy` | CPU/memory pressure but uptime still fine |
+| 3. Multi-host shared-DB | €120-180 | Medium — two hosts, private network, partial HA only | Paying users + zero-downtime deploys mandatory |
+| 4. Postgres HA | €360+ | High — replication, failover, conflict handling | Thousands of tenants, real downtime intolerance |
+| 5. Multi-region | €600+ | Very high | Real geographic spread |

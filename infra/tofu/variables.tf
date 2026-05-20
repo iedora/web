@@ -209,9 +209,7 @@ variable "hetzner_location" {
 
 # ── Container secrets (BWS-sourced) ──────────────────────────────────────────
 # Tofu inputs that flow into the docker_container env arrays in
-# containers.tf. bin/with-secrets exports each as TF_VAR_* from its BWS
-# key. (Previously these lived in a Kamal-style .kamal/secrets file; the
-# migration to Tofu-managed containers folded them in here.)
+# containers.tf. bin/with-secrets exports each as TF_VAR_* from its BWS key.
 
 variable "infra_postgres_password" {
   description = "Postgres superuser password (shared accessory). TF_VAR_infra_postgres_password (from BWS INFRA_POSTGRES_PASSWORD)."
@@ -266,9 +264,7 @@ variable "infra_zitadel_first_admin_password" {
 }
 
 # ── Menu app secrets (consumed by docker_container.menu_web) ─────────────────
-# Menu used to run via Kamal; on 2026-05-20 it moved to a Tofu-managed
-# docker_container so the whole stack is one `tofu apply`. These vars wire
-# its runtime env from BWS through TF_VAR_*.
+# These vars wire the menu container's runtime env from BWS through TF_VAR_*.
 
 variable "menu_auth_secret" {
   description = "Better Auth signing secret for menu. TF_VAR_menu_auth_secret (from BWS MENU_AUTH_SECRET)."

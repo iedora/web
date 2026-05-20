@@ -4,7 +4,8 @@
  * Two operating modes:
  *  - Build (`SKIP_ENV_VALIDATION=1`): returns a stub Proxy so `next build`'s
  *    "collect page data" phase can evaluate server modules (lib/db, auth,
- *    storage) without real secrets. Kamal injects the real env at runtime.
+ *    storage) without real secrets. Tofu wires the real env at runtime
+ *    (docker_container.menu_web in infra/tofu/containers.tf).
  *  - Runtime: parses `process.env` with Zod and crashes loud, naming the
  *    offending keys — no buried postgres-js stack traces.
  *

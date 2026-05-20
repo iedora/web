@@ -72,9 +72,6 @@ playwright/.auth/
 **/terraform.tfvars
 # .terraform.lock.hcl SHOULD be committed — pins provider versions
 
-# Kamal — .kamal/secrets is committed (only references, no values). Real
-# secret material lives in infra/.env (gitignored above).
-
 # Backup artefacts — `make restore` and ad-hoc pg_dump leave these in cwd.
 # Database dumps are the most sensitive payload in the repo; never commit one
 # even if it lands gpg-encrypted (the file shape leaks volume + schedule).

@@ -2,7 +2,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@/shared/db/client'
 
 /**
- * Healthcheck endpoint. Used by kamal-proxy as `proxy.healthcheck.path`.
+ * Healthcheck endpoint. Hit by Caddy + uptime monitors.
  * Returns 200 only if the DB answers `SELECT 1` within 2 seconds.
  * Bypasses every cache via `force-dynamic` so the proxy poll always reaches origin.
  * No tenant tables (restaurant/menu/category/item) are touched, so the

@@ -80,7 +80,7 @@ The counter is safe to create at module load even before
 | -------------------------------- | --------------------------------------------------- |
 | `service.namespace`              | `iedora` (constant)                                 |
 | `service.name`                   | `opts.serviceName`                                  |
-| `service.version`                | `process.env.GIT_SHA` (Kamal injects on build)      |
+| `service.version`                | `process.env.GIT_SHA` (CI passes on build)          |
 | `deployment.environment.name`    | `process.env.DEPLOYMENT_ENV` ?? `NODE_ENV`          |
 | `host.name`                      | `process.env.HOST_NAME` (Tofu injects per fleet.tf) |
 
@@ -101,7 +101,7 @@ when the work is scoped to one tenant.
 | `production`  | `TraceIdRatioBasedSampler(0.1)` (10%)   | Yes              |
 | anything else | `AlwaysOnSampler` (100%)                | Yes              |
 
-Both wrap a `NoiseFilteringSampler` that drops `GET /up` (Kamal proxy
+Both wrap a `NoiseFilteringSampler` that drops `GET /up` (Caddy + uptime
 health checks) and `GET /api/track/*` (public-menu view beacon) before
 any decision is made.
 

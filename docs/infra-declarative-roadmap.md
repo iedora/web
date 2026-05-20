@@ -50,7 +50,7 @@ What we are NOT trying to do:
 **Inherently imperative (leave alone):**
 
 - Container entrypoints (`infra/backup/{backup,restore,run}.sh`) — by definition imperative; they're the *thing being run*, not infra declaration.
-- `tofu apply`, `kamal deploy`, `wrangler deploy` themselves — the *runtime step* is imperative; only the *configuration* is declarative.
+- `tofu apply`, `wrangler deploy` themselves — the *runtime step* is imperative; only the *configuration* is declarative.
 
 ---
 
@@ -114,8 +114,8 @@ locals {
   # Secrets — sourced from BWS via bws CLI in bin/with-secrets, fed in as
   # Tofu vars by the local recipe. Stays out of state in plaintext.
   github_secrets = {
-    BWS_ACCESS_TOKEN      = var.bws_access_token
-    KAMAL_SSH_PRIVATE_KEY = var.kamal_ssh_private_key
+    BWS_ACCESS_TOKEN            = var.bws_access_token
+    INFRA_KAMAL_SSH_PRIVATE_KEY = var.kamal_ssh_private_key
   }
 }
 
@@ -168,7 +168,7 @@ module "tunnel" {
   account_id      = var.account_id
   tunnel_name     = "menu"
   public_hostname = var.public_hostname
-  # Extra ingress entries (none for menu beyond the default kamal-proxy)
+  # Extra ingress entries (none for menu beyond the default Caddy upstream)
   ingress_extra   = []
 }
 
@@ -249,8 +249,6 @@ products/<newprod>/
 │   ├── bin/with-secrets                    (copy from sibling)
 │   ├── justfile                            (copy + edit)
 │   ├── Dockerfile                          (copy + edit)
-│   ├── kamal/config/deploy.yml
-│   ├── kamal/.kamal/secrets
 │   └── tofu/
 │       ├── versions.tf                     (copy verbatim — 32 dup lines)
 │       ├── variables.tf                    (copy + edit defaults)
@@ -268,7 +266,6 @@ products/<newprod>/                          (same Bun workspace)
 │   ├── .env.example                        (just BWS access + ACCOUNT_ID)
 │   ├── justfile                            (5-recipe boilerplate, mostly forwarders)
 │   ├── Dockerfile
-│   ├── kamal/config/deploy.yml
 │   └── tofu/
 │       ├── versions.tf                     (still has to exist per root)
 │       ├── variables.tf
@@ -286,7 +283,6 @@ Marginal cost drops from ~600 lines copied to ~80 lines new.
 ## What NOT to do
 
 - **Don't merge the per-product Tofu roots.** The blast-radius isolation is documented as deliberate; merging them puts every product's resources in one state file. Modules give code reuse without that cost.
-- **Don't generate `kamal/deploy.yml` from Tofu.** Both Kamal's YAML and Tofu's HCL are declarative; cross-translating between them only adds an indirection layer.
 - **Don't move CI workflow YAMLs to HCL.** GH Actions' YAML is the canonical declarative form; the `actions-yaml-from-hcl` providers I've seen are toys.
 - **Don't auto-apply Tofu from CI** (Tier 6). For a solo dev, manual `just infra::deploy` is plenty.
 - **Don't introduce Terragrunt.** OpenTofu 1.10's native `encryption {}` + module sources cover everything Terragrunt offered; the maintenance cost isn't worth the marginal feature.

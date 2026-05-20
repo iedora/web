@@ -5,8 +5,8 @@
 #     infra" lever — used after editing any `.tf` and pushing to main).
 #   - workflow_run: when Menu CI completes on main with `success`. Menu CI
 #     builds the image; this workflow re-runs `tofu apply` so the
-#     `docker_container.menu_web` resource (which used to be Kamal-managed)
-#     re-pulls the newest image tag and recreates the container.
+#     `docker_container.menu_web` resource re-pulls the newest image tag
+#     and recreates the container.
 #
 # What `just infra::deploy` does (from infra/justfile):
 #   1. tofu init -upgrade -input=false
@@ -87,7 +87,7 @@ jobs:
 
       - name: Install bws CLI
         # Pinned to bws v2.0.0 (Feb 2025, statically-linked MUSL). Same
-        # snippet used by _kamal-deploy.yml + house-deploy.yml.
+        # snippet used by menu.yml + house-deploy.yml.
         env:
           BWS_VERSION: '2.0.0'
         run: |
@@ -145,8 +145,8 @@ jobs:
       - name: Configure SSH for root@onprem
         # The kreuzwerker/docker Tofu provider talks to the Hetzner Docker
         # daemon over SSH — same key the operator uses from the laptop.
-        # `INFRA_KAMAL_SSH_PRIVATE_KEY` is the historical name (predates
-        # the Tofu migration); kept for parity with BWS.
+        # `INFRA_KAMAL_SSH_PRIVATE_KEY` is a tombstone name kept for
+        # parity with BWS; see docs/secrets.md.
         env:
           SSH_KEY: ${{ secrets.INFRA_KAMAL_SSH_PRIVATE_KEY }}
           HOST: ${{ steps.host.outputs.host }}
@@ -182,9 +182,8 @@ jobs:
         run: just deploy
 
       - name: Smoke check menu.iedora.com/up
-        # The menu container is now Tofu-managed (formerly Kamal). After
-        # apply, the public hostname should be back to 200 within a few
-        # seconds — give it 30s (6 × 5s) before failing the workflow.
+        # After apply, the public hostname should be back to 200 within a
+        # few seconds — give it 30s (6 × 5s) before failing the workflow.
         env:
           URL: https://menu.iedora.com/up
         run: |

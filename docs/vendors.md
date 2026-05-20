@@ -1,144 +1,137 @@
 # Vendor register
 
-Every external dependency in the iedora trust chain — who they are, what data they touch, how we know they handle it responsibly, when we last looked.
+Every external dependency in the iedora trust chain — who they are, what data they touch, how we know they handle it responsibly.
 
-Required artifact for SOC 2 CC9 (Vendor management). Reviewed annually at minimum, or when a vendor materially changes their service / suffers an incident / is replaced.
+Required artifact for SOC 2 CC9. Reviewed annually, or when a vendor materially changes their service / suffers an incident / is replaced.
 
-**Owner**: Eduardo (solo founder). All vendor decisions and reviews land on his plate until the team grows.
-
-**Last full review**: 2026-05-17.
+**Owner:** Eduardo (solo founder).
 
 ---
 
 ## Tier 1 — Third-party SaaS (paid + contractual)
 
-These vendors process customer data or hold the keys to it. Their compromise directly compromises us. Each must have a current SOC 2 report on file.
+Vendors that process customer data or hold the keys. Each must have a current SOC 2 report on file.
 
 ### Cloudflare
 
 | | |
 |---|---|
-| **Service** | DNS + TLS termination + Cloudflare Tunnel (menu app on the Hetzner VPS) + R2 object storage (encrypted pg_dump backups + future asset uploads) + Workers Static Assets (iedora.com). `auth.iedora.com` (Zitadel) terminates TLS via Caddy directly on the VPS — no tunnel in front. |
-| **Data they touch** | Every HTTP request and response in flight (Cloudflare terminates TLS at the edge for any hostname proxied through it). Backup data at rest (encrypted with `INFRA_BACKUP_PASSPHRASE` from BWS — Cloudflare sees ciphertext only). |
-| **SOC 2 status** | Type II — current. Available via Cloudflare Trust Hub at https://www.cloudflare.com/trust-hub/compliance-resources/ |
+| **Service** | DNS + R2 object storage (3 buckets: backups, observability, menu assets) + Workers Static Assets (iedora.com). TLS is terminated by Caddy on the VPS — Cloudflare proxies are NOT in front of `menu.iedora.com`, `auth.iedora.com`, or `obs.iedora.com` (grey-cloud A records direct to the VPS IPv4). |
+| **Data they touch** | DNS records and R2 contents. Backup data at rest is GPG-encrypted with `INFRA_BACKUP_PASSPHRASE` (CF sees ciphertext only). |
+| **SOC 2 status** | Type II — current. https://www.cloudflare.com/trust-hub/compliance-resources/ |
 | **Other compliance** | ISO 27001, ISO 27018, PCI DSS, FedRAMP Moderate |
-| **DPA** | Standard Cloudflare DPA accepted at account-setup time |
-| **What happens if they're compromised** | Attacker sees plaintext request bodies in flight (auth headers, OAuth codes, webhook payloads) for hostnames Cloudflare proxies. Mitigated by: short-lived OAuth tokens, PKCE, refresh-token replay detection. Encrypted backups stay encrypted at rest. |
-| **Rotation / exit plan** | Workload tokens rotate via `tofu apply -replace=<resource>`. Switching providers means re-pointing DNS, replacing the tunnel with direct exposure (the VPS has public IPv4), migrating R2 → another S3-compatible store. Estimated 1-2 day project. |
-| **Last reviewed** | 2026-05-19 |
+| **DPA** | Standard CF DPA accepted at account-setup |
+| **Compromise impact** | DNS records modifiable. R2 contents accessible — but backups stay encrypted at rest. No TLS-in-flight exposure (no CF proxy). |
+| **Rotation / exit plan** | Workload tokens via `tofu apply -replace=<resource>`. Switching providers means re-pointing DNS + migrating R2 → another S3-compatible store. ~1-2 day project. |
 
 ### GitHub
 
 | | |
 |---|---|
-| **Service** | Source code (private repos), GitHub Container Registry (production container images), GitHub Actions (CI) |
-| **Data they touch** | Source code (no customer data in code). Container images we push. CI run logs (no customer data). |
-| **SOC 2 status** | ✅ Type II — current. Available via GitHub Trust Center at https://github.com/security |
+| **Service** | Source code (private), GitHub Container Registry, GitHub Actions (CI) |
+| **Data they touch** | Source code (no customer data in code), container images, CI run logs |
+| **SOC 2 status** | Type II — current. https://github.com/security |
 | **Other compliance** | ISO 27001/17/18, FedRAMP, PCI DSS |
-| **DPA** | Microsoft / GitHub Customer Agreement (covers all repos under the personal account) |
-| **What happens if they're compromised** | Attacker gets source code (already designed to be public-safe — no secrets in repo, BWS holds all credentials), container images (signed; integrity verifiable on pull). They can't deploy without `KAMAL_REGISTRY_PASSWORD` which is a separate token in BWS. |
-| **Rotation / exit plan** | The `KAMAL_REGISTRY_PASSWORD` rotates via the GitHub UI + BWS update (5 min). Switching to GitLab / Gitea is a multi-week project (CI rewrite + image-registry migration). |
-| **Last reviewed** | 2026-05-17 |
+| **DPA** | Microsoft / GitHub Customer Agreement |
+| **Compromise impact** | Source code (designed to be public-safe — BWS holds all credentials), container images (signed; integrity verifiable). They can't deploy without `INFRA_GHCR_TOKEN` (a separate token in BWS). |
+| **Rotation / exit plan** | Rotate `INFRA_GHCR_TOKEN` via GH UI + BWS update (5 min). Switch to GitLab / Gitea is a multi-week project. |
 
 ### Bitwarden Secrets Manager (BWS)
 
 | | |
 |---|---|
-| **Service** | Production secret storage in project `iedora-deploy` (keys prefixed by ownership: `INFRA_*` for tofu/Cloudflare/Postgres/backups/GHCR; `MENU_*` for menu's session and OAuth secrets). |
-| **Data they touch** | Plaintext secrets at rest (encrypted with Bitwarden's KMS). Access tokens we generate for the deploy machine. |
-| **SOC 2 status** | Type II — current. Available via https://bitwarden.com/help/bitwarden-security-white-paper/ + SOC 2 report on request |
+| **Service** | Production secret storage in project `iedora-deploy` |
+| **Data they touch** | Plaintext secrets at rest (encrypted with Bitwarden's KMS); access tokens we generate |
+| **SOC 2 status** | Type II — current. https://bitwarden.com/help/bitwarden-security-white-paper/ |
 | **Other compliance** | ISO 27001, GDPR, HIPAA, SOC 3 (public) |
-| **DPA** | Bitwarden DPA accepted at account-setup time |
-| **What happens if they're compromised** | Attacker who steals the BWS access token AND project ID gets every production secret. The token is on **one** developer laptop (FileVault-encrypted) and is the single highest-value credential in the iedora system. Mitigated by: short access-token lifetime (rotate quarterly), FileVault on the laptop, Bitwarden's own audit logs. |
-| **Rotation / exit plan** | Access token rotated via Bitwarden UI → BWS_ACCESS_TOKEN updated in each workspace's local `.env`. Per-secret rotation via `just <workspace>::rotate-secret <KEY>` (any of `infra::`, `menu::`). Switching providers (HashiCorp Vault, AWS Secrets Manager, age-encrypted file in repo) is a 1-day project — secrets are few and named. |
-| **Last reviewed** | 2026-05-19 |
+| **DPA** | Bitwarden DPA accepted |
+| **Compromise impact** | Attacker who steals the BWS access token + project ID gets every production secret. Token is on **one** FileVault-encrypted dev laptop. |
+| **Rotation / exit plan** | Access token via Bitwarden UI → update `infra/.env`. Per-secret via `just infra::rotate-secret <KEY>`. Switching providers (Vault, AWS Secrets Manager, age-encrypted file) is a 1-day project. |
 
 ---
 
 ## Tier 2 — Infrastructure foundation
 
-### Hetzner Cloud (VPS)
+### Hetzner Cloud
 
 | | |
 |---|---|
-| **Service** | Single CAX11 VPS (Falkenstein, public IPv4) running Docker + every iedora container (menu, zitadel, postgres, openobserve, caddy, cloudflared, backups). |
-| **Data they touch** | All production data at rest (Postgres data directory mounted on the box). Backup tarballs (encrypted before R2 upload). |
-| **SOC 2 status** | n/a — Hetzner is ISO 27001 certified but does not publish a SOC 2 report. Compensating controls: SSH key-only auth (no password login), `ufw` allowlist on the public IPv4 (only 22 + 443 + Cloudflare-Tunnel-managed outbound), Caddy auto-TLS for `auth.iedora.com`. |
-| **What happens if it's compromised** | Plaintext DB access. Mitigated by: SSH key-only login, public-port allowlist, daily encrypted backups to R2 (recovery point ≤ 24h), `just infra::restore` to a fresh box. Webhook secrets (encrypted at rest — see security audit #27) stay safe unless the attacker also has `MENU_AUTH_SECRET`. |
-| **Rotation / exit plan** | Restore on a different host is a ~30-min runbook: stand up new VPS, install Docker, paste BWS token, `just infra::deploy && just infra::restore && just menu::deploy`. Switching cloud (DigitalOcean / OVH) is the same runbook — `ONPREM_HOST` is just an env value. |
-| **Last reviewed** | 2026-05-19 |
+| **Service** | Single CPX22 VPS (Falkenstein, public IPv4) running Docker + every iedora container |
+| **Data they touch** | All production data at rest (Postgres data dir on the box). Backup tarballs encrypted before R2 upload |
+| **SOC 2 status** | n/a — ISO 27001 certified, no public SOC 2. Compensating controls: SSH key-only auth, `ufw` allowlist (22 + 443 only), Caddy auto-TLS |
+| **Compromise impact** | Plaintext DB access. Mitigated by SSH key-only login, port allowlist, daily encrypted backups to R2 (RPO ≤ 24h), `just infra::restore` to a fresh box |
+| **Rotation / exit plan** | Restore on different host: stand up new VPS, install Docker, paste BWS token, `just infra::deploy && just infra::restore`. Switching cloud (DigitalOcean / OVH) is the same runbook — `INFRA_HCLOUD_TOKEN` swaps with the provider's |
 
 ---
 
 ## Tier 3 — Code dependencies (subprocessors in the SOC 2 sense)
 
-These don't operate a service — they're OSS we run on customer data. Trust decision is based on community maintenance + audit history + a documented monitoring posture (we watch their CVE feeds).
+OSS we run on customer data. Trust based on community maintenance + audit history + CVE-feed monitoring.
+
+### Zitadel
+
+| | |
+|---|---|
+| **What we use** | Self-hosted IdP at `auth.iedora.com`. Owns user / org / OAuth-client tables in the `zitadel` Postgres database. Menu cutover queued (issue #20) |
+| **License** | Apache 2.0 |
+| **Maintainer** | ZITADEL (Swiss company, commercial backing) |
+| **Known CVEs** | None tracked at time of review |
+| **Monitoring** | GitHub Advisory Database + ZITADEL security advisories |
+| **Replacement** | Keycloak, Authentik. Replacement requires re-pointing OIDC clients in every consumer — multi-day project |
 
 ### Better Auth
 
 | | |
 |---|---|
-| **What we use it for** | Menu's local session layer (user/session/account). The federated IdP role previously held by genkan (Better Auth + OAuth provider) has been retired; identity moves to Zitadel under issue #19. |
+| **What we use** | Menu's local session layer (user/session/account). Slated for removal once Zitadel cutover lands (issue #20) |
 | **License** | MIT |
-| **Maintainer** | Bekacru — sole maintainer at landing time; project picked up by WorkOS in 2025 with active contributions. |
-| **Known CVEs we track** | [CVE-2026-45364](https://www.cvedetails.com/product/177298/Better-auth-Better-Auth.html) (IPv6 rate-limit bypass — mitigated via `ipv6Subnet:64`), [GHSA-wxw3-q3m9-c3jr](https://github.com/advisories) (OAuth state mismatch w/o PKCE — mitigated via `require_pkce:true`). Both documented in `docs/security-audit.md`. |
-| **Monitoring** | GitHub Advisory Database subscription on `better-auth` + manual review of release notes for every minor bump |
-| **Replacement** | Auth.js / NextAuth, or — once Zitadel becomes the IdP — drop Better Auth from menu entirely and use plain OIDC session cookies. |
-| **Last reviewed** | 2026-05-19 |
+| **Maintainer** | Bekacru / WorkOS (active contributions) |
+| **Known CVEs** | [CVE-2026-45364](https://www.cvedetails.com/product/177298/Better-auth-Better-Auth.html) (IPv6 rate-limit bypass — mitigated), [GHSA-wxw3-q3m9-c3jr](https://github.com/advisories) (OAuth state mismatch w/o PKCE — mitigated). See `docs/security-audit.md` |
+| **Monitoring** | GitHub Advisory Database + manual release-note review on every minor bump |
+| **Replacement** | Once Zitadel becomes the IdP, drop Better Auth entirely and use plain OIDC session cookies |
 
 ### Drizzle ORM
 
 | | |
 |---|---|
-| **What we use it for** | Every DB query in menu. Schema definition, migrations, type-safe queries. |
+| **What we use** | Every DB query in menu. Schema, migrations, type-safe queries |
 | **License** | Apache 2.0 |
 | **Maintainer** | drizzle-team (commercial backing) |
-| **Known CVEs** | None tracked at time of review |
-| **Monitoring** | GitHub Advisory Database |
-| **Replacement** | Kysely or raw SQL via `postgres-js`. Replacement is a 1-2 week refactor; queries are written explicitly, not generated. |
-| **Last reviewed** | 2026-05-17 |
+| **Known CVEs** | None tracked |
+| **Replacement** | Kysely or raw SQL via `postgres-js`. ~1-2 week refactor — queries are written explicitly |
 
 ### postgres-js (`postgres`)
 
 | | |
 |---|---|
-| **What we use it for** | The Postgres driver Drizzle sits on top of. Direct usage in `migrate.mjs`, `encrypt-webhook-secrets.mjs`, `backfill-audit-chain.mjs`. |
+| **What we use** | Postgres driver under Drizzle |
 | **License** | The Unlicense |
-| **Maintainer** | porsager (Rasmus Porsager) |
-| **Known CVEs** | None tracked at time of review |
-| **Monitoring** | GitHub Advisory Database |
-| **Replacement** | `node-postgres` (`pg`). Drop-in for Drizzle; the migration scripts would need minor API surface updates. 1-day project. |
-| **Last reviewed** | 2026-05-17 |
+| **Maintainer** | porsager |
+| **Known CVEs** | None tracked |
+| **Replacement** | `node-postgres` (`pg`). Drop-in for Drizzle. ~1-day project |
 
 ### Next.js
 
 | | |
 |---|---|
-| **What we use it for** | App framework for menu. Routing, rendering, server actions, middleware (proxy). |
+| **What we use** | App framework for menu |
 | **License** | MIT |
 | **Maintainer** | Vercel |
-| **Known CVEs** | Regularly patched; we run 16.x and watch for upstream advisories. |
-| **Monitoring** | GitHub Advisory Database + Vercel's security mailing list |
-| **Replacement** | Not realistic — Next is the framework choice. Future products could pick alternatives (Remix, SolidStart). |
-| **Last reviewed** | 2026-05-17 |
+| **Known CVEs** | Regularly patched; we run 16.x and watch upstream |
+| **Monitoring** | GitHub Advisory Database + Vercel security list |
 
 ### React
 
 | | |
 |---|---|
-| **What we use it for** | All UI. |
+| **What we use** | All UI |
 | **License** | MIT |
 | **Maintainer** | Meta |
-| **Known CVEs** | None tracked at time of review |
-| **Monitoring** | GitHub Advisory Database |
-| **Last reviewed** | 2026-05-17 |
+| **Known CVEs** | None tracked |
 
 ### @iedora/* workspace packages
 
-| | |
-|---|---|
-| **What we use** | Internal — `@iedora/design-system`, `@iedora/identity`, `@iedora/observability`. |
-| **Trust model** | First-party; same review process as application code. Listed here for completeness so an auditor reading this doc can trace every import. |
+First-party. Same review process as application code. Listed for completeness so an auditor can trace every import.
 
 ---
 
@@ -146,42 +139,34 @@ These don't operate a service — they're OSS we run on customer data. Trust dec
 
 **Annually** (or sooner on incident):
 
-1. Walk this register top to bottom. For each vendor:
-   - Confirm the SOC 2 report is current (Tier 1)
-   - Read their security advisories index since last review (all tiers)
-   - Verify no breaking changes that affect our integration
-   - Update "Last reviewed" date
-
-2. Cross-reference against `docs/security-audit.md` — any new vendor or service surface added since the last vendor review needs an entry here.
-
-3. Commit the diff. The git log is the audit trail of "we reviewed our vendors on this date".
+1. Walk this register top to bottom. For each vendor: confirm SOC 2 (Tier 1), read security advisories since last review, verify no breaking changes affecting our integration.
+2. Cross-reference against `docs/security-audit.md` — any new vendor needs an entry here.
+3. Commit the diff. Git log = audit trail.
 
 **On incident** (any vendor breach, even one we don't directly use):
 
-1. Read the disclosure
-2. Check if any of our keys / data / configs were in scope
-3. Rotate the relevant credential if there's any doubt (`just menu::rotate-secret` or `just infra::rotate-secret`)
-4. Add an inline note under the relevant entry above + commit
-5. If the vendor was Tier 1 and the breach was material, decide whether to migrate away
+1. Read the disclosure.
+2. Check if any of our keys / data / configs were in scope.
+3. Rotate the relevant credential if there's any doubt.
+4. Add an inline note under the relevant entry + commit.
+5. If Tier 1 and breach was material, decide whether to migrate.
 
 ## Adding a new vendor
 
-Before adopting a new third-party service:
+Before adopting a new third-party:
 
-1. **Tier 1 check**: do they have a current SOC 2 Type II? If they touch customer data and don't, find an alternative.
-2. **Single-purpose principle**: each vendor should do one thing. Don't pick a vendor because it offers many things — pick because it does the specific thing well.
-3. **Exit cost**: can we leave in under a week if they double their prices / get bought by someone we don't trust / shut down?
-4. **Add an entry here** before the first production call. The entry IS the procurement decision record.
+1. **Tier 1 check**: current SOC 2 Type II? If touching customer data without one, find an alternative.
+2. **Single-purpose principle**: each vendor does one thing.
+3. **Exit cost**: can we leave in under a week?
+4. **Add an entry here** before the first production call.
 
-## What we deliberately don't use (and why)
-
-For each capability where we picked the in-house / OSS path over a SaaS:
+## What we deliberately don't use
 
 | Capability | What we don't use | What we do instead | Why |
 |---|---|---|---|
-| Identity | Auth0, Clerk, WorkOS, Stytch | Zitadel (self-hosted on the same Hetzner VPS; previously Better-Auth-based genkan) | Cost (hundreds of $/mo at small scale) + we wanted full control of the auth surface for the iedora estate |
-| Observability | Datadog, Sentry, Honeycomb | Docker logs + `just menu::logs` | Single-operator; alerting is the operator's eyes. Will add Better Stack or similar when the operator can no longer keep up. |
-| CI | CircleCI, Buildkite, GitLab CI | GitHub Actions | Already inside the GitHub trust boundary |
-| Background jobs | Inngest, Trigger.dev | In-process `setInterval` (JWKS rotation) + database advisory locks | Cron-like work today is rare and small; reach for a real scheduler when that changes |
-| Email | Resend, Postmark, SendGrid | (none yet — no transactional email today) | Add when the IdP needs to send password reset / invitation / verification emails. Resend is the likely default given its low-overhead DX. |
-| Error tracking | Sentry, Bugsnag | Stderr to docker logs | Same reason as observability. Sentry is the likely default when it's added. |
+| Identity | Auth0, Clerk, WorkOS, Stytch | Zitadel (self-hosted) | Cost + full control of auth surface |
+| Observability | Datadog, Sentry, Honeycomb | OpenObserve (self-hosted) + OTel | Single-operator; alerting is operator's eyes |
+| CI | CircleCI, Buildkite | GitHub Actions | Already inside GitHub trust boundary |
+| Background jobs | Inngest, Trigger.dev | In-process intervals + DB advisory locks | Cron-like work is rare and small |
+| Email | Resend, Postmark, SendGrid | (none yet) | Add when IdP needs password reset / invitation emails |
+| Error tracking | Sentry, Bugsnag | Stderr → docker logs | Same as observability. Sentry likely default when needed |

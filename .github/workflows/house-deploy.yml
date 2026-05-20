@@ -1,11 +1,10 @@
 # House CD — Astro static build → Cloudflare Workers Static Assets.
 #
-# Token flow follows the same pattern as menu / genkan kamal secrets: the
-# narrow workload token is minted by Tofu locally (via `just house::deploy`
-# or `just house::rotate-token`), written through to BWS as
-# INFRA_HOUSE_WORKERS_TOKEN, and read here via `bws secret list`. Tofu
-# stays out of CI entirely — house CI does Astro build + wrangler upload
-# and nothing else.
+# Token flow: the narrow workload token is minted by Tofu locally (via
+# `just house::deploy` or `just house::rotate-token`), written through to
+# BWS as INFRA_HOUSE_WORKERS_TOKEN, and read here via `bws secret list`.
+# Tofu stays out of CI entirely — house CI does Astro build + wrangler
+# upload and nothing else.
 #
 # First-time bootstrap: run `just house::deploy` once from a laptop. That
 # mints the token AND populates the BWS entry; CI works on every push
