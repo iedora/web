@@ -53,9 +53,18 @@ resource "random_password" "openobserve_password" {
 # Idempotent: if the secret exists, edit; else create. The bws CLI
 # inherits BWS_ACCESS_TOKEN from the wrapping `bin/with-secrets` call.
 #
-# Triggers on a sha256 of the value, not the value itself, so the
-# diff stays out of plan output. Value flows via env var to keep it
-# off the command line (avoids ps + history disclosure).
+# No Bitwarden-Secrets-Manager provider exists in the OpenTofu registry
+# (checked 2026-05-20 — only `maxlaverse/bitwarden` for the password
+# vault, no SM resource). `terraform_data` + local-exec is the
+# documented escape hatch when no provider exists. `terraform_data`
+# replaces the older `null_resource` pattern as of Tofu 1.4+ — same
+# semantics, but `triggers_replace` is typed (any) and the resource is
+# built into the terraform.io namespace, no extra provider needed.
+#
+# `triggers_replace` is set to a sha256 of the value so the diff in
+# `tofu plan` shows "replaced because triggers_replace changed" without
+# leaking the secret itself. Value is piped through an env var to keep
+# it off the command line (avoids `ps` + shell-history disclosure).
 
 locals {
   autogen_lookup = {
@@ -67,13 +76,10 @@ locals {
   }
 }
 
-resource "null_resource" "bws_sync_autogen" {
+resource "terraform_data" "bws_sync_autogen" {
   for_each = toset(keys(local.autogen_lookup))
 
-  triggers = {
-    # sha256 over the value detects rotation without leaking it.
-    hash = sha256(local.autogen_lookup[each.key])
-  }
+  triggers_replace = sha256(local.autogen_lookup[each.key])
 
   provisioner "local-exec" {
     environment = {
