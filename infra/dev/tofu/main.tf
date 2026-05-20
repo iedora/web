@@ -82,21 +82,21 @@ variable "zitadel_masterkey" {
 
 # ── Shared network + volumes ────────────────────────────────────────────────
 
-resource "docker_network" "dev" {
-  name   = "dev"
+resource "docker_network" "iedora" {
+  name   = "iedora"
   driver = "bridge"
 }
 
 resource "docker_volume" "postgres_data" {
-  name = "dev_postgres_data"
+  name = "postgres-data"
 }
 
 resource "docker_volume" "localstack_data" {
-  name = "dev_localstack_data"
+  name = "localstack-data"
 }
 
 resource "docker_volume" "openobserve_data" {
-  name = "dev_openobserve_data"
+  name = "openobserve-data"
 }
 
 # Zitadel bootstrap volume holds the FirstInstance-minted PATs.
@@ -122,7 +122,7 @@ module "postgres" {
   count  = var.enable_postgres ? 1 : 0
   source = "../../modules/services/postgres"
 
-  network_name      = docker_network.dev.name
+  network_name      = docker_network.iedora.name
   postgres_password = "postgres"
   data_path         = docker_volume.postgres_data.name
   expose_host_port  = 5432
@@ -135,7 +135,7 @@ module "localstack" {
   count  = var.enable_localstack ? 1 : 0
   source = "../../modules/services/localstack"
 
-  network_name     = docker_network.dev.name
+  network_name     = docker_network.iedora.name
   data_volume_name = docker_volume.localstack_data.name
   init_script      = <<-EOT
     #!/usr/bin/env bash
@@ -151,7 +151,7 @@ module "openobserve" {
   count  = var.enable_openobserve ? 1 : 0
   source = "../../modules/services/openobserve"
 
-  network_name       = docker_network.dev.name
+  network_name       = docker_network.iedora.name
   data_path          = docker_volume.openobserve_data.name
   root_user_email    = "dev@iedora.local"
   root_user_password = "dev-password"
@@ -175,7 +175,7 @@ module "zitadel" {
   count  = var.enable_zitadel ? 1 : 0
   source = "../../modules/services/zitadel"
 
-  network_name      = docker_network.dev.name
+  network_name      = docker_network.iedora.name
   masterkey         = var.zitadel_masterkey
   external_domain   = "localhost"
   external_port     = 8080
@@ -197,7 +197,7 @@ module "zitadel_login" {
   count  = var.enable_zitadel ? 1 : 0
   source = "../../modules/services/zitadel-login"
 
-  network_name   = docker_network.dev.name
+  network_name   = docker_network.iedora.name
   api_url        = "http://localhost:8080"
   bootstrap_path = local.bootstrap_host_path
   host_entries = [
@@ -223,7 +223,7 @@ module "house" {
   count  = var.enable_house ? 1 : 0
   source = "../../modules/services/house"
 
-  network_name     = docker_network.dev.name
+  network_name     = docker_network.iedora.name
   image_id         = docker_image.house[0].image_id
   expose_host_port = 3002
 }

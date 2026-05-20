@@ -44,8 +44,8 @@ dev *ARGS:
 dev-down:
     -cd infra/dev/tofu && tofu destroy -auto-approve -var zitadel_pat="" 2>/dev/null
     -docker ps -aq --filter "name=infra-" | xargs -r docker rm -f
-    -docker network rm dev 2>/dev/null
-    -docker volume ls -q --filter "name=dev_" | xargs -r docker volume rm
+    -docker network rm iedora 2>/dev/null
+    -docker volume rm postgres-data localstack-data openobserve-data 2>/dev/null
     rm -rf infra/dev/.zitadel-bootstrap
     rm -rf infra/dev/tofu/.terraform infra/dev/tofu/.terraform.lock.hcl infra/dev/tofu/terraform.tfstate*
     rm -f products/menu/.env.local

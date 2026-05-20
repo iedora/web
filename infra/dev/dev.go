@@ -174,7 +174,7 @@ func main() {
 	// previous failed runs from tripping the apply.
 	applyArgs := []string{
 		"apply", "-auto-approve", "-input=false",
-		"-target=docker_network.dev",
+		"-target=docker_network.iedora",
 		"-target=docker_volume.postgres_data",
 		"-target=docker_volume.localstack_data",
 		"-target=docker_volume.openobserve_data",
