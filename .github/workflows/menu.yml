@@ -35,14 +35,6 @@ on:
       - 'tsconfig*.json'
       - '.github/workflows/menu.yml'
       - '.github/actions/setup/**'
-  # Manual lever for "I want to rebuild + push the image without any
-  # source change" (e.g. base-image bump, dep-only rotation, CD smoke
-  # test). Without this trigger the only way to re-run the workflow is
-  # to touch a path-filtered file — pure noise in git history.
-  # Pairs with infra-deploy.yml's own workflow_dispatch (which re-rolls
-  # the existing GHCR SHA without rebuilding) — together they cover the
-  # full "rebuild" / "redeploy" lever space.
-  workflow_dispatch:
   pull_request:
     branches: [main]
     paths:
