@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "go run scripts/dev.go",
+    "dev": "go run ../../infra/dev/dev.go",
     "dev:fast": "bun run scripts/check-migrations.ts && next dev",
     "build": "next build",
     "start": "next start",

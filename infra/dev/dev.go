@@ -48,13 +48,13 @@ const (
 
 func main() {
 	// Locate the repo root: this file is at
-	//   <repo>/products/menu/scripts/dev.go
-	// → repo root is three levels up from `runtime.Caller`'s file.
+	//   <repo>/infra/dev/dev.go
+	// → repo root is two levels up from `runtime.Caller`'s file.
 	_, thisFile, _, ok := runtime.Caller(0)
 	if !ok {
 		fail("runtime.Caller failed")
 	}
-	repoRoot := filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(thisFile))))
+	repoRoot := filepath.Dir(filepath.Dir(filepath.Dir(thisFile)))
 
 	step(1, "docker compose up -d --wait  ("+devInfraDir+")")
 	runIn(filepath.Join(repoRoot, devInfraDir), "docker", "compose", "up", "-d", "--wait")

@@ -26,3 +26,21 @@ mod house 'products/house/infra'
 [private]
 _default:
     @just --list
+
+# Start the full menu dev stack: docker compose (postgres + localstack +
+# zitadel) → tofu seed → drizzle migrate → next dev. Equivalent to
+# `cd products/menu && bun run dev`. Lives at the root because the dev
+# infra is transversal across products — `infra/dev/dev.go` is the
+# orchestrator.
+[doc("boot the full menu dev stack")]
+dev:
+    @go run infra/dev/dev.go
+
+# Tear the dev stack down + wipe its volumes. Use before a clean
+# re-bootstrap when you want fresh PATs / fresh Zitadel DB.
+[doc("wipe the dev stack (volumes + bootstrap PATs + .env.local)")]
+dev-down:
+    docker compose -f infra/dev/docker-compose.yml down -v
+    rm -rf infra/dev/.zitadel-bootstrap
+    rm -rf infra/dev/tofu/.terraform infra/dev/tofu/.terraform.lock.hcl infra/dev/tofu/terraform.tfstate*
+    rm -f products/menu/.env.local
