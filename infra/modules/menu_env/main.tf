@@ -19,7 +19,7 @@
 #   4. Update `src/shared/env.ts` Zod schema.
 
 terraform {
-  required_version = "~> 1.15"
+  required_version = "~> 1.12"
   # No required_providers — module emits only `local` map / list / string
   # outputs, no resources of its own.
 }

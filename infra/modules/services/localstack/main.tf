@@ -6,7 +6,7 @@
 # the bucket lives in real R2 (cloudflare_r2_bucket resources).
 
 terraform {
-  required_version = "~> 1.15"
+  required_version = "~> 1.12"
   required_providers {
     docker = {
       source  = "kreuzwerker/docker"

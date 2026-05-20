@@ -18,7 +18,7 @@
 # gitignored). Throwaway — `just dev-down` wipes it.
 
 terraform {
-  required_version = "~> 1.15"
+  required_version = "~> 1.12"
   required_providers {
     docker = {
       source  = "kreuzwerker/docker"
