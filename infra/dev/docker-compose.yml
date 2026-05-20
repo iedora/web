@@ -136,6 +136,31 @@ services:
       postgres:
         condition: service_healthy
 
+  # OpenObserve — local OTLP collector + UI. Mirrors prod's
+  # `infra-openobserve` container with the R2 cold tier stripped
+  # (`ZO_LOCAL_MODE=true` keeps everything on local disk — no S3 setup
+  # to mock). Same ports as prod: 5080 HTTP UI + OTLP-HTTP receiver.
+  # Menu's `OTEL_EXPORTER_OTLP_ENDPOINT` in `.env.local` points at it
+  # (`http://localhost:5080/api/default`).
+  openobserve:
+    image: public.ecr.aws/zinclabs/openobserve:v0.80.3
+    restart: unless-stopped
+    environment:
+      ZO_LOCAL_MODE: "true"
+      ZO_DATA_DIR: /data
+      ZO_HTTP_PORT: "5080"
+      ZO_GRPC_PORT: "5081"
+      ZO_ROOT_USER_EMAIL: dev@iedora.local
+      ZO_ROOT_USER_PASSWORD: dev-password
+    ports:
+      - "5080:5080"
+    volumes:
+      - openobserve_data:/data
+    # No healthcheck — the openobserve image is distroless (no sh / wget /
+    # curl), and our compose has nothing depending on it, so `--wait`
+    # falling through to "container running" is fine. /healthz is still
+    # reachable from the host for ad-hoc probes if needed.
+
   zitadel-login:
     image: ghcr.io/zitadel/zitadel-login:v4.15.0
     restart: unless-stopped
@@ -164,3 +189,4 @@ services:
 volumes:
   postgres_data:
   localstack_data:
+  openobserve_data:

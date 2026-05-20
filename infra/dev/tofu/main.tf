@@ -163,11 +163,11 @@ resource "local_file" "env" {
     S3_SECRET_KEY=test
     S3_BUCKET=menu
 
-    # Observability — off in dev. Set OTEL_EXPORTER_OTLP_ENDPOINT to
-    # http://localhost:5080/api/default + run a local OpenObserve if you
-    # want spans / metrics during dev.
-    OTEL_EXPORTER_OTLP_ENDPOINT=
-    OTEL_EXPORTER_OTLP_HEADERS=
+    # Observability — local OpenObserve compose service. Spans + metrics
+    # ship to it via OTLP HTTP, surfaced at http://localhost:5080.
+    # Login: dev@iedora.local / dev-password (matches the compose env).
+    OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5080/api/default
+    OTEL_EXPORTER_OTLP_HEADERS=Authorization=Basic%20${base64encode("dev@iedora.local:dev-password")}
     GIT_SHA=
     HOST_NAME=
   EOT
