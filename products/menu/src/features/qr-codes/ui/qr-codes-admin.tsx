@@ -1,8 +1,10 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import Link from 'next/link'
 import {
   Button,
+  Combobox,
   Field,
   FieldInput,
   FieldLabel,
@@ -16,6 +18,7 @@ import {
   CardDesc,
   Badge,
   Separator,
+  type ComboboxOption,
 } from '@iedora/design-system'
 import { Histogram, Stat, StatsPanel } from '@/shared/ui/admin-stats'
 import {
@@ -29,6 +32,11 @@ import type { QrCodeListRow } from '../ports'
 import type { QrStats } from '../stats'
 
 type RestaurantOption = { id: string; name: string; slug: string }
+
+/** Project a restaurant list into ds Combobox options (label = name, hint = slug). */
+function restaurantOptions(rs: ReadonlyArray<RestaurantOption>): ComboboxOption[] {
+  return rs.map((r) => ({ value: r.id, label: r.name, hint: r.slug }))
+}
 
 /**
  * Admin surface — three things on one page:
@@ -206,26 +214,15 @@ function CreateOneForm({ restaurants }: { restaurants: RestaurantOption[] }) {
 
         <Field>
           <FieldLabel htmlFor="qr-restaurant">Bind to restaurant</FieldLabel>
-          <div className="relative w-full">
-            <select
-              id="qr-restaurant"
-              value={restaurantId}
-              onChange={(e) => setRestaurantId(e.target.value)}
-              className="w-full pr-8 appearance-none bg-transparent border-0 border-b border-[var(--ink-22)] py-3 font-[family-name:var(--serif)] text-[18px] text-[var(--ink)] outline-none transition-colors duration-200 focus:border-[var(--ink)]"
-            >
-              <option value="" className="bg-[var(--paper)]">— unbound —</option>
-              {restaurants.map((r) => (
-                <option key={r.id} value={r.id} className="bg-[var(--paper)]">
-                  {r.name} ({r.slug})
-                </option>
-              ))}
-            </select>
-            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-1 text-[var(--ink-55)]">
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 9l-7 7-7-7" />
-              </svg>
-            </div>
-          </div>
+          <Combobox
+            id="qr-restaurant"
+            options={restaurantOptions(restaurants)}
+            value={restaurantId || null}
+            onChange={(v) => setRestaurantId(v ?? '')}
+            placeholder="— unbound —"
+            searchPlaceholder="Search restaurants…"
+            emptyMessage="No restaurants match."
+          />
         </Field>
 
         <Field>
@@ -362,13 +359,13 @@ function CodesTable({
         <p className="text-sm text-[var(--ink-55)]">No codes yet.</p>
       ) : (
         <div className="overflow-x-auto border border-[var(--ink-14)]">
-          <Table className="min-w-full">
+          <Table className="min-w-[760px]">
             <thead>
               <tr>
-                <Th className="w-[15%]">Code</Th>
-                <Th className="w-[30%]">Direct URL</Th>
-                <Th className="w-[30%]">Bound To</Th>
-                <Th className="w-[15%]">Label</Th>
+                <Th className="w-[12%]">Code</Th>
+                <Th className="w-[36%]">URL</Th>
+                <Th className="w-[28%]">Bound to</Th>
+                <Th className="w-[14%]">Label</Th>
                 <Th className="w-[10%] text-right">Actions</Th>
               </tr>
             </thead>
@@ -400,10 +397,16 @@ function CodeRow({
 }) {
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
-  const publicUrl = `${publicOrigin}/q/${row.code}`
+  // Sticker URL — what is printed on the QR. Canonical entry-point for
+  // scanners (no redirect; the page renders directly at /q/[code]).
+  const stickerUrl = `${publicOrigin}/q/${row.code}`
+  // Branded URL — vanity / marketing alias. Only relevant once a code
+  // is bound; an unbound code has no slug to show.
+  const brandedUrl = row.restaurant
+    ? `${publicOrigin}/r/${row.restaurant.slug}`
+    : null
 
-  function onBindChange(e: React.ChangeEvent<HTMLSelectElement>) {
-    const next = e.target.value
+  function onBindChange(next: string | null) {
     setError(null)
     startTransition(async () => {
       const res = next
@@ -428,36 +431,42 @@ function CodeRow({
         <span className="font-mono text-xs text-[var(--ink)]">{row.code}</span>
       </Td>
       <Td>
-        <a
-          href={publicUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="font-mono text-xs text-[var(--ink-55)] hover:text-[var(--cinnabar)] hover:underline inline-flex items-center gap-1 transition-colors"
-        >
-          <span>{publicUrl.replace(/^https?:\/\//, '')}</span>
-          <span className="text-[10px] text-[var(--cinnabar)]">↗</span>
-        </a>
+        <div className="flex flex-col gap-1">
+          <Link
+            href={`/q/${row.code}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Printed on the QR sticker"
+            className="font-mono text-xs text-[var(--ink)] hover:text-[var(--cinnabar)] hover:underline inline-flex items-center gap-1 transition-colors"
+          >
+            <span className="truncate">{stickerUrl.replace(/^https?:\/\//, '')}</span>
+            <span className="text-[10px] text-[var(--cinnabar)]">↗</span>
+          </Link>
+          {brandedUrl && row.restaurant && (
+            <Link
+              href={`/r/${row.restaurant.slug}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Vanity URL for marketing / Instagram bio"
+              className="font-mono text-[10px] text-[var(--ink-40)] hover:text-[var(--ink-55)] hover:underline inline-flex items-center gap-1 transition-colors"
+            >
+              <span className="font-[family-name:var(--mono)] uppercase tracking-[0.18em]">alias</span>
+              <span className="truncate">{brandedUrl.replace(/^https?:\/\//, '')}</span>
+            </Link>
+          )}
+        </div>
       </Td>
       <Td>
-        <div className="relative inline-block w-full max-w-[220px]">
-          <select
-            value={row.restaurantId ?? ''}
+        <div className="w-full max-w-[240px]">
+          <Combobox
+            options={restaurantOptions(restaurants)}
+            value={row.restaurantId ?? null}
             onChange={onBindChange}
             disabled={pending}
-            className="w-full pr-6 appearance-none bg-transparent border-b border-[var(--ink-14)] focus:border-[var(--ink)] py-1 font-[family-name:var(--serif)] text-[15px] text-[var(--ink)] outline-none transition-colors duration-200 disabled:opacity-50"
-          >
-            <option value="" className="bg-[var(--paper)]">— unbound —</option>
-            {restaurants.map((r) => (
-              <option key={r.id} value={r.id} className="bg-[var(--paper)]">
-                {r.name}
-              </option>
-            ))}
-          </select>
-          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center text-[var(--ink-40)]">
-            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 9l-7 7-7-7" />
-            </svg>
-          </div>
+            placeholder="— unbound —"
+            searchPlaceholder="Search restaurants…"
+            emptyMessage="No matches."
+          />
         </div>
         {error && <p className="mt-1 text-xs text-[var(--cinnabar)]">{error}</p>}
       </Td>
