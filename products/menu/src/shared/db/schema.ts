@@ -1,4 +1,4 @@
-import { relations } from 'drizzle-orm'
+import { relations, sql } from 'drizzle-orm'
 import {
   pgSchema,
   primaryKey,
@@ -305,6 +305,50 @@ export const rateLimitEvent = menuSchema.table(
       .defaultNow(),
   },
   (t) => [index('rate_limit_event_key_time_idx').on(t.key, t.occurredAt)],
+)
+
+// ─── Auth: server-side session store ──────────────────────────────────────────
+// Menu's session is now a server-side row keyed by an opaque `id`; the
+// `menu_session` cookie holds only `{sid, sub, exp}` (JWE-sealed). Permissions
+// + roles live HERE so a grant change in Zitadel can be reflected without
+// waiting for the cookie to expire — the webhook updates the row directly,
+// the admin UI can `revoked_at = now()` to terminate, and every request
+// resolves the active permission set with a single PK lookup.
+//
+// `id` is a 256-bit random urlsafe-base64 string minted at /api/auth/callback.
+// `user_id` is the Zitadel sub claim. No FK — Zitadel lives in a separate DB.
+// `permissions_version` bumps whenever the webhook rewrites permissions; the
+// admin UI surfaces it for debugging "why doesn't my new scope show up".
+export const session = menuSchema.table(
+  'session',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull(),
+    email: text('email').notNull(),
+    name: text('name').notNull(),
+    roles: jsonb('roles').$type<string[]>().notNull().default([]),
+    permissions: jsonb('permissions').$type<string[]>().notNull().default([]),
+    permissionsVersion: integer('permissions_version').notNull().default(1),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).defaultNow().notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    // Set when an admin revokes the session, or when the user logs out. Once
+    // set, every subsequent open() returns null and the DAL bounces the user
+    // back through OIDC. Kept (not deleted) for the admin UI's audit log; a
+    // periodic vacuum job can purge rows past `expires_at + 30d`.
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    revokedReason: text('revoked_reason'),
+    userAgent: text('user_agent'),
+    // SHA-256 of the client IP, hex. Storing the hash (not the IP itself)
+    // keeps the audit trail useful without holding raw PII at rest.
+    ipHash: text('ip_hash'),
+  },
+  (t) => [
+    index('session_user_active_idx')
+      .on(t.userId)
+      .where(sql`${t.revokedAt} IS NULL`),
+    index('session_expires_idx').on(t.expiresAt),
+  ],
 )
 
 // ─── Relations ────────────────────────────────────────────────────────────────

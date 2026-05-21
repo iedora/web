@@ -6,6 +6,7 @@ import {
   type WebhookDeps,
 } from '@/features/auth/zitadel-webhook'
 import { IEDORA_ADMIN_ROLE } from '@/features/auth/roles'
+import { refreshPermissionsForUser } from '@/features/sessions'
 import { env } from '@/shared/env'
 
 /**
@@ -74,7 +75,11 @@ async function grantIedoraAdmin(userId: string, orgId: string): Promise<boolean>
   return false
 }
 
-const deps: WebhookDeps = { adminEmails, grantIedoraAdmin }
+const deps: WebhookDeps = {
+  adminEmails,
+  grantIedoraAdmin,
+  refreshSessionsForUser: refreshPermissionsForUser,
+}
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const rawBody = await req.text()

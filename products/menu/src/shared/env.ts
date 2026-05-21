@@ -52,6 +52,16 @@ const serverSchema = z.object({
   // `ZITADEL-Signature` header on every inbound call.
   ZITADEL_ACTION_SIGNING_KEY: z.string().min(1),
 
+  // HMAC signing key for the second Zitadel Actions v2 target — fires on
+  // `user.grant.{added,changed,cascade.changed,removed,cascade.removed,
+  // deactivated,reactivated}` events. The /api/zitadel/grants-changed
+  // route validates this key and re-resolves the user's permissions in
+  // place, so a grant change reflects on the user's NEXT request even
+  // if they never re-auth. Minted by zitadel_action_target.menu_grants
+  // (computed signing_key). Optional during the rollout window — empty
+  // value disables the route (returns 503).
+  ZITADEL_GRANTS_SIGNING_KEY: z.string().default(''),
+
   // ID of the iedora Zitadel project. The webhook uses it as `projectId`
   // when self-healing an admin's missing iedora-admin grant on their
   // first sign-in (the TF-time grant helper can't reach a user that

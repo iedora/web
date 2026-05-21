@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Transparent wrapper for the Go zitadel-grant command at
+# infra/cmd/zitadel-grant. Same shape as bin/iedora and bin/with-secrets —
+# `go run` compiles once into the user's GOCACHE; subsequent invocations
+# reuse the cached binary.
+#
+# Used by:
+#   - infra/tofu/zitadel.tf       null_resource.iedora_admin_grants
+#                                 (every prod `just deploy` re-applies the grants)
+#   - infra/dev/tofu/main.tf      same, against local Zitadel on :8080
+#   - `just zitadel-grant`        ad-hoc operator invocation (env vars
+#                                 must be set externally — see the cmd
+#                                 godoc for ZG_* shape).
+set -euo pipefail
+
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+INFRA_DIR="$(dirname "$DIR")"
+
+exec go run -C "$INFRA_DIR" ./cmd/zitadel-grant "$@"

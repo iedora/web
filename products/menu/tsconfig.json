@@ -7,7 +7,8 @@
     "jsx": "react-jsx",
     "plugins": [{ "name": "next" }],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "server-only": ["./tests/e2e/helpers/server-only-stub.ts"]
     }
   },
   "include": [

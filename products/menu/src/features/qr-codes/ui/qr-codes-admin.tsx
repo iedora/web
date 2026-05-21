@@ -6,9 +6,16 @@ import {
   Field,
   FieldInput,
   FieldLabel,
+  FieldHint,
   Table,
   Td,
   Th,
+  Card,
+  CardIndex,
+  CardTitle,
+  CardDesc,
+  Badge,
+  Separator,
 } from '@iedora/design-system'
 import {
   bindCodeAction,
@@ -41,9 +48,44 @@ export function QrCodesAdmin({
   publicOrigin: string
 }) {
   return (
-    <div className="space-y-10">
-      <CreateOneForm restaurants={restaurants} />
-      <BulkGenerateForm />
+    <div className="space-y-12">
+      {/* Forms Grid */}
+      <div className="grid gap-8 lg:grid-cols-2">
+        <Card className="min-h-fit flex flex-col justify-between">
+          <div>
+            <CardIndex>
+              <span>Option 01</span>
+              <Badge variant="accent">Single</Badge>
+            </CardIndex>
+            <CardTitle as="h3" className="mt-4">Create One</CardTitle>
+            <CardDesc className="mt-2 text-sm text-[var(--ink-55)]">
+              Generate a single QR code, optionally binding it to a restaurant and adding an administrative label.
+            </CardDesc>
+          </div>
+          <div className="mt-6 flex-1">
+            <CreateOneForm restaurants={restaurants} />
+          </div>
+        </Card>
+
+        <Card className="min-h-fit flex flex-col justify-between">
+          <div>
+            <CardIndex>
+              <span>Option 02</span>
+              <Badge variant="ink">Bulk</Badge>
+            </CardIndex>
+            <CardTitle as="h3" className="mt-4">Bulk Generate</CardTitle>
+            <CardDesc className="mt-2 text-sm text-[var(--ink-55)]">
+              Batch generate multiple unbound QR codes in a single operation.
+            </CardDesc>
+          </div>
+          <div className="mt-6 flex-1">
+            <BulkGenerateForm />
+          </div>
+        </Card>
+      </div>
+
+      <Separator />
+
       <CodesTable rows={rows} restaurants={restaurants} publicOrigin={publicOrigin} />
     </div>
   )
@@ -80,40 +122,46 @@ function CreateOneForm({ restaurants }: { restaurants: RestaurantOption[] }) {
   }
 
   return (
-    <section className="space-y-3">
-      <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--ink-55)]">
-        Create one
-      </h2>
-      <form onSubmit={onSubmit} className="grid gap-3 sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-end">
+    <form onSubmit={onSubmit} className="flex flex-col h-full justify-between space-y-6">
+      <div className="space-y-6">
         <Field>
-          <FieldLabel htmlFor="qr-code">Code (leave blank to generate)</FieldLabel>
+          <FieldLabel htmlFor="qr-code">Code</FieldLabel>
           <FieldInput
             id="qr-code"
             name="code"
             value={code}
             onChange={(e) => setCode(e.target.value)}
-            placeholder="auto"
+            placeholder="Auto-generated if left blank"
             maxLength={64}
           />
         </Field>
+
         <Field>
-          <FieldLabel htmlFor="qr-restaurant">Bind to restaurant (optional)</FieldLabel>
-          <select
-            id="qr-restaurant"
-            value={restaurantId}
-            onChange={(e) => setRestaurantId(e.target.value)}
-            className="h-10 rounded-md border border-[var(--ink-14)] bg-[var(--paper)] px-3 text-sm"
-          >
-            <option value="">— unbound —</option>
-            {restaurants.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.name} ({r.slug})
-              </option>
-            ))}
-          </select>
+          <FieldLabel htmlFor="qr-restaurant">Bind to restaurant</FieldLabel>
+          <div className="relative w-full">
+            <select
+              id="qr-restaurant"
+              value={restaurantId}
+              onChange={(e) => setRestaurantId(e.target.value)}
+              className="w-full pr-8 appearance-none bg-transparent border-0 border-b border-[var(--ink-22)] py-3 font-[family-name:var(--serif)] text-[18px] text-[var(--ink)] outline-none transition-colors duration-200 focus:border-[var(--ink)]"
+            >
+              <option value="" className="bg-[var(--paper)]">— unbound —</option>
+              {restaurants.map((r) => (
+                <option key={r.id} value={r.id} className="bg-[var(--paper)]">
+                  {r.name} ({r.slug})
+                </option>
+              ))}
+            </select>
+            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-1 text-[var(--ink-55)]">
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+          </div>
         </Field>
+
         <Field>
-          <FieldLabel htmlFor="qr-label">Label (optional)</FieldLabel>
+          <FieldLabel htmlFor="qr-label">Administrative Label</FieldLabel>
           <FieldInput
             id="qr-label"
             value={label}
@@ -122,13 +170,18 @@ function CreateOneForm({ restaurants }: { restaurants: RestaurantOption[] }) {
             maxLength={200}
           />
         </Field>
-        <Button variant="solid" type="submit" disabled={pending}>
-          {pending ? 'Creating…' : 'Create'}
-        </Button>
-      </form>
-      {error && <p className="text-sm text-[var(--cinnabar)]">{error}</p>}
-      {success && <p className="text-sm text-[var(--ink-55)]">{success}</p>}
-    </section>
+      </div>
+
+      <div className="pt-4 space-y-3">
+        <div className="flex justify-end">
+          <Button variant="solid" type="submit" disabled={pending} arrow>
+            {pending ? 'Creating…' : 'Create QR Code'}
+          </Button>
+        </div>
+        {error && <p className="text-sm text-[var(--cinnabar)]">{error}</p>}
+        {success && <p className="text-sm text-[var(--ink-55)]">{success}</p>}
+      </div>
+    </form>
   )
 }
 
@@ -139,11 +192,13 @@ function BulkGenerateForm() {
   const [error, setError] = useState<string | null>(null)
   const [generated, setGenerated] = useState<string[] | null>(null)
   const [pending, startTransition] = useTransition()
+  const [copied, setCopied] = useState(false)
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     setError(null)
     setGenerated(null)
+    setCopied(false)
     startTransition(async () => {
       const res = await bulkGenerateAction(count)
       if (!res.ok) {
@@ -154,14 +209,18 @@ function BulkGenerateForm() {
     })
   }
 
+  function handleCopy() {
+    if (!generated) return
+    navigator.clipboard.writeText(generated.join('\n'))
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
   return (
-    <section className="space-y-3">
-      <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--ink-55)]">
-        Bulk generate (unbound)
-      </h2>
-      <form onSubmit={onSubmit} className="flex flex-wrap items-end gap-3">
+    <form onSubmit={onSubmit} className="flex flex-col h-full justify-between space-y-6">
+      <div className="space-y-6">
         <Field>
-          <FieldLabel htmlFor="qr-bulk-count">How many?</FieldLabel>
+          <FieldLabel htmlFor="qr-bulk-count">Quantity to generate</FieldLabel>
           <FieldInput
             id="qr-bulk-count"
             type="number"
@@ -169,24 +228,42 @@ function BulkGenerateForm() {
             max={500}
             value={count}
             onChange={(e) => setCount(Number(e.target.value))}
+            className="[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
           />
+          <FieldHint>Supports generating between 1 and 500 codes per batch.</FieldHint>
         </Field>
-        <Button variant="solid" type="submit" disabled={pending}>
-          {pending ? 'Generating…' : `Generate ${count}`}
-        </Button>
-      </form>
-      {error && <p className="text-sm text-[var(--cinnabar)]">{error}</p>}
-      {generated && (
-        <details open className="rounded-md border border-[var(--ink-14)] p-3 text-sm">
-          <summary className="cursor-pointer">
-            {generated.length} new code{generated.length === 1 ? '' : 's'}
-          </summary>
-          <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-all font-mono text-xs text-[var(--ink-55)]">
-            {generated.join('\n')}
-          </pre>
-        </details>
-      )}
-    </section>
+      </div>
+
+      <div className="pt-4 space-y-4">
+        <div className="flex justify-end">
+          <Button variant="solid" type="submit" disabled={pending} arrow>
+            {pending ? 'Generating…' : `Generate ${count} Codes`}
+          </Button>
+        </div>
+        {error && <p className="text-sm text-[var(--cinnabar)]">{error}</p>}
+
+        {generated && (
+          <div className="mt-4 border border-[var(--ink-14)] p-4 bg-[var(--paper-2)] transition-all duration-300">
+            <div className="flex items-center justify-between border-b border-[var(--ink-14)] pb-2 mb-2">
+              <span className="font-mono text-[10.5px] text-[var(--ink-55)] uppercase tracking-wider">
+                Generated {generated.length} code{generated.length === 1 ? '' : 's'}
+              </span>
+              <Button
+                variant="ghost"
+                type="button"
+                onClick={handleCopy}
+                className="text-[10px] py-1 px-2 h-7"
+              >
+                {copied ? 'Copied!' : 'Copy List'}
+              </Button>
+            </div>
+            <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-all font-mono text-xs text-[var(--ink-70)]">
+              {generated.join('\n')}
+            </pre>
+          </div>
+        )}
+      </div>
+    </form>
   )
 }
 
@@ -202,34 +279,38 @@ function CodesTable({
   publicOrigin: string
 }) {
   return (
-    <section className="space-y-3">
-      <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--ink-55)]">
-        Registry ({rows.length})
-      </h2>
+    <section className="space-y-6">
+      <div className="flex items-baseline justify-between">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--ink-55)]">
+          Registry ({rows.length})
+        </h2>
+      </div>
       {rows.length === 0 ? (
         <p className="text-sm text-[var(--ink-55)]">No codes yet.</p>
       ) : (
-        <Table>
-          <thead>
-            <tr>
-              <Th>Code</Th>
-              <Th>URL</Th>
-              <Th>Bound to</Th>
-              <Th>Label</Th>
-              <Th>Actions</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <CodeRow
-                key={row.code}
-                row={row}
-                restaurants={restaurants}
-                publicOrigin={publicOrigin}
-              />
-            ))}
-          </tbody>
-        </Table>
+        <div className="overflow-x-auto border border-[var(--ink-14)]">
+          <Table className="min-w-full">
+            <thead>
+              <tr>
+                <Th className="w-[15%]">Code</Th>
+                <Th className="w-[30%]">Direct URL</Th>
+                <Th className="w-[30%]">Bound To</Th>
+                <Th className="w-[15%]">Label</Th>
+                <Th className="w-[10%] text-right">Actions</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <CodeRow
+                  key={row.code}
+                  row={row}
+                  restaurants={restaurants}
+                  publicOrigin={publicOrigin}
+                />
+              ))}
+            </tbody>
+          </Table>
+        </div>
       )}
     </section>
   )
@@ -269,41 +350,57 @@ function CodeRow({
   }
 
   return (
-    <tr>
+    <tr className="hover:bg-[rgba(26,24,21,0.01)] transition-colors duration-150">
       <Td>
-        <span className="font-mono text-xs">{row.code}</span>
+        <span className="inline-block font-mono text-[11px] font-semibold text-[var(--ink)] bg-[var(--paper-2)] px-2 py-0.5 border border-[var(--ink-14)]">
+          {row.code}
+        </span>
       </Td>
       <Td>
         <a
           href={publicUrl}
           target="_blank"
           rel="noreferrer"
-          className="text-xs text-[var(--ink-55)] underline"
+          className="font-mono text-xs text-[var(--ink-55)] hover:text-[var(--cinnabar)] hover:underline inline-flex items-center gap-1 transition-colors"
         >
-          {publicUrl}
+          <span>{publicUrl.replace(/^https?:\/\//, '')}</span>
+          <span className="text-[10px] text-[var(--cinnabar)]">↗</span>
         </a>
       </Td>
       <Td>
-        <select
-          value={row.restaurantId ?? ''}
-          onChange={onBindChange}
-          disabled={pending}
-          className="h-8 rounded-md border border-[var(--ink-14)] bg-[var(--paper)] px-2 text-xs"
-        >
-          <option value="">— unbound —</option>
-          {restaurants.map((r) => (
-            <option key={r.id} value={r.id}>
-              {r.name}
-            </option>
-          ))}
-        </select>
+        <div className="relative inline-block w-full max-w-[220px]">
+          <select
+            value={row.restaurantId ?? ''}
+            onChange={onBindChange}
+            disabled={pending}
+            className="w-full pr-6 appearance-none bg-transparent border-b border-[var(--ink-14)] focus:border-[var(--ink)] py-1 font-[family-name:var(--serif)] text-[15px] text-[var(--ink)] outline-none transition-colors duration-200 disabled:opacity-50"
+          >
+            <option value="" className="bg-[var(--paper)]">— unbound —</option>
+            {restaurants.map((r) => (
+              <option key={r.id} value={r.id} className="bg-[var(--paper)]">
+                {r.name}
+              </option>
+            ))}
+          </select>
+          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center text-[var(--ink-40)]">
+            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 9l-7 7-7-7" />
+            </svg>
+          </div>
+        </div>
         {error && <p className="mt-1 text-xs text-[var(--cinnabar)]">{error}</p>}
       </Td>
       <Td>
-        <span className="text-xs text-[var(--ink-55)]">{row.label ?? '—'}</span>
+        <span className="text-sm text-[var(--ink-70)] italic">{row.label ?? '—'}</span>
       </Td>
-      <Td>
-        <Button variant="ghost" type="button" onClick={onDelete} disabled={pending}>
+      <Td className="text-right">
+        <Button
+          variant="ghost"
+          type="button"
+          onClick={onDelete}
+          disabled={pending}
+          className="text-[11px] py-1 px-2.5 h-7 inline-flex items-center"
+        >
           Delete
         </Button>
       </Td>

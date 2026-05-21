@@ -467,8 +467,8 @@ variable "iedora_admin_emails" {
     User must have signed in via menu locally at least once before they
     resolve — Zitadel auto-provisions on first OIDC login.
   EOT
-  type    = list(string)
-  default = ["dev@iedora.local"]
+  type        = list(string)
+  default     = ["dev@iedora.local"]
 }
 
 resource "zitadel_project_role" "iedora_admin" {
@@ -492,7 +492,7 @@ resource "null_resource" "iedora_admin_grants" {
   }
 
   provisioner "local-exec" {
-    command = "${path.module}/../../bin/zitadel-grant-iedora-admins"
+    command = "${path.module}/../../bin/zitadel-grant"
     environment = {
       # Local Zitadel runs plaintext on :8080 — the helper routes via
       # http:// instead of https://.
@@ -593,6 +593,52 @@ resource "zitadel_action_execution_function" "menu_permissions_accesstoken" {
   }
 }
 
+# ── Grants-changed event webhook (Phase 2.5) ─────────────────────────────────
+# Second action target — fires on `user.grant.*` events so menu can refresh
+# the resolved permission set on every active session for the affected user
+# WITHOUT waiting for them to re-auth. The existing menu_permissions target
+# still handles login-time expansion via preuserinfo/preaccesstoken; this
+# target closes the gap for grant changes happening mid-session.
+#
+# Separate target (not piggybacked on menu_permissions) because the payload
+# shape differs — function executions get the auth context, event executions
+# get the event envelope. The signing key is per-target; menu reads them as
+# two distinct env vars.
+resource "zitadel_action_target" "menu_grants" {
+  name        = "menu-grants"
+  endpoint    = "http://host.docker.internal:3000/api/zitadel/grants-changed"
+  target_type = "REST_CALL"
+  timeout     = "5s"
+  # `false` so a slow / down webhook doesn't block grant writes themselves —
+  # menu's session row stays stale at worst, picked up on next login.
+  interrupt_on_error = false
+
+  lifecycle {
+    enabled = local.seed_active
+  }
+}
+
+# Every `user.grant.*` event we care about. Listed individually instead of
+# `all = true` so the trigger surface is auditable from the TF source.
+locals {
+  menu_grant_event_types = toset([
+    "user.grant.added",
+    "user.grant.changed",
+    "user.grant.cascade.changed",
+    "user.grant.removed",
+    "user.grant.cascade.removed",
+    "user.grant.deactivated",
+    "user.grant.reactivated",
+  ])
+}
+
+resource "zitadel_action_execution_event" "menu_grants_events" {
+  for_each = local.seed_active ? local.menu_grant_event_types : toset([])
+
+  event      = each.value
+  target_ids = [zitadel_action_target.menu_grants.id]
+}
+
 # Menu service account — same shape as prod's infra/tofu/zitadel.tf.
 # The `zitadel-admin-sa` JSON key is for TF-provider auth only; the
 # menu app itself runs with a separate PAT under `menu-sa`, scoped
@@ -646,6 +692,7 @@ locals {
     zitadel_oauth_client_secret = zitadel_application_oidc.menu.client_secret
     zitadel_management_token    = zitadel_personal_access_token.menu_sa.token
     zitadel_action_signing_key  = zitadel_action_target.menu_permissions.signing_key
+    zitadel_grants_signing_key  = zitadel_action_target.menu_grants.signing_key
     iedora_project_id           = zitadel_project.iedora.id
     iedora_admin_emails         = join(",", var.iedora_admin_emails)
     s3_region                   = "us-east-1"
@@ -664,6 +711,7 @@ locals {
     zitadel_oauth_client_secret = ""
     zitadel_management_token    = ""
     zitadel_action_signing_key  = ""
+    zitadel_grants_signing_key  = ""
     iedora_project_id           = ""
     iedora_admin_emails         = ""
     s3_region                   = ""
@@ -696,6 +744,7 @@ module "menu_env_container" {
   zitadel_oauth_client_secret = local.menu_env_shared.zitadel_oauth_client_secret
   zitadel_management_token    = local.menu_env_shared.zitadel_management_token
   zitadel_action_signing_key  = local.menu_env_shared.zitadel_action_signing_key
+  zitadel_grants_signing_key  = local.menu_env_shared.zitadel_grants_signing_key
   iedora_project_id           = local.menu_env_shared.iedora_project_id
   iedora_admin_emails         = local.menu_env_shared.iedora_admin_emails
   s3_endpoint                 = "http://infra-localstack:4566"
@@ -728,6 +777,7 @@ module "menu_env_host" {
   zitadel_oauth_client_secret = local.menu_env_shared.zitadel_oauth_client_secret
   zitadel_management_token    = local.menu_env_shared.zitadel_management_token
   zitadel_action_signing_key  = local.menu_env_shared.zitadel_action_signing_key
+  zitadel_grants_signing_key  = local.menu_env_shared.zitadel_grants_signing_key
   iedora_project_id           = local.menu_env_shared.iedora_project_id
   iedora_admin_emails         = local.menu_env_shared.iedora_admin_emails
   s3_endpoint                 = "http://localhost:4566"

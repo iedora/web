@@ -1,9 +1,8 @@
-// zitadel-grant-iedora-admins resolves a list of admin emails to Zitadel
-// user IDs and POSTs the iedora-admin project-role grant for each
-// resolved user. Idempotent — runs every `just infra::deploy` (and `just
-// dev`) via a Tofu `null_resource` + `local-exec`. Already-granted users
-// are skipped server-side (Zitadel returns ALREADY_EXISTS, which we
-// treat as success).
+// zitadel-grant resolves a list of admin emails to Zitadel user IDs and
+// POSTs the iedora-admin project-role grant for each resolved user.
+// Idempotent — runs every `just deploy` (and `just dev`) via a Tofu
+// `null_resource` + `local-exec`. Already-granted users are skipped
+// server-side (Zitadel returns ALREADY_EXISTS, which we treat as success).
 //
 // Inputs (env, matches Tofu local-exec environment block):
 //
@@ -84,7 +83,7 @@ const (
 
 func main() {
 	if err := run(); err != nil {
-		fmt.Fprintf(os.Stderr, "zitadel-grant-iedora-admins: %v\n", err)
+		fmt.Fprintf(os.Stderr, "zitadel-grant: %v\n", err)
 		os.Exit(1)
 	}
 }

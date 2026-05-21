@@ -85,7 +85,7 @@ export function parseAdminEmails(raw: string | undefined): Set<string> {
 
 /**
  * Closure dependencies the webhook needs to self-heal grants. Tests inject
- * fakes; production wires the real Zitadel mgmt API call.
+ * fakes; production wires the real Zitadel mgmt API call + session store.
  */
 export type WebhookDeps = {
   /** `IEDORA_ADMIN_EMAILS` parsed. */
@@ -98,6 +98,20 @@ export type WebhookDeps = {
     userId: string,
     orgId: string,
   ) => Promise<boolean>
+  /**
+   * Optional hook to push the freshly-resolved permission set onto every
+   * active menu session for the user. Closes the loop on grant changes:
+   * the next request the user makes (no re-auth) sees the new scopes.
+   *
+   * Receives the resolved roles + permissions and the userId. The route
+   * wires `sessionStore.refreshPermissionsForUser`; tests pass a spy.
+   * Errors are swallowed inside the webhook — a transient DB issue
+   * shouldn't fail the entire token-signing flow.
+   */
+  refreshSessionsForUser?: (
+    userId: string,
+    next: { roles: string[]; permissions: string[] },
+  ) => Promise<unknown>
 }
 
 /**
@@ -147,6 +161,25 @@ export async function buildPermissionsResponse(
     if (ok) roles.add(IEDORA_ADMIN_ROLE)
   }
 
-  const permissions = expandRolesToScopes(Array.from(roles))
+  const rolesArr = Array.from(roles)
+  const permissions = expandRolesToScopes(rolesArr)
+
+  // Side-effect: fan the resolved set out to the user's open menu
+  // sessions so a grant change reflects on their NEXT request instead of
+  // requiring re-auth. Swallow errors — the token-signing path must not
+  // break on a transient DB hiccup; the existing session's stale
+  // permissions are bounded by the cookie TTL and the next refresh of
+  // this webhook.
+  if (deps.refreshSessionsForUser && userId) {
+    try {
+      await deps.refreshSessionsForUser(userId, {
+        roles: rolesArr,
+        permissions,
+      })
+    } catch (err) {
+      console.error('[zitadel-webhook] session refresh failed', err)
+    }
+  }
+
   return { append_claims: [{ key: 'permissions', value: permissions }] }
 }

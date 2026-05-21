@@ -4,28 +4,54 @@ import { and, eq } from 'drizzle-orm'
 import { db } from '@/shared/db/client'
 import { restaurant } from '@/shared/db/schema'
 import { env } from '@/shared/env'
+import { sessionStore } from '@/features/sessions'
 import type { AuthGateway } from '../ports'
 import {
-  makeSessionAdapter,
+  makeSessionCookie,
   SESSION_COOKIE,
   type Session,
 } from './session'
 
 /**
- * Production AuthGateway. Wraps the menu session cookie (jose JWE) and
- * Drizzle (restaurant lookup scoped to a tenant id). The tenant-membership
- * check itself runs against Zitadel via `@/features/identity` — see the
- * use-cases.
+ * Production AuthGateway. Wraps the menu session cookie (jose JWE → opaque
+ * pointer) + the server-side session store + Drizzle (restaurant lookup
+ * scoped to a tenant id). Tenant-membership checks run against Zitadel
+ * via `@/features/identity` — see the use-cases.
  *
  * Server-only: `cookies()` and the Drizzle client never belong on the client.
  */
-const sessions = makeSessionAdapter(env.MENU_SESSION_SECRET)
+const sessions = makeSessionCookie(env.MENU_SESSION_SECRET)
 
 async function readSessionCookie(): Promise<Session | null> {
   const jar = await cookies()
   const raw = jar.get(SESSION_COOKIE)?.value
   if (!raw) return null
-  return sessions.open(raw)
+
+  const pointer = await sessions.open(raw)
+  if (!pointer) return null
+
+  // Authoritative lookup. The store rejects revoked + expired rows, so a
+  // grant-change webhook or admin revoke takes effect on the very next
+  // request — no waiting on the 7d cookie TTL.
+  const record = await sessionStore.get(pointer.sid)
+  if (!record) return null
+
+  // Cheap tamper check: cookie's `sub` must match the row's `userId`. The
+  // JWE already authenticates the payload (A256GCM), but a mismatch here
+  // would catch a server-side row swap and is a free invariant to assert.
+  if (record.userId !== pointer.sub) return null
+
+  return {
+    user: {
+      id: record.userId,
+      email: record.email,
+      name: record.name,
+      roles: record.roles,
+      permissions: record.permissions,
+    },
+    expiresAt: Math.floor(record.expiresAt.getTime() / 1000),
+    sid: record.id,
+  }
 }
 
 export const drizzleAuthGateway: AuthGateway = {

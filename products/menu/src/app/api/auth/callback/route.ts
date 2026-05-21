@@ -1,12 +1,14 @@
+import { createHash } from 'node:crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { exchangeAuthorizationCode } from '@/features/auth/adapters/oidc'
 import {
   makeOidcFlowAdapter,
-  makeSessionAdapter,
+  makeSessionCookie,
   OIDC_FLOW_COOKIE,
   SESSION_COOKIE,
   SESSION_TTL_SECONDS,
 } from '@/features/auth/adapters/session'
+import { sessionStore } from '@/features/sessions'
 import { env } from '@/shared/env'
 
 /**
@@ -22,7 +24,21 @@ import { env } from '@/shared/env'
  * surface the raw OIDC error to the user.
  */
 const flowCookies = makeOidcFlowAdapter(env.MENU_SESSION_SECRET)
-const sessions = makeSessionAdapter(env.MENU_SESSION_SECRET)
+const sessions = makeSessionCookie(env.MENU_SESSION_SECRET)
+
+/**
+ * Extract the client IP from common proxy headers. Caddy sits in front
+ * in prod and sets `X-Forwarded-For`; the dev server gets `127.0.0.1` via
+ * `req.ip` (Next 16). The value is immediately SHA-256'd before being
+ * persisted — we want the audit signal ("same IP across two sessions")
+ * without holding raw PII at rest.
+ */
+function ipHashFromRequest(req: NextRequest): string | null {
+  const xff = req.headers.get('x-forwarded-for')
+  const raw = xff?.split(',')[0]?.trim() ?? req.headers.get('x-real-ip') ?? null
+  if (!raw) return null
+  return createHash('sha256').update(raw).digest('hex')
+}
 
 function failure(): NextResponse {
   // Use the canonical MENU_PUBLIC_URL — NOT `req.nextUrl.origin`.
@@ -70,16 +86,26 @@ export async function GET(req: NextRequest): Promise<Response> {
     return failure()
   }
 
-  const expiresAt = Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS
+  const expiresAtSec = Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS
+  // Server-side row first — if the insert fails we don't want a cookie
+  // pointing at a non-existent sid. Permissions + roles live here so the
+  // Zitadel webhook can refresh them without re-auth and the admin UI
+  // can revoke without waiting for the cookie to expire.
+  const sid = await sessionStore.issue({
+    userId: result.sub,
+    email: result.email,
+    name: result.name,
+    roles: result.roles,
+    permissions: result.permissions,
+    expiresAt: new Date(expiresAtSec * 1000),
+    userAgent: req.headers.get('user-agent'),
+    ipHash: ipHashFromRequest(req),
+  })
+
   const sessionJwe = await sessions.seal({
-    user: {
-      id: result.sub,
-      email: result.email,
-      name: result.name,
-      roles: result.roles,
-      permissions: result.permissions,
-    },
-    expiresAt,
+    sid,
+    sub: result.sub,
+    exp: expiresAtSec,
   })
 
   // Same fix as failure() — use the canonical public URL, not the

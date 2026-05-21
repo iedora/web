@@ -229,12 +229,56 @@ resource "zitadel_action_execution_function" "menu_permissions_accesstoken" {
   }
 }
 
+# ── Actions v2 — grant-change event webhook (Phase 2.5) ──────────────────────
+# Second target — fires on `user.grant.*` events so menu can refresh the
+# resolved permission set on every active session for the affected user
+# WITHOUT waiting for them to re-auth. The existing menu_permissions
+# target still handles login-time expansion via preuserinfo/preaccesstoken;
+# this target closes the gap for grant changes mid-session.
+#
+# Separate from menu_permissions because the payload shape differs
+# (function executions get the auth context; event executions get the
+# event envelope) and the signing key is per-target.
+resource "zitadel_action_target" "menu_grants" {
+  name               = "menu-grants"
+  endpoint           = "https://${var.menu_public_hostname}/api/zitadel/grants-changed"
+  target_type        = "REST_CALL"
+  timeout            = "5s"
+  # `false` so a down webhook doesn't block grant writes; the worst-case
+  # is a stale `menu.session` row that the next login's function webhook
+  # corrects.
+  interrupt_on_error = false
+
+  lifecycle {
+    enabled = local.zitadel_bootstrapped
+  }
+}
+
+locals {
+  menu_grant_event_types = toset([
+    "user.grant.added",
+    "user.grant.changed",
+    "user.grant.cascade.changed",
+    "user.grant.removed",
+    "user.grant.cascade.removed",
+    "user.grant.deactivated",
+    "user.grant.reactivated",
+  ])
+}
+
+resource "zitadel_action_execution_event" "menu_grants_events" {
+  for_each = local.zitadel_bootstrapped ? local.menu_grant_event_types : toset([])
+
+  event      = each.value
+  target_ids = [zitadel_action_target.menu_grants.id]
+}
+
 # ── iedora-admin grants ──────────────────────────────────────────────────────
 # The zitadel TF provider has no "search user by email" data source, and
 # `for_each` rejects apply-time-unknown keys — so the lookup-via-data-
 # external + zitadel_user_grant chain isn't viable. Instead we run a
-# single Go helper (`infra/cmd/zitadel-grant-iedora-admins`, shimmed at
-# `infra/bin/zitadel-grant-iedora-admins`) via a `null_resource`
+# single Go helper (`infra/cmd/zitadel-grant`, shimmed at
+# `infra/bin/zitadel-grant`) via a `null_resource`
 # `local-exec`: it looks up each email and POSTs the grant, treating
 # ALREADY_EXISTS (Zitadel's idempotent-grant response) as success.
 #
@@ -254,7 +298,7 @@ resource "null_resource" "iedora_admin_grants" {
   }
 
   provisioner "local-exec" {
-    command = "${path.module}/../bin/zitadel-grant-iedora-admins"
+    command = "${path.module}/../bin/zitadel-grant"
     environment = {
       ZG_HOSTNAME   = var.zitadel_hostname
       ZG_SCHEME     = "https"

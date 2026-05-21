@@ -297,6 +297,7 @@ module "menu_env" {
   zitadel_oauth_client_secret = zitadel_application_oidc.menu.client_secret
   zitadel_management_token    = zitadel_personal_access_token.menu_sa.token
   zitadel_action_signing_key  = zitadel_action_target.menu_permissions.signing_key
+  zitadel_grants_signing_key  = zitadel_action_target.menu_grants.signing_key
   iedora_project_id           = zitadel_project.iedora.id
   iedora_admin_emails         = join(",", var.iedora_admin_emails)
 

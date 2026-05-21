@@ -3,47 +3,67 @@ import { createHash } from 'node:crypto'
 import { EncryptJWT, jwtDecrypt, base64url } from 'jose'
 
 /**
- * Menu's session is a single encrypted cookie (JWE compact, alg=dir,
- * enc=A256GCM). Self-contained: cookie ⇄ session, no server-side store.
+ * Menu's session is a server-side row (see `@/features/sessions`) plus a
+ * cookie holding an opaque pointer to it. The cookie is JWE-sealed
+ * (compact, alg=dir, enc=A256GCM) — sealing keeps the cookie value
+ * opaque to passive log capture and lets a secret rotation
+ * (`tofu apply -replace=random_password.menu_session_secret`) cleanly
+ * invalidate every issued cookie at once.
  *
- * Trade-off: a user disabled in Zitadel mid-session keeps the menu session
- * until it expires (up to `SESSION_TTL_SECONDS`). Acceptable pre-customer;
- * revisit when we need server-initiated revocation (abuse handling).
+ * Trade-offs vs the pre-#21 self-contained cookie:
+ *   - Admin revoke + scope refresh now apply on the very next request
+ *     instead of waiting up to 7d for the cookie to expire.
+ *   - One PK lookup per page render (`session.id` is a 32-byte PK).
  *
- * The encryption key is derived (sha256) from the env-supplied
- * MENU_SESSION_SECRET — Zitadel TF mints that secret in state
- * (random_password.menu_session_secret), so rotation = tofu apply
- * -replace and all live sessions invalidate gracefully (cookies become
- * undecryptable → DAL bounces every user through OIDC again).
+ * Cookie name is `menu_session_v2` — bumped on the cutover so any
+ * lingering self-contained cookie issued before the migration fails
+ * closed (no `sid` claim → `null` → user re-auths cleanly).
  */
 
-export const SESSION_COOKIE = 'menu_session'
+export const SESSION_COOKIE = 'menu_session_v2'
+/**
+ * Cookie lifetime. The DB row's `expires_at` is the authoritative bound
+ * — `get()` rejects rows past it — but we keep the cookie's `maxAge`
+ * + JWE `exp` in sync so the browser drops dead cookies without an
+ * extra round-trip.
+ */
 export const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7 // 7d
 
-/** Subset of token claims menu keeps in the cookie. Tiny on purpose. */
+/**
+ * The cookie payload — opaque pointer to a server-side row. Everything
+ * else (user identity, roles, permissions) lives on the row.
+ */
+export type SessionPointer = {
+  /** Opaque server-side session id (256-bit, base64url). */
+  sid: string
+  /** Zitadel `sub` claim. Mirrored here so a fast invariant check can
+   * reject a tampered cookie before any DB lookup. */
+  sub: string
+  /** Unix-seconds expiry. JWE itself rejects past-exp on decrypt. */
+  exp: number
+}
+
+/**
+ * Subset of session data exposed to callers. Identical shape to the
+ * pre-#21 type so the auth slice's use-cases and the entire DAL didn't
+ * have to change — the data just comes from the DB row now instead of
+ * the cookie body.
+ */
 export type Session = {
   user: {
     /** Zitadel `sub` claim — the immutable user id. */
     id: string
     email: string
     name: string
-    /**
-     * Zitadel project-role keys asserted on the iedora project (e.g.
-     * `'iedora-admin'`). What the user was literally granted. Kept for
-     * audit / debug. Authorization gates read `permissions` instead.
-     */
+    /** Project-role keys (e.g. `iedora-admin`). Kept for audit/debug. */
     roles: string[]
-    /**
-     * Flat scope strings (e.g. `'qr-codes:write'`), produced by the
-     * Zitadel Actions v2 webhook at `/api/zitadel/permissions` which
-     * expands bundle role-grants into concrete scopes. Authoritative
-     * for `requireScope(scope)` checks. Frozen at login time — a fresh
-     * grant requires re-auth to take effect.
-     */
+    /** Flat scopes (e.g. `qr-codes:write`) — authoritative for `requireScope`. */
     permissions: string[]
   }
-  /** Unix-seconds expiry. Cheap to compare without parsing the JWE. */
+  /** Unix-seconds expiry — mirrors the DB row's `expires_at`. */
   expiresAt: number
+  /** Server-side session id. Surfaced so admin tooling + logout can revoke. */
+  sid: string
 }
 
 /**
@@ -55,64 +75,48 @@ function deriveKey(secret: string): Uint8Array {
   return new Uint8Array(createHash('sha256').update(secret).digest())
 }
 
-export function makeSessionAdapter(secret: string) {
+export function makeSessionCookie(secret: string) {
   // Length is enforced at the env boundary (`@/shared/env`). Constructing
   // here with the build-time stub (empty strings) must not throw — we run
   // `next build` against an empty env to collect page data.
   const key = deriveKey(secret)
 
   return {
-    /** Encrypts `session` into a compact JWE string suitable for a cookie. */
-    async seal(session: Session): Promise<string> {
+    /** Encrypts a pointer into a compact JWE string suitable for a cookie. */
+    async seal(pointer: SessionPointer): Promise<string> {
       return new EncryptJWT({
-        sub: session.user.id,
-        email: session.user.email,
-        name: session.user.name,
-        roles: session.user.roles,
-        permissions: session.user.permissions,
+        sid: pointer.sid,
+        sub: pointer.sub,
       })
         .setProtectedHeader({ alg: 'dir', enc: 'A256GCM' })
         .setIssuedAt()
-        .setExpirationTime(session.expiresAt)
+        .setExpirationTime(pointer.exp)
         .encrypt(key)
     },
 
     /**
      * Decrypts + validates a cookie value. Returns null on any failure
-     * (tampered ciphertext, wrong key, expired). Caller treats `null` as
-     * "no session" — same as a missing cookie.
+     * (tampered ciphertext, wrong key, missing sid, expired). Caller
+     * treats `null` as "no session" — same as a missing cookie.
+     *
+     * NOTE: this does NOT consult the server-side store. Callers
+     * (production: `drizzleAuthGateway.getSession`) must look the `sid`
+     * up against `SessionStore.get` and reject revoked / expired rows.
      */
-    async open(jwe: string): Promise<Session | null> {
+    async open(jwe: string): Promise<SessionPointer | null> {
       try {
         const { payload } = await jwtDecrypt(jwe, key)
+        const sid = payload.sid
         const sub = payload.sub
-        const email = payload.email
-        const name = payload.name
         const exp = payload.exp
         if (
+          typeof sid !== 'string' ||
           typeof sub !== 'string' ||
-          typeof email !== 'string' ||
-          typeof name !== 'string' ||
           typeof exp !== 'number'
         ) {
           return null
         }
-        // Forward-compatible additions. Pre-roles cookies (very old) and
-        // pre-permissions cookies (sealed before the Zitadel Action v2
-        // shipped) lack the new fields; treat as `[]` so existing
-        // sessions keep working until they expire and the user re-auths.
-        const rawRoles = payload.roles
-        const roles = Array.isArray(rawRoles)
-          ? rawRoles.filter((r): r is string => typeof r === 'string')
-          : []
-        const rawPermissions = payload.permissions
-        const permissions = Array.isArray(rawPermissions)
-          ? rawPermissions.filter((p): p is string => typeof p === 'string')
-          : []
-        return {
-          user: { id: sub, email, name, roles, permissions },
-          expiresAt: exp,
-        }
+        return { sid, sub, exp }
       } catch {
         return null
       }
@@ -120,7 +124,7 @@ export function makeSessionAdapter(secret: string) {
   }
 }
 
-export type SessionAdapter = ReturnType<typeof makeSessionAdapter>
+export type SessionCookie = ReturnType<typeof makeSessionCookie>
 
 /**
  * Short-lived envelope holding the OIDC `state` + PKCE code_verifier

@@ -3,6 +3,7 @@ import { Wordmark } from '@iedora/design-system'
 import {
   getEffectiveOrganizationId,
   getSession,
+  IEDORA_ADMIN_ROLE,
   SCOPES,
 } from '@/features/auth'
 import { getOrganizationPlan, planHas } from '@/features/plans'
@@ -32,6 +33,11 @@ export default async function DashboardLayout({
   // the link, and only those.
   const showAdminLink =
     session?.user.permissions.includes(SCOPES.QR_CODES_READ) ?? false
+  // Sessions admin is cross-tenant and only useful to operators — gate
+  // by the bundle role itself, not a derived scope, so a fresh hire
+  // with the bundle gets the link without us minting a new permission.
+  const showSessionsLink =
+    session?.user.roles.includes(IEDORA_ADMIN_ROLE) ?? false
 
   const navLinkClass =
     "font-[family-name:var(--mono)] text-[10.5px] uppercase tracking-[0.18em] text-[var(--ink-55)] no-underline transition-colors hover:text-[var(--ink)] py-1.5"
@@ -84,6 +90,15 @@ export default async function DashboardLayout({
                 className={navLinkClass}
               >
                 Admin
+              </Link>
+            )}
+            {showSessionsLink && (
+              <Link
+                href="/dashboard/admin/sessions"
+                data-testid="nav-sessions"
+                className={navLinkClass}
+              >
+                Sessions
               </Link>
             )}
             {session?.user && (

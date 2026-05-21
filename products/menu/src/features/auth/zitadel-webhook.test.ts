@@ -231,4 +231,58 @@ describe('buildPermissionsResponse', () => {
       expect(grantFn).not.toHaveBeenCalled()
     })
   })
+
+  describe('session refresh side-effect', () => {
+    it('fans the resolved permissions out to active sessions for the user', async () => {
+      const refreshFn = vi.fn(async () => 2)
+      const deps: WebhookDeps = {
+        adminEmails: new Set(),
+        grantIedoraAdmin: vi.fn(async () => false),
+        refreshSessionsForUser: refreshFn,
+      }
+      const body = JSON.stringify({
+        user: { id: 'u1', human: { email: 'a@b' } },
+        org: { id: 'o1' },
+        user_grants: [{ roles: [IEDORA_ADMIN_ROLE] }],
+      })
+      await buildPermissionsResponse(body, deps)
+      expect(refreshFn).toHaveBeenCalledWith('u1', {
+        roles: [IEDORA_ADMIN_ROLE],
+        permissions: expect.arrayContaining([SCOPES.QR_CODES_READ]),
+      })
+    })
+
+    it('does not crash the webhook if the session refresh throws', async () => {
+      const deps: WebhookDeps = {
+        adminEmails: new Set(),
+        grantIedoraAdmin: vi.fn(async () => false),
+        refreshSessionsForUser: vi.fn(async () => {
+          throw new Error('db down')
+        }),
+      }
+      const body = JSON.stringify({
+        user: { id: 'u1', human: { email: 'a@b' } },
+        org: { id: 'o1' },
+        user_grants: [{ roles: [IEDORA_ADMIN_ROLE] }],
+      })
+      const res = await buildPermissionsResponse(body, deps)
+      expect(res.append_claims[0]?.key).toBe('permissions')
+    })
+
+    it('skips the refresh when userId is missing from the event', async () => {
+      const refreshFn = vi.fn(async () => 0)
+      const deps: WebhookDeps = {
+        adminEmails: new Set(),
+        grantIedoraAdmin: vi.fn(async () => false),
+        refreshSessionsForUser: refreshFn,
+      }
+      const body = JSON.stringify({
+        user: { human: { email: 'a@b' } },
+        org: { id: 'o1' },
+        user_grants: [],
+      })
+      await buildPermissionsResponse(body, deps)
+      expect(refreshFn).not.toHaveBeenCalled()
+    })
+  })
 })

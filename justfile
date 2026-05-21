@@ -92,3 +92,17 @@ doctor:
 [doc("exec a command with every BWS secret + TF_VAR_* hydrated into env")]
 with-secrets *CMD:
     @cd infra && bin/with-secrets {{CMD}}
+
+# iedora-admin role-grant helper. Looks up admin emails in Zitadel and
+# POSTs the iedora-admin project-role grant for each one. Idempotent —
+# every `just deploy` re-runs it via a Tofu `null_resource` + local-exec
+# whenever `var.iedora_admin_emails` changes. This recipe is the ad-hoc
+# escape hatch: re-run the grants without a full apply (e.g. after a user
+# self-provisions via OIDC and you want their role landed now).
+#
+# Env vars expected (see `infra/cmd/zitadel-grant/main.go` godoc):
+#   ZG_HOSTNAME, ZG_SCHEME, ZG_TOKEN, ZG_ORG_ID, ZG_PROJECT_ID, ZG_ROLE_KEY, ZG_EMAILS
+# Caller responsibility — the recipe is a transparent dispatcher.
+[doc("re-run the iedora-admin grants helper (env-driven — see cmd godoc)")]
+zitadel-grant *ARGS:
+    @cd infra && bin/zitadel-grant {{ARGS}}

@@ -52,6 +52,7 @@ function makeSession(opts: {
       permissions: opts.permissions ?? [],
     },
     expiresAt: Math.floor(Date.now() / 1000) + 3600,
+    sid: 'test-sid',
   }
 }
 

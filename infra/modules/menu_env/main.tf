@@ -71,6 +71,13 @@ variable "zitadel_action_signing_key" {
   sensitive   = true
 }
 
+variable "zitadel_grants_signing_key" {
+  description = "HMAC signing key for the Zitadel Actions v2 EVENT webhook that fires on `user.grant.*` events. Minted by `zitadel_action_target.menu_grants.signing_key`. Optional during rollout — empty disables the route handler (returns 503), at which point grant changes only reflect on the next login (the function webhook still updates the row on `preuserinfo`/`preaccesstoken`)."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 variable "iedora_project_id" {
   description = "ID of the iedora Zitadel project (zitadel_project.iedora.id). The Actions v2 webhook uses it as `projectId` when self-healing a missing iedora-admin grant for an admin email on first sign-in."
   type        = string
@@ -149,6 +156,7 @@ locals {
     ZITADEL_OAUTH_CLIENT_SECRET = var.zitadel_oauth_client_secret
     ZITADEL_MANAGEMENT_TOKEN    = var.zitadel_management_token
     ZITADEL_ACTION_SIGNING_KEY  = var.zitadel_action_signing_key
+    ZITADEL_GRANTS_SIGNING_KEY  = var.zitadel_grants_signing_key
     IEDORA_PROJECT_ID           = var.iedora_project_id
     IEDORA_ADMIN_EMAILS         = var.iedora_admin_emails
     S3_ENDPOINT                 = var.s3_endpoint
@@ -175,16 +183,21 @@ locals {
     "ZITADEL_OAUTH_CLIENT_SECRET",
     "ZITADEL_MANAGEMENT_TOKEN",
     "ZITADEL_ACTION_SIGNING_KEY",
+    "ZITADEL_GRANTS_SIGNING_KEY",
   ])
 
   # Placeholders chosen to satisfy src/shared/env.ts Zod constraints
   # (MENU_SESSION_SECRET requires ≥ 32 chars; the rest need ≥ 1).
+  # ZITADEL_GRANTS_SIGNING_KEY has a Zod default of "", so we keep its
+  # placeholder empty too — the route handler short-circuits to 503 when
+  # empty, which is the right behaviour pre-`just dev`.
   placeholders = {
     MENU_SESSION_SECRET         = "PLACEHOLDER-bun-run-dev-overrides-via-env-local"
     ZITADEL_OAUTH_CLIENT_ID     = "PLACEHOLDER-bun-run-dev-overrides-via-env-local"
     ZITADEL_OAUTH_CLIENT_SECRET = "PLACEHOLDER-bun-run-dev-overrides-via-env-local"
     ZITADEL_MANAGEMENT_TOKEN    = "PLACEHOLDER-bun-run-dev-overrides-via-env-local"
     ZITADEL_ACTION_SIGNING_KEY  = "PLACEHOLDER-bun-run-dev-overrides-via-env-local"
+    ZITADEL_GRANTS_SIGNING_KEY  = ""
   }
 
   env_committable = {

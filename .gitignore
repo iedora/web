@@ -102,7 +102,7 @@ playwright/.auth/
 # (`infra/dev` is omitted on purpose — it's a tracked directory.)
 /infra/iedora
 /infra/with-secrets
-/infra/zitadel-grant-iedora-admins
+/infra/zitadel-grant
 
 # Backup artefacts — `make restore` and ad-hoc pg_dump leave these in cwd.
 # Database dumps are the most sensitive payload in the repo; never commit one
@@ -117,3 +117,6 @@ playwright/.auth/
 # Tests put intentional screenshots under tests/e2e/screenshots/ instead.
 /*.png
 products/menu/tests/e2e/.testkit.json
+
+# Local reference checkouts (not part of the repo)
+services-references/
