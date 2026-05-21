@@ -550,7 +550,14 @@
   opacity: 0.5;
 }
 
-.ds-combobox__input {
+/* Specificity bump (`.ds-field input.ds-combobox__input`) — without it
+   a `<Combobox>` rendered inside a `<Field>` picks up the Field's
+   default `.ds-field input` rule (18px serif, 12px vertical padding),
+   inflating the wrapper to ~50px tall and breaking row alignment with
+   sibling `<FieldInput compact>` chips that stay at ~30px. Both
+   selectors carry the same declarations. */
+.ds-combobox__input,
+.ds-field input.ds-combobox__input {
   appearance: none;
   background: transparent;
   border: 0;

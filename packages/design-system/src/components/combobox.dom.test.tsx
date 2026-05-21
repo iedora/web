@@ -197,6 +197,17 @@ describe("Combobox", () => {
     expect(input.getAttribute("title")).toBe("Beta Carotene");
   });
 
+  it("input class carries the specificity-bumped selector so a Combobox inside a Field doesn't pick up the Field's 18px base rule", () => {
+    // The Field's base rule `.ds-field input` (specificity 0,1,1) wins
+    // against `.ds-combobox__input` (0,1,0) unless we add a same-
+    // specificity selector. We can't observe layout in jsdom but we can
+    // assert the className contract the consumer relies on so a future
+    // rename breaks this test loudly.
+    render(<ControlledCombobox />);
+    const input = screen.getByRole("combobox", { name: /pick one/i });
+    expect(input.className).toContain("ds-combobox__input");
+  });
+
   it("renders a hidden form-input when `name` is provided", () => {
     function FormCombobox() {
       const [v, setV] = useState<string | null>("beta");
