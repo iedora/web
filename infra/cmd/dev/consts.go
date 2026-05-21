@@ -1,12 +1,3 @@
-// Centralised magic strings. Anything that appears in more than one
-// file (or is part of a versioned contract — file paths, output names,
-// annotation tokens — and would be a search-and-replace footgun if
-// duplicated) lives here.
-//
-// SRP: this file holds NO logic; just named values. Anything that
-// needs to KNOW the value imports from here. Anything that needs to
-// COMPUTE one belongs in the file owning that concern.
-
 package main
 
 const (
@@ -61,10 +52,6 @@ const (
 	annotationAdded   = "added" // legacy pre-Option-2 annotation; parsed as managed
 
 	annotationDate = "2006-01-02" // YYYY-MM-DD (time.Format)
-
-	// ── Wait/poll timing ─────────────────────────────────────────────────
-
-	pollInterval = 500 // ms — between HTTP/file probes during waitFor*
 
 	// ── File modes ───────────────────────────────────────────────────────
 

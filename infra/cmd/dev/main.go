@@ -10,15 +10,53 @@
 //	just dev -i                    interactive TUI per category
 //	just dev --only menu           everything menu needs (zitadel + …)
 //	just dev --except openobserve  everything else, deps preserved
+//	just dev --destroy             tear down the full stack (TUI bypassed)
 //
-// Each file in this package owns one concern:
+// ─── File layout (one concern per file) ──────────────────────────────
 //
-//	consts.go      magic strings / paths / timing
-//	service.go     catalog + dep graph
-//	selection.go   CLI flags / TUI
-//	envfile.go     .env + .env.local lifecycle
-//	proc.go        exec + wait + log helpers
-//	dev.go         main() + applyDevStack (this file)
+// main.go        Entry point: main() + applyDevStack + destroyDevStack.
+//                The high-level flow reads as a script.
+//
+// consts.go      Centralised magic strings — file paths, Tofu output
+//                names, annotation tokens. SRP: no logic, just named
+//                values. Anything appearing in more than one file (or
+//                part of a versioned contract that would be a search-
+//                and-replace footgun if duplicated) lives here.
+//
+// service.go     Service catalog — source of truth for what runs and
+//                how. Each entry is self-describing: TF gate, deps,
+//                menu env keys it produces. The orchestrator consumes
+//                the catalog by iteration, never by name (open/closed
+//                principle). Add a service → one entry, no extra wiring.
+//
+// selection.go   User-facing selection — CLI flags + Charm/huh TUI.
+//                Translates operator input into a final []string of
+//                service names. The dep-graph closure + except-filter
+//                live here because they're part of "interpreting what
+//                the user asked for", not part of the catalog or the
+//                apply orchestration.
+//
+// envfile.go     .env / .env.local lifecycle. Contract:
+//                  .env       (committed, TF-owned) — every key for a
+//                             service currently UP locally; values
+//                             are real (Tofu fills dynamic ones).
+//                             Excluded-service keys are dropped.
+//                  .env.local (gitignored, operator-owned) — place-
+//                             holders for excluded services; operator
+//                             pastes a homelab/remote URL. Option-2
+//                             sync: real values stay, `<please_fill>`
+//                             auto-refills from TF, stale keys flagged.
+//                Annotations (`# auto: managed`, `# auto: stale`) are
+//                orchestrator-managed; everything else passes through
+//                verbatim.
+//
+// proc.go        Process + I/O helpers. No business logic — thin
+//                layer for shelling out, capturing output, emitting
+//                log lines, and waiting on external signals. Wait
+//                helpers prefer push-based signals (docker events as
+//                a stream) over polling; the few short-polling paths
+//                exist only where the producer doesn't expose a
+//                stream.
 
 package main
 

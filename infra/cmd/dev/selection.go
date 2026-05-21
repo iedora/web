@@ -1,9 +1,3 @@
-// User-facing selection — CLI flags + interactive TUI. Translates
-// operator input into a final `[]string` of service names to enable.
-// The dep-graph closure + except-filter live here because they're
-// part of "interpreting what the user asked for", not part of the
-// service catalog (service.go) or the apply orchestration (dev.go).
-
 package main
 
 import (

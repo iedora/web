@@ -1,9 +1,3 @@
-// Service catalog — the dev stack's source of truth for what runs and
-// how. Each `service` entry is self-describing: TF gate, dependencies,
-// menu env keys it produces. Add a new service here in one place; the
-// orchestrator (selection, env file, exec) consumes the catalog by
-// iteration, never by name (open/closed principle).
-
 package main
 
 import "sort"

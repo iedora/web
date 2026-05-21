@@ -17,30 +17,41 @@ tofu := "bin/with-secrets tofu -chdir=tofu"
 _default:
     @just --list --unsorted
 
-# Apply every infra resource: Hetzner VPS + Cloudflare R2 + GitHub Actions
-# config + all containers. Thin shim over the Go orchestrator at
-# infra/cmd/iedora — every Pass 1/2/3 detail, the cert-ready probe, the
-# DNS-override CONNECT proxy that sidesteps the macOS NXDOMAIN cache, and
-# the BWS write-through of INFRA_HOST_IP all live there.
+# Apply (or tear down) every infra resource. One recipe, two modes:
 #
-# Why Go (not bash): the inline bash for `deploy` + `destroy` had grown
-# to a ~150-line octopus that nobody could change without breaking
-# something three lines later. The Go port is type-checked, unit-tested
-# (see `infra/cmd/iedora/*_test.go`), and contains the load-bearing
-# fluency fixes from `docs/deploy-fluency-brief.md`:
+#   just infra::deploy                  → full apply (Pass 1/2/3)
+#   just infra::deploy -d               → full destroy (state-rm Zitadel,
+#                                         tofu destroy, BWS scrub, known_hosts)
+#   just infra::deploy --destroy        → alias for -d
+#   just infra::deploy --skip-init      → flags pass through to the Go orchestrator
+#
+# Thin shim over the Go orchestrator at infra/cmd/iedora — every Pass
+# 1/2/3 detail, the cert-ready probe, the DNS-override CONNECT proxy
+# that sidesteps the macOS NXDOMAIN cache, and the BWS write-through of
+# INFRA_HOST_IP live there. `-d`/`--destroy` is intercepted here so the
+# Go side keeps its `iedora deploy` and `iedora destroy` subcommands
+# cleanly separate.
+#
+# Why Go (not bash): the inline bash for deploy + destroy had grown to a
+# ~150-line octopus that nobody could change without breaking something
+# three lines later. The Go port is type-checked, unit-tested (see
+# `infra/cmd/iedora/*_test.go`), and contains the load-bearing fluency
+# fixes from `docs/deploy-fluency-brief.md`:
 #   - HTTPS_PROXY → localhost dns-override proxy for Pass 3 (bypasses
 #     mDNSResponder NXDOMAIN cache for auth.iedora.com after IP churn).
 #   - Cert-issuer check before declaring Zitadel ready (catches Caddy
 #     mid-ACME serving its internal CA).
 #   - Auto-scrub of the prior IP's ~/.ssh/known_hosts entry on destroy.
-deploy:
-    bin/iedora deploy
-
-# Tear down EVERY Tofu-managed resource. Same orchestrator, see deploy
-# above. The state-rm + placeholder-Zitadel + BWS-scrub logic the old
-# bash carried lives in infra/cmd/iedora/destroy.go now.
-destroy:
-    bin/iedora destroy
+[doc("apply the infra estate (or -d/--destroy to tear it down)")]
+deploy *FLAGS:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for arg in {{FLAGS}}; do
+      case "$arg" in
+        -d|--destroy) exec bin/iedora destroy ;;
+      esac
+    done
+    exec bin/iedora deploy {{FLAGS}}
 
 # Preflight check — runs locally, no mutation. Verifies bws + tofu + ssh
 # are on PATH, BWS auth works, and every required bootstrap secret is in

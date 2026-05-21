@@ -71,7 +71,7 @@ Wall-clock: ~10 min for a < 1 GB dump.
 A new VPS is one `just infra::deploy` away — Tofu provisions a fresh CPX22 via the `hcloud` provider.
 
 ```bash
-just infra::destroy            # tear down dead box's state (skip if Hetzner already removed it)
+just infra::deploy -d          # tear down dead box's state (skip if Hetzner already removed it)
 just infra::deploy             # provisions NEW VPS + boots every container
 just infra::restore            # pulls latest dump into the new postgres
 just infra::deploy             # menu picks up the now-populated DB

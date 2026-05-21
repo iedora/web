@@ -1,23 +1,3 @@
-// Everything `.env` / `.env.local` in one place.
-//
-// Contract (also documented at the top of products/menu/.env / .env.local):
-//
-//   `.env` (committed, TF-owned):
-//       Every key for services that are currently UP locally. Values
-//       are real (Tofu fills the dynamic ones). Dropped keys: those
-//       whose backing service was `--except`'d — there's no local
-//       listener so the key in .env would be a lie.
-//
-//   `.env.local` (gitignored, operator-owned):
-//       Placeholders for keys whose service IS excluded — the operator
-//       pastes a homelab tunnel URL / remote endpoint. On the next
-//       `just dev`, real values stay (Option 2 sync), placeholders
-//       auto-refill from TF when applicable.
-//
-// All file-level annotations (`# auto: managed`, `# auto: stale`) are
-// orchestrator-managed; everything else (blank lines, user comments,
-// user values) passes through verbatim.
-
 package main
 
 import (

@@ -1,10 +1,20 @@
+// with-secrets — BWS env wrapper.
+//
+// Reads BWS_ACCESS_TOKEN from the operator's shell, discovers the
+// iedora-deploy project, hydrates every BWS secret into env (+ TF_VAR_*
+// aliases), then in-place execs the named command. Replaces a former
+// bash script — every recipe / CI workflow / docs example shells
+// `bin/with-secrets <cmd>` to get a Tofu-shaped env.
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"syscall"
+
+	"github.com/eduvhc/iedora/infra/internal/bws"
 )
 
 func main() {
@@ -15,42 +25,37 @@ func main() {
 
 	bwsAccessToken := os.Getenv("BWS_ACCESS_TOKEN")
 	if bwsAccessToken == "" {
-		fmt.Fprintln(os.Stderr, "with-secrets error: BWS_ACCESS_TOKEN missing — export it in your shell (e.g. source ~/.secrets)")
-		os.Exit(1)
+		fatal("BWS_ACCESS_TOKEN missing — export it in your shell (e.g. source ~/.secrets)")
 	}
 
-	// 1. Discover BWS_PROJECT_ID
-	projectID, err := getBwsProjectID(bwsAccessToken)
+	ctx := context.Background()
+
+	projectID, err := bws.ProjectID(ctx)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "with-secrets error: %v\n", err)
-		os.Exit(1)
+		fatal("%v", err)
 	}
 
-	// 2. Fetch secrets from BWS
-	secrets, err := getBwsSecrets(projectID)
+	secrets, err := bws.ListSecrets(ctx, projectID)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "with-secrets error: %v\n", err)
-		os.Exit(1)
+		fatal("%v", err)
 	}
 
-	// 3. Assemble environment variables
-	envSlice, err := buildEnvironment(secrets, bwsAccessToken, projectID, os.Environ())
+	envSlice, err := buildEnvironment(ctx, secrets, bwsAccessToken, projectID, os.Environ())
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "with-secrets error: %v\n", err)
-		os.Exit(1)
+		fatal("%v", err)
 	}
 
-	// 4. Look up target binary path
 	binaryPath, err := exec.LookPath(os.Args[1])
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "with-secrets error: command %q not found: %v\n", os.Args[1], err)
-		os.Exit(1)
+		fatal("command %q not found: %v", os.Args[1], err)
 	}
 
-	// 5. In-place process replacement via syscall.Exec
-	err = syscall.Exec(binaryPath, os.Args[1:], envSlice)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "with-secrets exec failed: %v\n", err)
-		os.Exit(1)
+	if err := syscall.Exec(binaryPath, os.Args[1:], envSlice); err != nil {
+		fatal("exec failed: %v", err)
 	}
+}
+
+func fatal(format string, args ...any) {
+	fmt.Fprintf(os.Stderr, "with-secrets: "+format+"\n", args...)
+	os.Exit(1)
 }

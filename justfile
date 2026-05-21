@@ -41,4 +41,4 @@ _default:
 # old `just dev-down` recipe; folded into the Go orchestrator).
 [doc("boot the dev stack via OpenTofu (--destroy to wipe everything)")]
 dev *ARGS:
-    @cd infra/dev && go run . {{ARGS}}
+    @cd infra && go run ./cmd/dev {{ARGS}}

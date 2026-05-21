@@ -73,7 +73,7 @@ infra/
 
 ```
 just infra::deploy        # → bin/iedora deploy (Go orchestrator — see cmd/iedora/)
-just infra::destroy       # → bin/iedora destroy
+just infra::deploy -d     # → bin/iedora destroy (-d / --destroy on the deploy recipe)
 just infra::doctor        # → bin/iedora doctor (preflight: PATH, BWS auth, bootstrap secrets)
 just infra::wipe-postgres # destructive — drops the data dir on the host (use after destroy)
 just infra::logs <svc>    # ssh + docker logs -f infra-<svc> (or menu_web)

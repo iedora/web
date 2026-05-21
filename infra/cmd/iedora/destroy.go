@@ -5,35 +5,21 @@ import (
 	"flag"
 	"fmt"
 	"strings"
+
+	"github.com/eduvhc/iedora/infra/internal/bws"
 )
 
 // runDestroy is the Go port of the `just infra::destroy` bash recipe.
 // Three steps:
 //
 //  1. state-rm every zitadel_* resource + the local-exec null_resources
-//     they depend on. Why: tofu destroy refreshes resources first, and
+//     they depend on. Why: `tofu destroy` refreshes resources first, and
 //     refreshing a zitadel_* hits the zitadel API — which is in the
 //     process of being torn down. State-rm first; the live objects
 //     vanish with the VPS anyway.
 //  2. tofu destroy with placeholder Zitadel mode + masterkey-rotation
-//     override. Same flags as before — they're correct, no improvement
-//     to make there.
-//  3. Scrub instance-bound BWS keys. INFRA_HOST_IP + INFRA_ZITADEL_SA_KEY_JSON
-//     are tied to the dying instance; leaving them in BWS makes the
-//     next deploy reuse stale material.
-//
-// New in this version vs the old bash:
-//
-//  - We also clean ~/.ssh/known_hosts for the prior IP, so the next
-//    `iedora deploy` doesn't have to do it via ssh-keyscan-on-IP-collision.
-//    Idempotent — `ssh-keygen -R` returns 0 even when the entry isn't
-//    there.
-//  - The state-rm step iterates the full list instead of relying on a
-//    grep that could miss future resources. Any address starting with
-//    `zitadel_` or `data.zitadel_` is in scope; the explicit list of
-//    null_resources is hand-maintained because they're the only
-//    local-exec resources whose `when=destroy` (we don't have any
-//    today but might in future) would otherwise try to call out.
+//     override.
+//  3. Scrub instance-bound BWS keys + the prior IP from ~/.ssh/known_hosts.
 func runDestroy(ctx context.Context, argv []string) error {
 	fs := flag.NewFlagSet("destroy", flag.ContinueOnError)
 	if err := fs.Parse(argv); err != nil {
@@ -45,16 +31,13 @@ func runDestroy(ctx context.Context, argv []string) error {
 		return fmt.Errorf("tofu init: %w", err)
 	}
 
-	// Grab the current IP BEFORE the destroy nukes the output. We'll
+	// Grab the current IP BEFORE the destroy nukes the output — we
 	// scrub its known_hosts entry as the last step.
 	priorIP, _ := runTofuOutput(ctx, nil, "output", "-raw", "hetzner_ipv4")
 
 	// ── Step 1: state-rm Zitadel + provisioners ─────────────────────────
 	resources, err := runTofuList(ctx, nil)
 	if err != nil {
-		// A missing state file produces empty output, not an error.
-		// Anything else is fatal — without state we don't know what to
-		// destroy.
 		return fmt.Errorf("state list: %w", err)
 	}
 
@@ -98,12 +81,12 @@ func runDestroy(ctx context.Context, argv []string) error {
 
 	// ── Step 3: scrub instance-bound BWS keys + known_hosts ─────────────
 	fmt.Fprintln(stderr, "→ Step 3/3: scrub instance-bound BWS secrets + known_hosts")
-	projectID, err := bwsProjectID(ctx)
+	projectID, err := bws.ProjectID(ctx)
 	if err != nil {
 		return fmt.Errorf("bws project id: %w", err)
 	}
 	for _, key := range []string{"INFRA_ZITADEL_SA_KEY_JSON", "INFRA_HOST_IP"} {
-		if err := bwsDelete(ctx, projectID, key); err != nil {
+		if err := bws.Delete(ctx, projectID, key); err != nil {
 			fmt.Fprintf(stderr, "  ! bws delete %s failed (continuing): %v\n", key, err)
 			continue
 		}

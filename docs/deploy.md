@@ -149,7 +149,7 @@ just infra::logs <svc>       # tail logs (defaults to backups; `just infra::logs
 just infra::console          # psql shell into Postgres
 just infra::backup           # force a pg_dump now
 just infra::restore          # restore latest dump (interactive)
-just infra::destroy          # tear down VPS + every resource
+just infra::deploy -d        # tear down VPS + every resource (-d / --destroy)
 just infra::wipe-postgres    # destructive — drops the data dir
 just infra::rotate-secret X  # prompt-driven BWS rotation
 ```

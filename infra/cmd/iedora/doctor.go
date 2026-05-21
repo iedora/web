@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+
+	"github.com/eduvhc/iedora/infra/internal/bws"
 )
 
 // runDoctor checks deploy-readiness on the operator's machine. Cheap
@@ -27,13 +29,13 @@ func runDoctor(ctx context.Context, _ []string) error {
 	}
 
 	fmt.Fprintln(stderr, "→ Checking BWS access")
-	projectID, err := bwsProjectID(ctx)
+	projectID, err := bws.ProjectID(ctx)
 	if err != nil {
 		return fmt.Errorf("bws access: %w", err)
 	}
 	fmt.Fprintf(stderr, "  ✓ BWS project: %s\n", projectID)
 
-	secrets, err := bwsListSecrets(ctx, projectID)
+	secrets, err := bws.ListSecrets(ctx, projectID)
 	if err != nil {
 		return fmt.Errorf("bws list secrets: %w", err)
 	}
@@ -50,7 +52,7 @@ func runDoctor(ctx context.Context, _ []string) error {
 		"INFRA_OPENOBSERVE_ROOT_USER_EMAIL",
 	}
 	for _, key := range bootstrap {
-		if _, _, ok := bwsFindSecret(secrets, key); !ok {
+		if _, _, ok := bws.Find(secrets, key); !ok {
 			fmt.Fprintf(stderr, "  ✗ %s — MISSING (deploy will fail)\n", key)
 			return fmt.Errorf("missing bootstrap secret: %s", key)
 		}

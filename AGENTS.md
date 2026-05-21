@@ -108,7 +108,7 @@ Menu's `infra/` owns a Dockerfile (built by CI into the GHCR image) plus a tiny 
 - `just infra::logs <svc>` / `just infra::console` — tail logs / psql shell via SSH.
 - `just infra::backup` / `restore` — force a Postgres dump / restore latest.
 - `just infra::rotate-secret <KEY>` — prompt-driven BWS rotation; for Tofu-minted sub-tokens use `bin/with-secrets tofu -chdir=tofu apply -replace=<resource>`.
-- `just infra::destroy` — tears down the VPS + every Tofu-managed resource.
+- `just infra::deploy -d` (or `--destroy`) — tears down the VPS + every Tofu-managed resource.
 - `just house::deploy` / `house::destroy` — manage iedora.com via wrangler.
 
 `just` is a Rust task runner — `brew install just` (or `cargo install just`).

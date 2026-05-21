@@ -7,6 +7,10 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/eduvhc/iedora/infra/internal/bws"
+	"github.com/eduvhc/iedora/infra/internal/proxy"
+	"github.com/eduvhc/iedora/infra/internal/tlsprobe"
 )
 
 // runDeploy is the Go port of the `just infra::deploy` bash recipe. The
@@ -44,18 +48,9 @@ func runDeploy(ctx context.Context, argv []string) error {
 	// ── Pass 1: Hetzner box (UNCONDITIONAL) ─────────────────────────────
 	// Always run the targeted hcloud + docker-readiness apply. Why
 	// always? The "skip if hetzner_ipv4 output present" gate the old
-	// recipe used is unreliable across destroy/deploy cycles:
-	//   - destroy completes; state file has no resources;
-	//   - tofu output -raw hetzner_ipv4 sometimes still returns the
-	//     prior IP from a cached eval (witnessed in round-3 log,
-	//     2026-05-21);
-	//   - that makes the deploy skip Pass 1 and head into Pass 2 where
-	//     the docker provider hits "ssh: Host key verification failed"
-	//     against an IP that was just recycled to someone else.
-	// Pass 1 is idempotent: if the box already exists with no diff,
-	// it's a ~3s refresh. The redundancy is well worth eliminating
-	// the brittle gate. (We also no longer need any "is the state
-	// post-destroy?" reasoning — every deploy runs the same path.)
+	// recipe used is unreliable across destroy/deploy cycles. Pass 1 is
+	// idempotent: if the box already exists with no diff, it's a ~3s
+	// refresh. The redundancy is well worth eliminating the brittle gate.
 	fmt.Fprintln(stderr, "→ Pass 1/3: targeted Hetzner apply (always — gates docker provider)")
 	if err := runTofu(ctx, nil, "apply", "-auto-approve",
 		"-target=hcloud_ssh_key.operator",
@@ -70,58 +65,42 @@ func runDeploy(ctx context.Context, argv []string) error {
 		return fmt.Errorf("post-pass-1 hetzner_ipv4 still empty (err=%v)", err)
 	}
 
-	// SSH host key rotation. Two sources to scrub:
-	//   - the current IP (it just got a fresh sshd, so even on a "no-op"
-	//     Pass 1 the host keys are unchanged but rotating is a no-op).
-	//   - the PRIOR IP from BWS INFRA_HOST_IP. After a destroy + deploy
-	//     where Hetzner recycles a different IP, ssh-keygen -R on the
-	//     prior IP keeps ~/.ssh/known_hosts tidy. (No-op if the IPs match.)
-	projectID, err := bwsProjectID(ctx)
+	// SSH host-key rotation. Two sources to scrub: the fresh IP (so the
+	// next SSH from the docker provider doesn't trip on a stale key from
+	// a previous instance at this same IP) and the PRIOR IP from BWS
+	// INFRA_HOST_IP. Both are no-ops when there's nothing to remove.
+	projectID, err := bws.ProjectID(ctx)
 	if err != nil {
 		return fmt.Errorf("bws project id: %w", err)
 	}
-	allSecrets, err := bwsListSecrets(ctx, projectID)
+	allSecrets, err := bws.ListSecrets(ctx, projectID)
 	if err != nil {
 		return fmt.Errorf("bws secrets: %w", err)
 	}
-	_, priorIP, _ := bwsFindSecret(allSecrets, "INFRA_HOST_IP")
+	_, priorIP, _ := bws.Find(allSecrets, "INFRA_HOST_IP")
 	rotateKnownHosts(ctx, priorIP, hetznerIPv4)
 
 	// ── Pass 2: depends on cold vs warm ──────────────────────────────────
-	// Cold deploy (no SA key in BWS):
-	//   - run Pass 2 in PLACEHOLDER MODE so the zitadel TF provider's
-	//     Configure() succeeds with a fake access_token + every
-	//     zitadel_* resource gates count=0/enabled=false. Containers
-	//     land, FirstInstance runs, key gets minted.
-	//   - then wait for /debug/ready + LE cert.
-	//   - then fetch the SA key into BWS.
-	//   - then Pass 3 with the real key, via the DNS-override proxy.
-	//
-	// Warm deploy (SA key already in BWS):
-	//   - SKIP the placeholder split entirely. Running Pass 2 with empty
-	//     SA key when zitadel_* are already in state forces a refresh
-	//     under the placeholder token, which Zitadel rejects with
-	//     "Errors.Token.Invalid" (caught 2026-05-21 in bulk-test
-	//     round 4). The two passes collapse into one apply with the
-	//     real SA key. Zitadel is already up — no readiness wait
-	//     needed — and the DNS-override proxy still guards the
-	//     OIDC discovery from the operator's NXDOMAIN cache.
-	_, _, saKeyPresent := bwsFindSecret(allSecrets, "INFRA_ZITADEL_SA_KEY_JSON")
+	// Cold (no SA key in BWS) → bootstrap dance with placeholder mode.
+	// Warm (SA key present)   → single apply with the real SA key.
+	// (See deploy-fluency notes for why warm must NOT do the placeholder
+	// dance — Errors.Token.Invalid on Zitadel refresh.)
+	_, _, saKeyPresent := bws.Find(allSecrets, "INFRA_ZITADEL_SA_KEY_JSON")
 
 	// Always-on DNS-override proxy. Cheap (single-port http.Server),
-	// harmless on warm deploys where DNS resolves fine, REQUIRED on
-	// warm deploys where the operator's resolver still has the
-	// NXDOMAIN cached from the prior destroy/deploy round.
-	overrides := map[string]string{
+	// harmless on warm deploys where DNS resolves fine, REQUIRED on warm
+	// deploys where the operator's resolver still has the NXDOMAIN
+	// cached from the prior destroy/deploy round.
+	overrides := proxy.DNSOverride{
 		"auth.iedora.com:443": hetznerIPv4 + ":443",
 		"auth.iedora.com:80":  hetznerIPv4 + ":80",
 	}
-	proxy := newDNSOverrideProxy(overrides)
-	proxyURL, err := proxy.Start(ctx)
+	p := proxy.New(overrides)
+	proxyURL, err := p.Start(ctx)
 	if err != nil {
 		return fmt.Errorf("start dns-override proxy: %w", err)
 	}
-	defer proxy.Stop()
+	defer p.Stop()
 
 	extraEnv := []string{
 		"HTTPS_PROXY=" + proxyURL,
@@ -141,8 +120,8 @@ func runDeploy(ctx context.Context, argv []string) error {
 			return fmt.Errorf("pass 2 apply: %w", err)
 		}
 
-		fmt.Fprintf(stderr, "→ Waiting for https://%s/debug/ready + LE cert (budget %s)\n", "auth.iedora.com", *readyBudget)
-		elapsed, err := waitForZitadelReady(ctx, readinessTarget{Hostname: "auth.iedora.com", IPv4: hetznerIPv4}, *readyBudget)
+		fmt.Fprintf(stderr, "→ Waiting for https://auth.iedora.com/debug/ready + LE cert (budget %s)\n", *readyBudget)
+		elapsed, err := tlsprobe.Wait(ctx, tlsprobe.Target{Hostname: "auth.iedora.com", IPv4: hetznerIPv4}, *readyBudget)
 		if err != nil {
 			return fmt.Errorf("zitadel readiness: %w (check `just infra::logs zitadel`)", err)
 		}
@@ -154,11 +133,11 @@ func runDeploy(ctx context.Context, argv []string) error {
 		}
 		// Set TF_VAR inline — bin/iedora's BWS hydration ran before we
 		// started, so the env doesn't have the freshly-fetched key.
-		newSecrets, err := bwsListSecrets(ctx, projectID)
+		newSecrets, err := bws.ListSecrets(ctx, projectID)
 		if err != nil {
 			return fmt.Errorf("re-read BWS after SA key fetch: %w", err)
 		}
-		if _, val, ok := bwsFindSecret(newSecrets, "INFRA_ZITADEL_SA_KEY_JSON"); ok {
+		if _, val, ok := bws.Find(newSecrets, "INFRA_ZITADEL_SA_KEY_JSON"); ok {
 			os.Setenv("TF_VAR_infra_zitadel_sa_key_json", val)
 		} else {
 			return fmt.Errorf("SA key still missing in BWS after fetch — check zitadel-bootstrap volume")
@@ -176,11 +155,8 @@ func runDeploy(ctx context.Context, argv []string) error {
 		}
 	}
 
-	// Write-through INFRA_HOST_IP to BWS. The destroy recipe scrubs it,
-	// so steady-state INFRA_HOST_IP in BWS is always the IP of the
-	// currently-deployed box.
 	fmt.Fprintln(stderr, "→ Write-through INFRA_HOST_IP to BWS")
-	if err := bwsUpsert(ctx, projectID, "INFRA_HOST_IP", hetznerIPv4); err != nil {
+	if err := bws.Upsert(ctx, projectID, "INFRA_HOST_IP", hetznerIPv4); err != nil {
 		return fmt.Errorf("bws upsert INFRA_HOST_IP: %w", err)
 	}
 
@@ -188,15 +164,14 @@ func runDeploy(ctx context.Context, argv []string) error {
 	return nil
 }
 
-// fetchAndStoreSAKey runs the SSH + docker dance that was previously
-// the `just zitadel-fetch-sa-key` recipe. Inlined here because it's
-// only called once per Zitadel lifetime and inlining keeps the
-// orchestrator self-contained.
+// fetchAndStoreSAKey runs the SSH + docker dance that was previously the
+// `just zitadel-fetch-sa-key` recipe. Inlined here because it's only
+// called once per Zitadel lifetime.
 func fetchAndStoreSAKey(ctx context.Context, host, projectID string) error {
-	// Wait for the FirstInstance step to actually land the key on the
-	// bootstrap volume. The /debug/ready=200 above is a STRONG signal
-	// that FirstInstance ran, but volumes are written from a different
-	// goroutine — give it 60s of grace.
+	// Wait for FirstInstance to actually land the key on the bootstrap
+	// volume. /debug/ready=200 is a strong signal that FirstInstance
+	// ran, but volumes are written from a different goroutine — give it
+	// 60s of grace.
 	deadline := time.Now().Add(60 * time.Second)
 	for time.Now().Before(deadline) {
 		err := sshExec(ctx, host, "docker run --rm -v zitadel-bootstrap:/x busybox test -s /x/zitadel-admin-sa.json")
@@ -213,7 +188,7 @@ func fetchAndStoreSAKey(ctx context.Context, host, projectID string) error {
 	if strings.TrimSpace(key) == "" {
 		return fmt.Errorf("SA key file present but empty")
 	}
-	if err := bwsUpsert(ctx, projectID, "INFRA_ZITADEL_SA_KEY_JSON", key); err != nil {
+	if err := bws.Upsert(ctx, projectID, "INFRA_ZITADEL_SA_KEY_JSON", key); err != nil {
 		return fmt.Errorf("bws upsert INFRA_ZITADEL_SA_KEY_JSON: %w", err)
 	}
 	return nil

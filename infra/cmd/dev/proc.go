@@ -1,13 +1,3 @@
-// Process & I/O helpers. No business logic — just the thin layer that
-// the rest of the orchestrator uses to shell out, capture output,
-// emit log lines, and wait on external signals.
-//
-// Wait helpers prefer push-based signals over polling: docker events
-// is a streaming API, so as soon as the daemon flips a container's
-// health status we get the line on stdout — zero `time.Sleep`. The
-// few polling fallbacks here exist only where the producer doesn't
-// expose a stream we can subscribe to.
-
 package main
 
 import (
@@ -19,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
 )
@@ -51,14 +40,27 @@ func fail(format string, args ...any) {
 
 // ── Repo root ────────────────────────────────────────────────────────────────
 
-// findRepoRoot walks up from this source file (compiled-in path) to
-// the repo root. dev.go lives at infra/dev/dev.go, so three Dir() ups.
+// findRepoRoot walks up from the current working directory looking for
+// a `bun.lock` marker. Robust against the binary's location and the
+// caller's `cd`: works from `go run ./cmd/dev` at infra/, from `bin/dev`
+// invoked anywhere inside the repo, or from a CI shim running at the
+// repo root.
 func findRepoRoot() string {
-	_, thisFile, _, ok := runtime.Caller(0)
-	if !ok {
-		fail("runtime.Caller failed")
+	cwd, err := os.Getwd()
+	if err != nil {
+		fail("getwd: %v", err)
 	}
-	return filepath.Dir(filepath.Dir(filepath.Dir(thisFile)))
+	dir := cwd
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "bun.lock")); err == nil {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			fail("repo root not found (no bun.lock from %s upward)", cwd)
+		}
+		dir = parent
+	}
 }
 
 // ── Subprocess execution ─────────────────────────────────────────────────────
@@ -225,42 +227,6 @@ func waitForHTTP200(probeURL string, timeout time.Duration) error {
 		// Spread across the timeout window without burning the CPU.
 		time.Sleep(50 * time.Millisecond)
 	}
-}
-
-// splitLines parses `tofu output -json` for a list-of-strings output
-// and returns each element as a separate string. Lightweight parse —
-// the JSON shapes coming out of TF list outputs are always flat
-// `["a","b"]`, no nested escaping to worry about.
-func splitLines(jsonArray string) []string {
-	jsonArray = strings.TrimSpace(jsonArray)
-	jsonArray = strings.TrimPrefix(jsonArray, "[")
-	jsonArray = strings.TrimSuffix(jsonArray, "]")
-	parts := strings.Split(jsonArray, ",")
-	out := make([]string, 0, len(parts))
-	for _, p := range parts {
-		s := strings.Trim(strings.TrimSpace(p), `"`)
-		if s != "" {
-			out = append(out, s)
-		}
-	}
-	return out
-}
-
-// readEnvVar reads one KEY's value from an env-file at `path`.
-// Returns "" if file or key is missing — no error path; the caller
-// is just probing for an optional default.
-func readEnvVar(path, key string) string {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return ""
-	}
-	prefix := key + "="
-	for _, line := range strings.Split(string(data), "\n") {
-		if strings.HasPrefix(line, prefix) {
-			return strings.TrimPrefix(line, prefix)
-		}
-	}
-	return ""
 }
 
 // composePort resolves the host URL a container's internal port maps

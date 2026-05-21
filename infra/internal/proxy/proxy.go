@@ -1,19 +1,5 @@
-package main
-
-import (
-	"context"
-	"fmt"
-	"io"
-	"net"
-	"net/http"
-	"strings"
-	"sync"
-	"time"
-)
-
-// dnsOverrideProxy is an HTTP CONNECT (and forward-HTTP) proxy that lives on
-// localhost and dials a fixed IP for any host in `overrides`. Everything
-// else routes via the system resolver.
+// Package proxy implements a localhost HTTP CONNECT (and forward-HTTP)
+// proxy that pins selected hostnames to fixed IPs.
 //
 // Why this exists: the zitadel Terraform provider talks to the upstream
 // (auth.iedora.com) using Go's HTTP + gRPC stacks. Both honor
@@ -30,22 +16,43 @@ import (
 //   - grpc-go internal/transport/http2_client.go — picks up HTTPS_PROXY
 //     for the dial step (HTTP CONNECT through the proxy before HTTP/2
 //     stream init).
-type dnsOverrideProxy struct {
-	overrides map[string]string // "auth.iedora.com:443" → "46.224.162.208:443"
+package proxy
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"net"
+	"net/http"
+	"strings"
+	"sync"
+	"time"
+)
+
+// DNSOverride is the host:port pinning map: "auth.iedora.com:443" →
+// "1.2.3.4:443". Hostnames are matched case-insensitively. Bare-host
+// keys ("auth.iedora.com") match any port.
+type DNSOverride map[string]string
+
+// Server is the localhost CONNECT/forward-HTTP proxy. Use New to build.
+type Server struct {
+	overrides DNSOverride
 	server    *http.Server
 	listener  net.Listener
 	mu        sync.Mutex
 }
 
-func newDNSOverrideProxy(overrides map[string]string) *dnsOverrideProxy {
-	return &dnsOverrideProxy{overrides: overrides}
+// New constructs a Server with the given override map. The map is not
+// copied — callers should not mutate it after passing it in.
+func New(overrides DNSOverride) *Server {
+	return &Server{overrides: overrides}
 }
 
-// Start begins listening on a random localhost port. Returns the URL the
-// proxy is reachable at (e.g. http://127.0.0.1:54321) — caller exports it
-// as HTTPS_PROXY / HTTP_PROXY for the child tofu process. The proxy runs
-// until Stop() is called or the context cancels.
-func (p *dnsOverrideProxy) Start(ctx context.Context) (string, error) {
+// Start begins listening on a random localhost port. Returns the URL
+// the proxy is reachable at (e.g. http://127.0.0.1:54321) — caller
+// exports it as HTTPS_PROXY / HTTP_PROXY for the child tofu process.
+// The proxy runs until Stop() is called or the context cancels.
+func (p *Server) Start(ctx context.Context) (string, error) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return "", fmt.Errorf("listen: %w", err)
@@ -75,7 +82,8 @@ func (p *dnsOverrideProxy) Start(ctx context.Context) (string, error) {
 	return "http://" + ln.Addr().String(), nil
 }
 
-func (p *dnsOverrideProxy) Stop() {
+// Stop closes the listener. Safe to call multiple times.
+func (p *Server) Stop() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.server != nil {
@@ -84,7 +92,7 @@ func (p *dnsOverrideProxy) Stop() {
 	}
 }
 
-func (p *dnsOverrideProxy) handle(w http.ResponseWriter, r *http.Request) {
+func (p *Server) handle(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodConnect {
 		p.handleConnect(w, r)
 		return
@@ -96,8 +104,8 @@ func (p *dnsOverrideProxy) handle(w http.ResponseWriter, r *http.Request) {
 // practice (HTTPS_PROXY + outbound HTTPS == CONNECT tunnel). The forward-
 // HTTP path below is there for completeness so the proxy doesn't fail on
 // random plain-HTTP probes (eg. tofu provider plugin checks).
-func (p *dnsOverrideProxy) handleConnect(w http.ResponseWriter, r *http.Request) {
-	target := p.rewrite(r.Host)
+func (p *Server) handleConnect(w http.ResponseWriter, r *http.Request) {
+	target := p.Rewrite(r.Host)
 
 	upstream, err := net.DialTimeout("tcp", target, 10*time.Second)
 	if err != nil {
@@ -134,7 +142,7 @@ func (p *dnsOverrideProxy) handleConnect(w http.ResponseWriter, r *http.Request)
 	<-done
 }
 
-func (p *dnsOverrideProxy) handleHTTP(w http.ResponseWriter, r *http.Request) {
+func (p *Server) handleHTTP(w http.ResponseWriter, _ *http.Request) {
 	// Tofu and the zitadel provider always use HTTPS for the upstream, so
 	// HTTPS_PROXY routes through CONNECT (handleConnect). Forward-HTTP is
 	// only worth implementing if a caller starts probing http:// URLs
@@ -143,12 +151,12 @@ func (p *dnsOverrideProxy) handleHTTP(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, "forward-HTTP path not exercised by Tofu — open a CONNECT tunnel", http.StatusNotImplemented)
 }
 
-// rewrite returns the addr to actually dial. If hostport matches an
-// override (case-insensitive on the hostname), the override is returned.
-// Otherwise hostport is returned unchanged. Ports are matched literally
-// — overriding only :443 (the only port the zitadel provider uses) is
-// fine because nothing else dials :80 or :8443 to auth.iedora.com.
-func (p *dnsOverrideProxy) rewrite(hostport string) string {
+// Rewrite returns the addr to actually dial. If hostport matches an
+// override (case-insensitive on the hostname), the override is
+// returned. Otherwise hostport is returned unchanged. Ports are matched
+// literally — overriding only :443 (the only port the zitadel provider
+// uses) is fine because nothing else dials :80 or :8443 to auth.iedora.com.
+func (p *Server) Rewrite(hostport string) string {
 	if hostport == "" {
 		return hostport
 	}
