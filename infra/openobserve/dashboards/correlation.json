@@ -36,7 +36,7 @@
           },
           "queries": [
             {
-              "query": "SELECT tenant_restaurant_id AS x_axis_1, approx_percentile_cont(duration_ms, 0.95) AS y_axis_1, COUNT(*) AS z_axis_1 FROM \"default\" WHERE service_name = 'iedora-menu' AND tenant_restaurant_id IS NOT NULL AND _timestamp > now() - INTERVAL '1 hour' GROUP BY x_axis_1 HAVING COUNT(*) > 10 ORDER BY y_axis_1 DESC LIMIT 50",
+              "query": "SELECT tenant_restaurant_id AS x_axis_1, approx_percentile_cont(duration / 1000.0, 0.95) AS y_axis_1, COUNT(*) AS z_axis_1 FROM \"default\" WHERE service_name = 'iedora-menu' AND tenant_restaurant_id IS NOT NULL GROUP BY x_axis_1 HAVING COUNT(*) > 10 ORDER BY y_axis_1 DESC LIMIT 50",
               "customQuery": true,
               "fields": {
                 "stream": "traces",
@@ -103,7 +103,7 @@
           },
           "queries": [
             {
-              "query": "SELECT tenant_restaurant_id AS x_axis_1, COUNT(*) AS y_axis_1 FROM \"default\" WHERE service_name = 'iedora-menu' AND status_code = 'ERROR' AND tenant_restaurant_id IS NOT NULL AND _timestamp > now() - INTERVAL '24 hour' GROUP BY x_axis_1 ORDER BY y_axis_1 DESC LIMIT 50",
+              "query": "SELECT tenant_restaurant_id AS x_axis_1, COUNT(*) AS y_axis_1 FROM \"default\" WHERE service_name = 'iedora-menu' AND span_status = 'ERROR' AND tenant_restaurant_id IS NOT NULL GROUP BY x_axis_1 ORDER BY y_axis_1 DESC LIMIT 50",
               "customQuery": true,
               "fields": {
                 "stream": "traces",
@@ -164,11 +164,11 @@
           },
           "queries": [
             {
-              "query": "WITH views AS (SELECT tenant_restaurant_id, SUM(value) AS view_count FROM \"iedora_restaurant_views_total\" WHERE _timestamp > now() - INTERVAL '24 hour' GROUP BY tenant_restaurant_id), lat AS (SELECT tenant_restaurant_id, approx_percentile_cont(duration_ms, 0.95) AS p95_ms FROM \"default\" WHERE service_name = 'iedora-menu' AND tenant_restaurant_id IS NOT NULL AND _timestamp > now() - INTERVAL '24 hour' GROUP BY tenant_restaurant_id) SELECT v.tenant_restaurant_id AS x_axis_1, v.view_count AS y_axis_1, lat.p95_ms AS z_axis_1 FROM views v JOIN lat ON v.tenant_restaurant_id = lat.tenant_restaurant_id ORDER BY v.view_count DESC LIMIT 200",
+              "query": "SELECT tenant_restaurant_id AS x_axis_1, COUNT(*) AS y_axis_1, approx_percentile_cont(duration / 1000.0, 0.95) AS z_axis_1 FROM \"default\" WHERE service_name = 'iedora-menu' AND operation_name = 'menu.load-snapshot' AND tenant_restaurant_id IS NOT NULL GROUP BY x_axis_1 HAVING COUNT(*) > 10",
               "customQuery": true,
               "fields": {
-                "stream": "iedora_restaurant_views_total",
-                "stream_type": "metrics",
+                "stream": "default",
+                "stream_type": "traces",
                 "x": [
                   {
                     "label": "Views",
@@ -230,11 +230,11 @@
           },
           "queries": [
             {
-              "query": "SELECT histogram(_timestamp, '1 minute') AS x_axis_1, iedora_zitadel_outcome AS breakdown_1, SUM(value) AS y_axis_1 FROM \"iedora_zitadel_calls_total\" WHERE _timestamp > now() - INTERVAL '15 minute' GROUP BY x_axis_1, breakdown_1 ORDER BY x_axis_1",
+              "query": "SELECT histogram(_timestamp, '1 minute') AS x_axis_1, COALESCE(span_status, 'UNSET') AS breakdown_1, COUNT(*) AS y_axis_1 FROM \"default\" WHERE service_name = 'iedora-menu' AND operation_name LIKE 'zitadel.%' GROUP BY x_axis_1, breakdown_1 ORDER BY x_axis_1",
               "customQuery": true,
               "fields": {
-                "stream": "iedora_zitadel_calls_total",
-                "stream_type": "metrics",
+                "stream": "default",
+                "stream_type": "traces",
                 "x": [
                   {
                     "label": "Time",
@@ -298,7 +298,7 @@
           },
           "queries": [
             {
-              "query": "SELECT trace_id AS x_axis_1, COUNT(DISTINCT service_name) AS y_axis_1, MAX(duration_ms) AS z_axis_1 FROM \"default\" WHERE _timestamp > now() - INTERVAL '15 minute' GROUP BY trace_id HAVING COUNT(DISTINCT service_name) >= 2 ORDER BY z_axis_1 DESC LIMIT 50",
+              "query": "SELECT trace_id AS x_axis_1, COUNT(DISTINCT service_name) AS y_axis_1, MAX(duration / 1000.0) AS z_axis_1 FROM \"default\" GROUP BY trace_id HAVING COUNT(DISTINCT service_name) >= 2 ORDER BY z_axis_1 DESC LIMIT 50",
               "customQuery": true,
               "fields": {
                 "stream": "traces",

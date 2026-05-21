@@ -58,14 +58,30 @@ for json_file in "$DASHBOARDS_DIR"/*.json; do
 
   # The list payload nests dashboards under different keys across versions.
   # Try each shape we've seen: top-level array, .list[], .dashboards[].
+  #
+  # CRITICAL: the version slot a dashboard sits in is NOT stable. OO will
+  # silently migrate a v5 payload to v6/v7/v8 on the next PUT (depending on
+  # the server version that processed it). So we must look in EVERY version
+  # slot AND at the top level for title + id; matching only on v5 misses
+  # migrated dashboards and the next apply creates a duplicate.
   existing_id=$(jq -r --arg t "$title" '
     (if type == "array" then .
      elif has("list") then .list
      elif has("dashboards") then .dashboards
      else [] end)
-    | map(select(.title == $t or (.v5 // .v4 // .v3 // .v2 // .v1 // {}).title == $t))
+    | map(select(
+        .title == $t
+        or (.v5 // .v4 // .v3 // .v2 // .v1 // .v6 // .v7 // .v8 // {}).title == $t
+      ))
     | (.[0] // {})
-    | (.dashboardId // .v5.dashboardId // .v4.dashboardId // .v3.dashboardId // .v2.dashboardId // .v1.dashboardId // "")
+    | (
+        .dashboard_id
+        // .dashboardId
+        // .v8.dashboardId // .v7.dashboardId // .v6.dashboardId
+        // .v5.dashboardId // .v4.dashboardId // .v3.dashboardId
+        // .v2.dashboardId // .v1.dashboardId
+        // ""
+      )
   ' <<<"$LIST_RESPONSE")
 
   if [[ -n "$existing_id" && "$existing_id" != "null" ]]; then
@@ -74,7 +90,12 @@ for json_file in "$DASHBOARDS_DIR"/*.json; do
     current=$(curl -sf -u "$EMAIL:$PASSWORD" \
       "$OO_BASE_URL/api/$OO_ORG/dashboards/$existing_id?folder=$OO_FOLDER" \
       -H 'Accept: application/json')
-    hash=$(jq -r '.hash // .v5.hash // .v4.hash // .v3.hash // .v2.hash // .v1.hash // ""' <<<"$current")
+    hash=$(jq -r '
+      .hash
+      // .v8.hash // .v7.hash // .v6.hash
+      // .v5.hash // .v4.hash // .v3.hash // .v2.hash // .v1.hash
+      // ""
+    ' <<<"$current")
 
     if [[ -z "$hash" || "$hash" == "null" ]]; then
       echo "    ⚠ no hash on existing dashboard $existing_id — falling back to PUT without hash"

@@ -37,11 +37,11 @@
           },
           "queries": [
             {
-              "query": "SELECT histogram(_timestamp, '1 minute') AS x_axis_1, http_route AS breakdown_1, approx_percentile_cont(value, 0.95) AS y_axis_1 FROM \"http_server_request_duration\" WHERE service_name = 'iedora-menu' AND _timestamp > now() - INTERVAL '15 minute' GROUP BY x_axis_1, breakdown_1 ORDER BY x_axis_1",
+              "query": "SELECT histogram(_timestamp, '1 minute') AS x_axis_1, http_route AS breakdown_1, approx_percentile_cont(duration / 1000.0, 0.95) AS y_axis_1 FROM \"default\" WHERE service_name = 'iedora-menu' AND http_route IS NOT NULL GROUP BY x_axis_1, breakdown_1 ORDER BY x_axis_1",
               "customQuery": true,
               "fields": {
-                "stream": "http_server_request_duration",
-                "stream_type": "metrics",
+                "stream": "default",
+                "stream_type": "traces",
                 "x": [
                   {
                     "label": "Time",
@@ -105,7 +105,7 @@
           },
           "queries": [
             {
-              "query": "SELECT histogram(_timestamp, '1 minute') AS x_axis_1, next_route AS breakdown_1, COUNT(*) AS y_axis_1 FROM \"default\" WHERE service_name = 'iedora-menu' AND status_code = 'ERROR' AND _timestamp > now() - INTERVAL '1 hour' GROUP BY x_axis_1, breakdown_1 ORDER BY x_axis_1",
+              "query": "SELECT histogram(_timestamp, '1 minute') AS x_axis_1, next_route AS breakdown_1, COUNT(*) AS y_axis_1 FROM \"default\" WHERE service_name = 'iedora-menu' AND span_status = 'ERROR' GROUP BY x_axis_1, breakdown_1 ORDER BY x_axis_1",
               "customQuery": true,
               "fields": {
                 "stream": "traces",
@@ -173,11 +173,11 @@
           },
           "queries": [
             {
-              "query": "SELECT histogram(_timestamp, '1 minute') AS x_axis_1, AVG(value) AS y_axis_1 FROM \"http_server_active_requests\" WHERE service_name = 'iedora-menu' AND _timestamp > now() - INTERVAL '1 hour' GROUP BY x_axis_1 ORDER BY x_axis_1",
+              "query": "SELECT histogram(_timestamp, '1 minute') AS x_axis_1, COUNT(*) AS y_axis_1 FROM \"default\" WHERE service_name = 'iedora-menu' AND operation_name LIKE 'GET %' GROUP BY x_axis_1 ORDER BY x_axis_1",
               "customQuery": true,
               "fields": {
-                "stream": "http_server_active_requests",
-                "stream_type": "metrics",
+                "stream": "default",
+                "stream_type": "traces",
                 "x": [
                   {
                     "label": "Time",
@@ -240,11 +240,11 @@
           },
           "queries": [
             {
-              "query": "SELECT histogram(_timestamp, '1 minute') AS x_axis_1, iedora_zitadel_endpoint AS breakdown_1, approx_percentile_cont(value, 0.95) AS y_axis_1 FROM \"iedora_zitadel_call_duration_ms\" WHERE _timestamp > now() - INTERVAL '1 hour' GROUP BY x_axis_1, breakdown_1 ORDER BY x_axis_1",
+              "query": "SELECT histogram(_timestamp, '1 minute') AS x_axis_1, operation_name AS breakdown_1, approx_percentile_cont(duration / 1000.0, 0.95) AS y_axis_1 FROM \"default\" WHERE service_name = 'iedora-menu' AND operation_name LIKE 'zitadel.%' GROUP BY x_axis_1, breakdown_1 ORDER BY x_axis_1",
               "customQuery": true,
               "fields": {
-                "stream": "iedora_zitadel_call_duration_ms",
-                "stream_type": "metrics",
+                "stream": "default",
+                "stream_type": "traces",
                 "x": [
                   {
                     "label": "Time",
@@ -308,11 +308,11 @@
           },
           "queries": [
             {
-              "query": "SELECT iedora_zitadel_endpoint AS x_axis_1, SUM(value) AS y_axis_1 FROM \"iedora_zitadel_calls_total\" WHERE iedora_zitadel_outcome = 'failed' AND _timestamp > now() - INTERVAL '1 hour' GROUP BY x_axis_1 ORDER BY y_axis_1 DESC",
+              "query": "SELECT operation_name AS x_axis_1, COUNT(*) AS y_axis_1 FROM \"default\" WHERE service_name = 'iedora-menu' AND operation_name LIKE 'zitadel.%' AND span_status = 'ERROR' GROUP BY x_axis_1 ORDER BY y_axis_1 DESC",
               "customQuery": true,
               "fields": {
-                "stream": "iedora_zitadel_calls_total",
-                "stream_type": "metrics",
+                "stream": "default",
+                "stream_type": "traces",
                 "x": [
                   {
                     "label": "Endpoint",
@@ -369,11 +369,11 @@
           },
           "queries": [
             {
-              "query": "SELECT histogram(_timestamp, '1 minute') AS x_axis_1, iedora_outcome AS breakdown_1, approx_percentile_cont(value, 0.95) AS y_axis_1 FROM \"iedora_menu_snapshot_load_duration_ms\" WHERE _timestamp > now() - INTERVAL '1 hour' GROUP BY x_axis_1, breakdown_1 ORDER BY x_axis_1",
+              "query": "SELECT histogram(_timestamp, '1 minute') AS x_axis_1, operation_name AS breakdown_1, approx_percentile_cont(duration / 1000.0, 0.95) AS y_axis_1 FROM \"default\" WHERE service_name = 'iedora-menu' AND operation_name LIKE 'menu.load-snapshot%' GROUP BY x_axis_1, breakdown_1 ORDER BY x_axis_1",
               "customQuery": true,
               "fields": {
-                "stream": "iedora_menu_snapshot_load_duration_ms",
-                "stream_type": "metrics",
+                "stream": "default",
+                "stream_type": "traces",
                 "x": [
                   {
                     "label": "Time",
@@ -438,11 +438,11 @@
           },
           "queries": [
             {
-              "query": "SELECT histogram(_timestamp, '1 minute') AS x_axis_1, iedora_storage_operation AS breakdown_1, approx_percentile_cont(value, 0.95) AS y_axis_1 FROM \"iedora_storage_operation_duration_ms\" WHERE _timestamp > now() - INTERVAL '1 hour' GROUP BY x_axis_1, breakdown_1 ORDER BY x_axis_1",
+              "query": "SELECT histogram(_timestamp, '1 minute') AS x_axis_1, operation_name AS breakdown_1, approx_percentile_cont(duration / 1000.0, 0.95) AS y_axis_1 FROM \"default\" WHERE service_name = 'iedora-menu' AND operation_name LIKE 'storage.%' GROUP BY x_axis_1, breakdown_1 ORDER BY x_axis_1",
               "customQuery": true,
               "fields": {
-                "stream": "iedora_storage_operation_duration_ms",
-                "stream_type": "metrics",
+                "stream": "default",
+                "stream_type": "traces",
                 "x": [
                   {
                     "label": "Time",
@@ -506,7 +506,7 @@
           },
           "queries": [
             {
-              "query": "SELECT iedora_rate_limit_policy AS x_axis_1, SUM(value) AS y_axis_1 FROM \"iedora_rate_limit_decisions_total\" WHERE iedora_rate_limit_outcome = 'deny' AND _timestamp > now() - INTERVAL '1 hour' GROUP BY x_axis_1 ORDER BY y_axis_1 DESC",
+              "query": "SELECT iedora_rate_limit_policy AS x_axis_1, SUM(value) AS y_axis_1 FROM \"iedora_rate_limit_decisions_total\" WHERE iedora_rate_limit_outcome = 'deny' GROUP BY x_axis_1 ORDER BY y_axis_1 DESC",
               "customQuery": true,
               "fields": {
                 "stream": "iedora_rate_limit_decisions_total",

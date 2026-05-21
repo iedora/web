@@ -38,7 +38,7 @@
           },
           "queries": [
             {
-              "query": "SELECT SUM(value) AS y_axis_1 FROM \"iedora_restaurant_views_total\" WHERE _timestamp > now() - INTERVAL '24 hour'",
+              "query": "SELECT SUM(value) AS y_axis_1 FROM \"iedora_restaurant_views_total\"",
               "customQuery": true,
               "fields": {
                 "stream": "iedora_restaurant_views_total",
@@ -93,7 +93,7 @@
           },
           "queries": [
             {
-              "query": "SELECT COUNT(DISTINCT tenant_restaurant_id) AS y_axis_1 FROM \"iedora_restaurant_views_total\" WHERE _timestamp > now() - INTERVAL '7 day'",
+              "query": "SELECT COUNT(DISTINCT tenant_restaurant_id) AS y_axis_1 FROM \"iedora_restaurant_views_total\"",
               "customQuery": true,
               "fields": {
                 "stream": "iedora_restaurant_views_total",
@@ -148,11 +148,11 @@
           },
           "queries": [
             {
-              "query": "SELECT SUM(value) AS y_axis_1 FROM \"iedora_zitadel_calls_total\" WHERE iedora_zitadel_endpoint = 'create-org' AND iedora_zitadel_outcome = 'success' AND _timestamp > now() - INTERVAL '7 day'",
+              "query": "SELECT COUNT(*) AS y_axis_1 FROM \"default\" WHERE operation_name = 'zitadel.create-org' AND (span_status IS NULL OR span_status != 'ERROR')",
               "customQuery": true,
               "fields": {
-                "stream": "iedora_zitadel_calls_total",
-                "stream_type": "metrics",
+                "stream": "default",
+                "stream_type": "traces",
                 "x": [],
                 "y": [
                   {
@@ -202,7 +202,7 @@
           },
           "queries": [
             {
-              "query": "SELECT histogram(_timestamp, '1 day') AS x_axis_1, SUM(value) AS y_axis_1 FROM \"iedora_restaurant_views_total\" WHERE _timestamp > now() - INTERVAL '30 day' GROUP BY x_axis_1 ORDER BY x_axis_1",
+              "query": "SELECT histogram(_timestamp, '1 day') AS x_axis_1, SUM(value) AS y_axis_1 FROM \"iedora_restaurant_views_total\" GROUP BY x_axis_1 ORDER BY x_axis_1",
               "customQuery": true,
               "fields": {
                 "stream": "iedora_restaurant_views_total",
@@ -263,7 +263,7 @@
           },
           "queries": [
             {
-              "query": "SELECT tenant_restaurant_id AS x_axis_1, SUM(value) AS y_axis_1 FROM \"iedora_restaurant_views_total\" WHERE _timestamp > now() - INTERVAL '7 day' GROUP BY x_axis_1 ORDER BY y_axis_1 DESC LIMIT 10",
+              "query": "SELECT tenant_restaurant_id AS x_axis_1, SUM(value) AS y_axis_1 FROM \"iedora_restaurant_views_total\" GROUP BY x_axis_1 ORDER BY y_axis_1 DESC LIMIT 10",
               "customQuery": true,
               "fields": {
                 "stream": "iedora_restaurant_views_total",
@@ -323,7 +323,7 @@
           },
           "queries": [
             {
-              "query": "SELECT iedora_language AS x_axis_1, SUM(value) AS y_axis_1 FROM \"iedora_restaurant_views_total\" WHERE _timestamp > now() - INTERVAL '7 day' GROUP BY x_axis_1 ORDER BY y_axis_1 DESC",
+              "query": "SELECT iedora_language AS x_axis_1, SUM(value) AS y_axis_1 FROM \"iedora_restaurant_views_total\" GROUP BY x_axis_1 ORDER BY y_axis_1 DESC",
               "customQuery": true,
               "fields": {
                 "stream": "iedora_restaurant_views_total",
