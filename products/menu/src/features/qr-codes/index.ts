@@ -2,6 +2,7 @@ import 'server-only'
 import { cache } from 'react'
 import { drizzleQrCodesGateway } from './adapters/drizzle'
 import { listCodes as runListCodes } from './use-cases/list-codes'
+import { listForRestaurant as runListForRestaurant } from './use-cases/list-for-restaurant'
 import { resolveCode as runResolveCode } from './use-cases/resolve'
 
 /**
@@ -22,5 +23,14 @@ export const resolveQrCode = cache((code: string) =>
 )
 
 export const listQrCodesForAdmin = cache(() => runListCodes(drizzleQrCodesGateway))
+
+/**
+ * Tenant-scoped reader for the restaurant dashboard's QR page. Caller
+ * MUST have already gated by `requireRestaurantBySlug` — this returns
+ * raw rows scoped to the given restaurant id.
+ */
+export const listQrCodesForRestaurant = cache((restaurantId: string) =>
+  runListForRestaurant(drizzleQrCodesGateway, restaurantId),
+)
 
 export type { QrCodeListRow, QrCodeResolved, QrCodeRow } from './ports'

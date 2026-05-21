@@ -70,6 +70,15 @@ export interface QrCodesGateway {
   list(): Promise<QrCodeListRow[]>
 
   /**
+   * Tenant-scoped list — returns the bound codes for a single restaurant.
+   * Used by the restaurant dashboard's QR page so the tenant operator
+   * can see which stickers point at their place (read-only — rebinding
+   * lives in the cross-tenant admin surface). Ordered by `boundAt`
+   * desc — most recently bound first.
+   */
+  listForRestaurant(restaurantId: string): Promise<QrCodeRow[]>
+
+  /**
    * Public resolver. Returns the restaurant slug for a bound code, else
    * null. Used by `/q/[code]` — must be cheap; one indexed lookup.
    */

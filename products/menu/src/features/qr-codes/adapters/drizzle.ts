@@ -87,6 +87,21 @@ export const drizzleQrCodesGateway: QrCodesGateway = {
     }))
   },
 
+  async listForRestaurant(restaurantId) {
+    const rows = await db
+      .select({
+        code: qrCode.code,
+        restaurantId: qrCode.restaurantId,
+        label: qrCode.label,
+        createdAt: qrCode.createdAt,
+        boundAt: qrCode.boundAt,
+      })
+      .from(qrCode)
+      .where(eq(qrCode.restaurantId, restaurantId))
+      .orderBy(desc(qrCode.boundAt))
+    return rows
+  },
+
   async resolveBound(code) {
     const rows = await db
       .select({ code: qrCode.code, slug: restaurant.slug })

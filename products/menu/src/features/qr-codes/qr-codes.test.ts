@@ -105,6 +105,20 @@ function makeGateway(testDb: TestDb): QrCodesGateway {
             : null,
       }))
     },
+    async listForRestaurant(restaurantId) {
+      const rows = await db
+        .select({
+          code: schema.qrCode.code,
+          restaurantId: schema.qrCode.restaurantId,
+          label: schema.qrCode.label,
+          createdAt: schema.qrCode.createdAt,
+          boundAt: schema.qrCode.boundAt,
+        })
+        .from(schema.qrCode)
+        .where(eq(schema.qrCode.restaurantId, restaurantId))
+        .orderBy(desc(schema.qrCode.boundAt))
+      return rows
+    },
     async resolveBound(code) {
       const rows = await db
         .select({ code: schema.qrCode.code, slug: schema.restaurant.slug })
@@ -268,6 +282,42 @@ describe('deleteCode + list', () => {
     const map = new Map(rows.map((r) => [r.code, r]))
     expect(map.get('bound')?.restaurant?.slug).toBe('sushi')
     expect(map.get('free')?.restaurant).toBeNull()
+  })
+})
+
+describe('listForRestaurant', () => {
+  it('returns an empty list when no codes are bound', async () => {
+    await seedRestaurant(t)
+    const gw = makeGateway(t)
+    expect(await gw.listForRestaurant('r1')).toEqual([])
+  })
+
+  it('returns only the codes bound to the requested restaurant', async () => {
+    await seedRestaurant(t, 'r1', 'sushi')
+    await seedRestaurant(t, 'r2', 'bistro')
+    const gw = makeGateway(t)
+    await createCode(gw, { code: 'sushi-1', restaurantId: 'r1' })
+    await createCode(gw, { code: 'sushi-2', restaurantId: 'r1' })
+    await createCode(gw, { code: 'bistro-1', restaurantId: 'r2' })
+    await createCode(gw, { code: 'free' }) // unbound — must not appear
+
+    const rows = await gw.listForRestaurant('r1')
+    const codes = new Set(rows.map((r) => r.code))
+    expect(codes).toEqual(new Set(['sushi-1', 'sushi-2']))
+  })
+
+  it('orders by boundAt desc (most recently bound first)', async () => {
+    await seedRestaurant(t)
+    const gw = makeGateway(t)
+    // Insert in chronological order; rely on real timestamps from boundAt.
+    await createCode(gw, { code: 'first', restaurantId: 'r1' })
+    await new Promise((r) => setTimeout(r, 5))
+    await createCode(gw, { code: 'second', restaurantId: 'r1' })
+    await new Promise((r) => setTimeout(r, 5))
+    await createCode(gw, { code: 'third', restaurantId: 'r1' })
+
+    const rows = await gw.listForRestaurant('r1')
+    expect(rows.map((r) => r.code)).toEqual(['third', 'second', 'first'])
   })
 })
 
