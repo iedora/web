@@ -85,6 +85,12 @@ variable "admin_email" {
   default = "dev@iedora.local"
 }
 
+variable "admin_username" {
+  description = "FirstInstance bootstrap human-admin username. Used at the Zitadel login screen if username-auth is enabled. Only consulted on the FIRST boot — Zitadel ignores FirstInstance env on subsequent starts."
+  type        = string
+  default     = "zitadel-admin"
+}
+
 variable "machine_username" {
   description = "FirstInstance machine user. Dev: `menu-sa` (used both for TF provider auth + menu's runtime management calls). Prod: `zitadel-admin-sa` (TF-provider only; menu_sa is minted separately via the zitadel provider once the admin SA is in BWS)."
   type        = string
@@ -149,7 +155,7 @@ resource "docker_container" "this" {
     "ZITADEL_DATABASE_POSTGRES_ADMIN_EXISTINGDATABASE=postgres",
 
     "ZITADEL_FIRSTINSTANCE_ORG_NAME=iedora",
-    "ZITADEL_FIRSTINSTANCE_ORG_HUMAN_USERNAME=zitadel-admin",
+    "ZITADEL_FIRSTINSTANCE_ORG_HUMAN_USERNAME=${var.admin_username}",
     "ZITADEL_FIRSTINSTANCE_ORG_HUMAN_FIRSTNAME=iedora",
     "ZITADEL_FIRSTINSTANCE_ORG_HUMAN_LASTNAME=Admin",
     "ZITADEL_FIRSTINSTANCE_ORG_HUMAN_EMAIL_ADDRESS=${var.admin_email}",

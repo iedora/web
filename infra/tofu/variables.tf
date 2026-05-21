@@ -258,6 +258,20 @@ variable "allow_masterkey_rotation" {
 # The matching dev .env.local (infra/dev/tofu/main.tf) emits the same
 # keys with localhost values — one shape, two backends.
 
+variable "iedora_admin_emails" {
+  description = <<-EOT
+    Emails that should be granted the cross-product `iedora-admin` Zitadel
+    project role on every `just infra::deploy`. Each entry is resolved to a
+    Zitadel user ID at plan time (see `scripts/lookup-zitadel-users.sh`);
+    addresses that haven't signed in yet are silently skipped and land on
+    the next apply after they self-provision via OIDC.
+
+    Add a teammate: append their email here, commit, deploy.
+  EOT
+  type    = list(string)
+  default = ["eduardoferdcarvalho@gmail.com"]
+}
+
 variable "infra_zitadel_sa_key_json" {
   description = <<-EOT
     JSON service-account key for Zitadel's `zitadel-admin-sa` machine user

@@ -146,7 +146,19 @@ func applyDevStack(selected []string, repoRoot, devTofuDir string) {
 // stack is throwaway by design, partial-state should never block
 // a clean reset.
 func destroyDevStack(repoRoot, devTofuDir, envLocalPath string) {
-	step(1, "tofu destroy")
+	stepOf(1, destroySteps, "tofu state rm zitadel_* + null_resource.iedora_admin_grants")
+	// `tofu destroy` refreshes every resource in state via its provider
+	// before planning the deletes. The Zitadel provider needs a valid
+	// JWT to read the org / project / grants — but mid-destroy the
+	// container is going away (or the JWT in state is stale from a
+	// previous instance), so the refresh fails with AUTH-7fs1e and
+	// blocks the whole destroy. Stripping these from state first
+	// removes the need for the API round-trip; the live objects vanish
+	// with the Zitadel container below. Best-effort: ignore errors
+	// (state may not exist yet, or none of these may be in it).
+	stateRmDevZitadel(devTofuDir)
+
+	stepOf(2, destroySteps, "tofu destroy")
 	// zitadel_jwt_profile="" satisfies the provider's Configure() check
 	// without needing a real JWT. If state is already gone the destroy
 	// is a no-op; manual cleanup below catches the rest either way.
@@ -154,16 +166,16 @@ func destroyDevStack(repoRoot, devTofuDir, envLocalPath string) {
 		"-var", "zitadel_jwt_profile=",
 	)
 
-	step(2, "remove infra-* containers")
+	stepOf(3, destroySteps, "remove infra-* containers")
 	// Catches orphans tofu didn't track (failed apply that never made
 	// it into state, e.g. an aborted first-pass).
 	removeInfraContainers()
 
-	step(3, "remove docker network + volumes")
+	stepOf(4, destroySteps, "remove docker network + volumes")
 	runQuiet("", "docker", "network", "rm", "iedora")
 	runQuiet("", "docker", "volume", "rm", "postgres-data", "localstack-data", "openobserve-data")
 
-	step(4, "wipe local state + .env.local")
+	stepOf(5, destroySteps, "wipe local state + .env.local")
 	for _, p := range []string{
 		filepath.Join(repoRoot, "infra/dev/.zitadel-bootstrap"),
 		filepath.Join(devTofuDir, ".terraform"),

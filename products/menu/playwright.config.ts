@@ -72,7 +72,7 @@ export default defineConfig({
       timeout: 240_000,
       env: {
         DATABASE_URL:
-          'postgresql://postgres:postgres@localhost:5432/menu_test',
+          'postgresql://postgres:Password1!@localhost:5432/menu_test',
         MENU_PUBLIC_URL: BASE_URL,
         MENU_SESSION_SECRET: MENU_TEST_SECRET,
         DISABLE_RATE_LIMIT: 'true',
@@ -86,6 +86,7 @@ export default defineConfig({
         ZITADEL_OAUTH_CLIENT_ID: 'menu',
         ZITADEL_OAUTH_CLIENT_SECRET: 'menu-secret',
         ZITADEL_MANAGEMENT_TOKEN: 'test-pat',
+        ZITADEL_ACTION_SIGNING_KEY: 'test-signing-key',
         // Storage — LocalStack via docker-compose. Separate bucket so tests
         // don't collide with dev assets.
         S3_ENDPOINT: 'http://localhost:4566',

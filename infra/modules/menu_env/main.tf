@@ -65,6 +65,24 @@ variable "zitadel_management_token" {
   sensitive = true
 }
 
+variable "zitadel_action_signing_key" {
+  description = "HMAC signing key for the Zitadel Actions v2 webhook that injects the flat `permissions` claim. Minted by `zitadel_action_target.menu_permissions.signing_key`."
+  type        = string
+  sensitive   = true
+}
+
+variable "iedora_project_id" {
+  description = "ID of the iedora Zitadel project (zitadel_project.iedora.id). The Actions v2 webhook uses it as `projectId` when self-healing a missing iedora-admin grant for an admin email on first sign-in."
+  type        = string
+  default     = ""
+}
+
+variable "iedora_admin_emails" {
+  description = "Comma-separated emails that should auto-receive `iedora-admin` on first OIDC sign-in. The Actions v2 webhook reads this and POSTs the grant inline when the email matches and the user has no grant yet — closes the gap that null_resource.iedora_admin_grants leaves when the user is auto-provisioned only at first login."
+  type        = string
+  default     = ""
+}
+
 variable "s3_endpoint" {
   type = string
 }
@@ -130,6 +148,9 @@ locals {
     ZITADEL_OAUTH_CLIENT_ID     = var.zitadel_oauth_client_id
     ZITADEL_OAUTH_CLIENT_SECRET = var.zitadel_oauth_client_secret
     ZITADEL_MANAGEMENT_TOKEN    = var.zitadel_management_token
+    ZITADEL_ACTION_SIGNING_KEY  = var.zitadel_action_signing_key
+    IEDORA_PROJECT_ID           = var.iedora_project_id
+    IEDORA_ADMIN_EMAILS         = var.iedora_admin_emails
     S3_ENDPOINT                 = var.s3_endpoint
     S3_REGION                   = var.s3_region
     S3_ACCESS_KEY               = var.s3_access_key
@@ -153,6 +174,7 @@ locals {
     "ZITADEL_OAUTH_CLIENT_ID",
     "ZITADEL_OAUTH_CLIENT_SECRET",
     "ZITADEL_MANAGEMENT_TOKEN",
+    "ZITADEL_ACTION_SIGNING_KEY",
   ])
 
   # Placeholders chosen to satisfy src/shared/env.ts Zod constraints
@@ -162,6 +184,7 @@ locals {
     ZITADEL_OAUTH_CLIENT_ID     = "PLACEHOLDER-bun-run-dev-overrides-via-env-local"
     ZITADEL_OAUTH_CLIENT_SECRET = "PLACEHOLDER-bun-run-dev-overrides-via-env-local"
     ZITADEL_MANAGEMENT_TOKEN    = "PLACEHOLDER-bun-run-dev-overrides-via-env-local"
+    ZITADEL_ACTION_SIGNING_KEY  = "PLACEHOLDER-bun-run-dev-overrides-via-env-local"
   }
 
   env_committable = {

@@ -9,7 +9,7 @@ describe('session adapter — encrypted cookie round-trip', () => {
   it('seals + opens a session payload', async () => {
     const a = makeSessionAdapter(SECRET)
     const session = {
-      user: { id: 'u1', email: 'u1@example.test', name: 'User One' },
+      user: { id: 'u1', email: 'u1@example.test', name: 'User One', roles: [], permissions: [] },
       expiresAt: Math.floor(Date.now() / 1000) + 3600,
     }
     const jwe = await a.seal(session)
@@ -19,11 +19,53 @@ describe('session adapter — encrypted cookie round-trip', () => {
     expect(opened?.expiresAt).toBe(session.expiresAt)
   })
 
+  it('round-trips project roles + permissions (iedora-admin etc.)', async () => {
+    const a = makeSessionAdapter(SECRET)
+    const session = {
+      user: {
+        id: 'u1',
+        email: 'admin@iedora.com',
+        name: 'Admin',
+        roles: ['iedora-admin', 'some-other-role'],
+        permissions: ['qr-codes:read', 'qr-codes:write'],
+      },
+      expiresAt: Math.floor(Date.now() / 1000) + 3600,
+    }
+    const jwe = await a.seal(session)
+    const opened = await a.open(jwe)
+    expect(opened?.user.roles).toEqual(['iedora-admin', 'some-other-role'])
+    expect(opened?.user.permissions).toEqual(['qr-codes:read', 'qr-codes:write'])
+  })
+
+  it('opens legacy cookies (no permissions field) with permissions defaulted to []', async () => {
+    // Simulate a cookie sealed before the permissions field existed.
+    // We construct it via the same JWE encoder but without the new key.
+    const { EncryptJWT } = await import('jose')
+    const { createHash } = await import('node:crypto')
+    const key = new Uint8Array(createHash('sha256').update(SECRET).digest())
+    const jwe = await new EncryptJWT({
+      sub: 'u1',
+      email: 'u@x',
+      name: 'U',
+      roles: ['iedora-admin'],
+      // NB: no `permissions`
+    })
+      .setProtectedHeader({ alg: 'dir', enc: 'A256GCM' })
+      .setIssuedAt()
+      .setExpirationTime(Math.floor(Date.now() / 1000) + 3600)
+      .encrypt(key)
+
+    const a = makeSessionAdapter(SECRET)
+    const opened = await a.open(jwe)
+    expect(opened?.user.roles).toEqual(['iedora-admin'])
+    expect(opened?.user.permissions).toEqual([])
+  })
+
   it('rejects a cookie sealed with a different secret (key rotation invalidates sessions)', async () => {
     const oldAdapter = makeSessionAdapter(SECRET)
     const newAdapter = makeSessionAdapter('b'.repeat(48))
     const jwe = await oldAdapter.seal({
-      user: { id: 'u1', email: 'u1@example.test', name: 'U' },
+      user: { id: 'u1', email: 'u1@example.test', name: 'U', roles: [], permissions: [] },
       expiresAt: Math.floor(Date.now() / 1000) + 3600,
     })
     expect(await newAdapter.open(jwe)).toBeNull()
@@ -32,7 +74,7 @@ describe('session adapter — encrypted cookie round-trip', () => {
   it('returns null on tampered ciphertext (AES-GCM detects the bit-flip)', async () => {
     const a = makeSessionAdapter(SECRET)
     const jwe = await a.seal({
-      user: { id: 'u1', email: 'u@x', name: 'U' },
+      user: { id: 'u1', email: 'u@x', name: 'U', roles: [], permissions: [] },
       expiresAt: Math.floor(Date.now() / 1000) + 3600,
     })
     // Flip a byte in the ciphertext (4th segment of compact JWE: hdr.cek.iv.ct.tag)
@@ -47,7 +89,7 @@ describe('session adapter — encrypted cookie round-trip', () => {
     const a = makeSessionAdapter(SECRET)
     const past = Math.floor(Date.now() / 1000) - 60
     const jwe = await a.seal({
-      user: { id: 'u1', email: 'u@x', name: 'U' },
+      user: { id: 'u1', email: 'u@x', name: 'U', roles: [], permissions: [] },
       expiresAt: past,
     })
     expect(await a.open(jwe)).toBeNull()

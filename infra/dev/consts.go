@@ -13,7 +13,8 @@ const (
 	// ── Display ───────────────────────────────────────────────────────────
 
 	logPrefix       = "[dev]"
-	totalSteps      = 4
+	totalSteps      = 4 // apply path
+	destroySteps    = 5 // destroy path (extra state-rm pass for zitadel_*)
 	redactThreshold = 32 // chars before redact() truncates with ellipsis
 
 	// ── File paths (relative to repo root) ───────────────────────────────

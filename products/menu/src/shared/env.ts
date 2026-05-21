@@ -45,6 +45,29 @@ const serverSchema = z.object({
   // zitadel_personal_access_token.menu_sa.
   ZITADEL_MANAGEMENT_TOKEN: z.string().min(1),
 
+  // HMAC signing key for the Zitadel Actions v2 webhook that injects the
+  // flat `permissions` claim into id_token / access_token. Minted in TF
+  // by zitadel_action_target.menu_permissions (computed `signing_key`).
+  // The /api/zitadel/permissions route uses it to validate the
+  // `ZITADEL-Signature` header on every inbound call.
+  ZITADEL_ACTION_SIGNING_KEY: z.string().min(1),
+
+  // ID of the iedora Zitadel project. The webhook uses it as `projectId`
+  // when self-healing an admin's missing iedora-admin grant on their
+  // first sign-in (the TF-time grant helper can't reach a user that
+  // doesn't exist yet — Zitadel only auto-provisions on first OIDC
+  // login). Empty in tests / build stub.
+  IEDORA_PROJECT_ID: z.string().default(''),
+
+  // Comma-separated emails that should auto-receive `iedora-admin` on
+  // first sign-in. Matches `var.iedora_admin_emails` on the TF side.
+  // Webhook reads this list, grants the role inline when the user has
+  // none, includes the expanded scopes in the same response — so the
+  // FIRST token already carries the right permissions claim. Empty
+  // disables self-heal (production behaviour falls back to the TF-side
+  // null_resource grant for users that pre-existed at apply time).
+  IEDORA_ADMIN_EMAILS: z.string().default(''),
+
   // Rate-limit kill-switch. Set 'true' in e2e tests so the slice short-circuits
   // to "always ok" and load-bearing flows (org creation, asset upload) can
   // run in tight loops. Never enable in production.

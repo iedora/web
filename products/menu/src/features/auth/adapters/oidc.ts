@@ -52,7 +52,16 @@ export type AuthorizationStart = {
  *   - openid profile email — standard ID-token claims
  *   - offline_access       — issues refresh_token (kept on Zitadel side;
  *                            menu's session lifetime is independent)
- * No `roles` scope yet — multi-tenant role mapping isn't wired.
+ *   - urn:zitadel:iam:org:project:roles
+ *                          — asks Zitadel to embed the user's roles for
+ *                            the iedora project under the
+ *                            `urn:zitadel:iam:org:project:roles` claim.
+ *                            `extractZitadelProjectRoles` reads the keys.
+ *                            The OIDC app's `*_role_assertion = true`
+ *                            flags do the same job server-side;
+ *                            requesting the scope is the explicit,
+ *                            client-declared version — defence in depth
+ *                            against the assertion flags ever flipping.
  */
 export async function buildAuthorizationStart(redirectUri: string): Promise<AuthorizationStart> {
   const config = await getConfig()
@@ -61,7 +70,7 @@ export async function buildAuthorizationStart(redirectUri: string): Promise<Auth
   const state = oidc.randomState()
   const url = oidc.buildAuthorizationUrl(config, {
     redirect_uri: redirectUri,
-    scope: 'openid profile email offline_access',
+    scope: 'openid profile email offline_access urn:zitadel:iam:org:project:roles',
     code_challenge: codeChallenge,
     code_challenge_method: 'S256',
     state,
@@ -73,10 +82,45 @@ export type CallbackResult = {
   sub: string
   email: string
   name: string
+  /**
+   * Project roles literally granted by Zitadel on the iedora project.
+   * Kept for audit / debug. Authorization gates use `permissions`.
+   */
+  roles: string[]
+  /**
+   * Flat scopes injected into the id_token by the Zitadel Actions v2
+   * webhook at `/api/zitadel/permissions`. Single source of truth for
+   * `requireScope` checks. Empty if the webhook didn't run (action
+   * misconfigured, target unreachable, fresh sign-in pre-rollout).
+   */
+  permissions: string[]
   /** Raw access_token if the caller needs it (we don't, currently). */
   accessToken: string
   /** Token expiry — Zitadel access_token TTL. */
   accessTokenExpiresAt: number
+}
+
+/**
+ * Pull project-role keys off a Zitadel id_token claims object. The claim
+ * shape is `{ "<role_key>": { "<org_id>": "<org_login>" } }`; we only care
+ * about the keys (the role names). Returns `[]` when the claim is absent or
+ * malformed — callers treat empty as "no special permissions".
+ */
+export function extractZitadelProjectRoles(claims: Record<string, unknown>): string[] {
+  const raw = claims['urn:zitadel:iam:org:project:roles']
+  if (!raw || typeof raw !== 'object') return []
+  return Object.keys(raw as Record<string, unknown>)
+}
+
+/**
+ * Pull the flat `permissions` claim (string[]) injected by the Zitadel
+ * Actions v2 webhook. Returns `[]` if the claim is missing or malformed
+ * — callers treat empty as "user has no scopes".
+ */
+export function extractPermissionsClaim(claims: Record<string, unknown>): string[] {
+  const raw = claims['permissions']
+  if (!Array.isArray(raw)) return []
+  return raw.filter((p): p is string => typeof p === 'string')
 }
 
 /**
@@ -106,6 +150,9 @@ export async function exchangeAuthorizationCode(args: {
   const sub = claims.sub
   const email = typeof claims.email === 'string' ? claims.email : ''
   const name = typeof claims.name === 'string' ? claims.name : email
+  const claimMap = claims as Record<string, unknown>
+  const roles = extractZitadelProjectRoles(claimMap)
+  const permissions = extractPermissionsClaim(claimMap)
 
   const accessToken = tokens.access_token
   if (!accessToken) throw new Error('OIDC: missing access_token in response')
@@ -114,7 +161,7 @@ export async function exchangeAuthorizationCode(args: {
   const ttl = typeof tokens.expires_in === 'number' ? tokens.expires_in : 3600
   const accessTokenExpiresAt = Math.floor(Date.now() / 1000) + ttl
 
-  return { sub, email, name, accessToken, accessTokenExpiresAt }
+  return { sub, email, name, roles, permissions, accessToken, accessTokenExpiresAt }
 }
 
 /**

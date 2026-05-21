@@ -1,6 +1,10 @@
 import Link from 'next/link'
 import { Wordmark } from '@iedora/design-system'
-import { getEffectiveOrganizationId, getSession } from '@/features/auth'
+import {
+  getEffectiveOrganizationId,
+  getSession,
+  SCOPES,
+} from '@/features/auth'
 import { getOrganizationPlan, planHas } from '@/features/plans'
 import { LogoutButton } from '@/features/dashboard-home/ui/logout-button'
 import { UserLocaleSwitcher } from '@/features/dashboard-home/ui/user-locale-switcher'
@@ -23,6 +27,11 @@ export default async function DashboardLayout({
     ? await getOrganizationPlan(organizationId)
     : null
   const showAnalyticsLink = plan ? planHas(plan, 'analytics') : false
+  // Chrome decision mirrors the page-level gate (`requireScope(QR_CODES_READ)`)
+  // so anyone with read permission — bundle holder or atomic grant — sees
+  // the link, and only those.
+  const showAdminLink =
+    session?.user.permissions.includes(SCOPES.QR_CODES_READ) ?? false
 
   const navLinkClass =
     "font-[family-name:var(--mono)] text-[10.5px] uppercase tracking-[0.18em] text-[var(--ink-55)] no-underline transition-colors hover:text-[var(--ink)] py-1.5"
@@ -68,6 +77,15 @@ export default async function DashboardLayout({
             <Link href="/dashboard/billing" className={navLinkClass}>
               Billing
             </Link>
+            {showAdminLink && (
+              <Link
+                href="/dashboard/admin/qr-codes"
+                data-testid="nav-admin"
+                className={navLinkClass}
+              >
+                Admin
+              </Link>
+            )}
             {session?.user && (
               <span
                 className="hidden min-w-0 truncate font-[family-name:var(--mono)] text-[10.5px] uppercase tracking-[0.18em] text-[var(--ink-40)] md:inline"

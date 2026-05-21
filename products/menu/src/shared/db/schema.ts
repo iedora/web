@@ -261,6 +261,33 @@ export const invoice = menuSchema.table(
   ],
 )
 
+// ─── QR codes ─────────────────────────────────────────────────────────────────
+// Physical-sticker registry. Each `code` is a short token printed on a sticker
+// (`menu.iedora.com/q/<code>`). An unbound row exists for "I printed it, haven't
+// decided which restaurant yet"; admin (iedora-admin role) binds it later by
+// setting `restaurantId`. `onDelete: 'set null'` keeps the sticker valid if a
+// restaurant is later deleted — the code can be rebound rather than discarded.
+//
+// CRUD is Iedora-staff only (see `requireIedoraAdmin`); tenant scoping does
+// NOT apply here — this is a cross-tenant operational table.
+
+export const qrCode = menuSchema.table(
+  'qr_code',
+  {
+    code: text('code').primaryKey(),
+    restaurantId: text('restaurant_id').references(() => restaurant.id, {
+      onDelete: 'set null',
+    }),
+    // Optional free-text label the admin uses to track stickers in the
+    // physical world ("box A — May 2026", "table 12"). Not exposed publicly.
+    label: text('label'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    // Set when restaurantId moves from null → non-null; cleared on unbind.
+    boundAt: timestamp('bound_at'),
+  },
+  (t) => [index('qr_code_restaurant_idx').on(t.restaurantId)],
+)
+
 // ─── Rate limiter ─────────────────────────────────────────────────────────────
 // Append-only log of rate-limit attempts. Sliding window is computed on read
 // (DELETE-expired → INSERT-now → COUNT, all in one transaction guarded by an

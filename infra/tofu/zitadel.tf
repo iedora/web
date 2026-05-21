@@ -91,6 +91,170 @@ resource "zitadel_project" "iedora" {
   }
 }
 
+# ── Project roles ────────────────────────────────────────────────────────────
+# Iedora-staff cross-product role. Defined on `zitadel_project.iedora` so any
+# OIDC app under that project (menu today, future products tomorrow) sees
+# this role on the user's token without further config — the project has
+# `project_role_assertion = true`, and every OIDC app under it asserts roles
+# on both id_token + access_token.
+resource "zitadel_project_role" "iedora_admin" {
+  org_id       = zitadel_org.iedora.id
+  project_id   = zitadel_project.iedora.id
+  role_key     = "iedora-admin"
+  display_name = "Iedora Admin"
+  group        = "iedora"
+
+  lifecycle {
+    enabled = local.zitadel_bootstrapped
+  }
+}
+
+# ── Atomic permission roles ──────────────────────────────────────────────────
+# Naming convention: keys with `:` are atomic, no expansion. Keys
+# without `:` (e.g. `iedora-admin` above) are bundles — expansion lives
+# in `products/menu/src/features/auth/bundles.ts`, consumed by the
+# Zitadel Actions v2 webhook (`zitadel_action_target` below).
+#
+# Add a new atomic permission = new `zitadel_project_role` here +
+# referencing the scope key in `scopes.ts`. New bundle = new role
+# without `:` + entry in `BUNDLES`. No re-grant needed for existing users.
+
+resource "zitadel_project_role" "qr_codes_read" {
+  org_id       = zitadel_org.iedora.id
+  project_id   = zitadel_project.iedora.id
+  role_key     = "qr-codes:read"
+  display_name = "QR codes — read"
+  group        = "qr-codes"
+
+  lifecycle {
+    enabled = local.zitadel_bootstrapped
+  }
+}
+
+resource "zitadel_project_role" "qr_codes_write" {
+  org_id       = zitadel_org.iedora.id
+  project_id   = zitadel_project.iedora.id
+  role_key     = "qr-codes:write"
+  display_name = "QR codes — create"
+  group        = "qr-codes"
+
+  lifecycle {
+    enabled = local.zitadel_bootstrapped
+  }
+}
+
+resource "zitadel_project_role" "qr_codes_update" {
+  org_id       = zitadel_org.iedora.id
+  project_id   = zitadel_project.iedora.id
+  role_key     = "qr-codes:update"
+  display_name = "QR codes — bind / unbind"
+  group        = "qr-codes"
+
+  lifecycle {
+    enabled = local.zitadel_bootstrapped
+  }
+}
+
+resource "zitadel_project_role" "qr_codes_delete" {
+  org_id       = zitadel_org.iedora.id
+  project_id   = zitadel_project.iedora.id
+  role_key     = "qr-codes:delete"
+  display_name = "QR codes — delete"
+  group        = "qr-codes"
+
+  lifecycle {
+    enabled = local.zitadel_bootstrapped
+  }
+}
+
+# ── Actions v2 — bundle expansion webhook ────────────────────────────────────
+# Zitadel POSTs the token-mint event to `menu_permissions_endpoint`. The
+# menu webhook (`/api/zitadel/permissions`) returns
+# `{ append_claims: [{ key: "permissions", value: [...] }] }`, which
+# Zitadel embeds in the id_token + access_token + userinfo. The flat
+# scope list is the authoritative input to `requireScope` in menu.
+#
+# Single source of truth — future iedora products point their own
+# Zitadel Targets at this same URL, no duplicate map.
+#
+# `REST_CALL` is synchronous (response IS consumed by Zitadel); contrast
+# REST_WEBHOOK which is fire-and-forget. `interrupt_on_error = false`
+# means a slow/down webhook silently drops the `permissions` claim
+# rather than blocking sign-in; the DAL fails closed on missing scope.
+#
+# The `signing_key` is a computed attribute (returned once on create).
+# It flows into `module.menu_env.zitadel_action_signing_key` via
+# `containers.tf`, which makes it available to the menu container as
+# `ZITADEL_ACTION_SIGNING_KEY`. Rotate via `tofu apply -replace=...`.
+
+resource "zitadel_action_target" "menu_permissions" {
+  name               = "menu-permissions"
+  endpoint           = "https://${var.menu_public_hostname}/api/zitadel/permissions"
+  target_type        = "REST_CALL"
+  timeout            = "5s"
+  interrupt_on_error = false
+
+  lifecycle {
+    enabled = local.zitadel_bootstrapped
+  }
+}
+
+resource "zitadel_action_execution_function" "menu_permissions_userinfo" {
+  name       = "preuserinfo"
+  target_ids = [zitadel_action_target.menu_permissions.id]
+
+  lifecycle {
+    enabled = local.zitadel_bootstrapped
+  }
+}
+
+resource "zitadel_action_execution_function" "menu_permissions_accesstoken" {
+  name       = "preaccesstoken"
+  target_ids = [zitadel_action_target.menu_permissions.id]
+
+  lifecycle {
+    enabled = local.zitadel_bootstrapped
+  }
+}
+
+# ── iedora-admin grants ──────────────────────────────────────────────────────
+# The zitadel TF provider has no "search user by email" data source, and
+# `for_each` rejects apply-time-unknown keys — so the lookup-via-data-
+# external + zitadel_user_grant chain isn't viable. Instead we run a
+# single Go helper (`infra/cmd/zitadel-grant-iedora-admins`, shimmed at
+# `infra/bin/zitadel-grant-iedora-admins`) via a `null_resource`
+# `local-exec`: it looks up each email and POSTs the grant, treating
+# ALREADY_EXISTS (Zitadel's idempotent-grant response) as success.
+#
+# Triggers: re-runs whenever `var.iedora_admin_emails` changes or the
+# role itself is recreated. Users that haven't signed in yet are skipped
+# (no fatal error) — append + re-deploy after they self-provision via OIDC.
+#
+# Limitation: ADDITIVE only. Removing an email from the var does NOT
+# revoke the existing grant — do that via the Zitadel admin UI.
+
+resource "null_resource" "iedora_admin_grants" {
+  count = local.zitadel_bootstrapped ? 1 : 0
+
+  triggers = {
+    emails  = join(",", var.iedora_admin_emails)
+    role_id = zitadel_project_role.iedora_admin.id
+  }
+
+  provisioner "local-exec" {
+    command = "${path.module}/../bin/zitadel-grant-iedora-admins"
+    environment = {
+      ZG_HOSTNAME   = var.zitadel_hostname
+      ZG_SCHEME     = "https"
+      ZG_TOKEN      = zitadel_personal_access_token.menu_sa.token
+      ZG_ORG_ID     = zitadel_org.iedora.id
+      ZG_PROJECT_ID = zitadel_project.iedora.id
+      ZG_ROLE_KEY   = zitadel_project_role.iedora_admin.role_key
+      ZG_EMAILS     = jsonencode(var.iedora_admin_emails)
+    }
+  }
+}
+
 # ── Menu OIDC app (#20) ──────────────────────────────────────────────────────
 # Confidential web client. Menu's auth slice (openid-client + jose) drives
 # the standard auth-code-with-PKCE flow against this app:

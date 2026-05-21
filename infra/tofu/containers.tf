@@ -184,6 +184,7 @@ module "zitadel" {
   login_v2_base_uri = "https://${var.zitadel_hostname}/ui/v2/login"
   postgres_host     = "infra-postgres"
   postgres_password = random_password.postgres.result
+  admin_username    = "eduvhc"
   admin_email       = "eduardoferdcarvalho@gmail.com"
   admin_password    = random_password.zitadel_first_admin.result
   bootstrap_path    = docker_volume.zitadel_bootstrap.name
@@ -295,6 +296,9 @@ module "menu_env" {
   zitadel_oauth_client_id     = zitadel_application_oidc.menu.client_id
   zitadel_oauth_client_secret = zitadel_application_oidc.menu.client_secret
   zitadel_management_token    = zitadel_personal_access_token.menu_sa.token
+  zitadel_action_signing_key  = zitadel_action_target.menu_permissions.signing_key
+  iedora_project_id           = zitadel_project.iedora.id
+  iedora_admin_emails         = join(",", var.iedora_admin_emails)
 
   # Shared assets bucket (cloudflare_r2_bucket.assets in main.tf).
   s3_endpoint   = "https://${var.account_id}.r2.cloudflarestorage.com"

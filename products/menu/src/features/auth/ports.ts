@@ -1,5 +1,7 @@
 import type { Session } from './adapters/session'
 
+export type { Session } from './adapters/session'
+
 /**
  * AuthGateway — the slice's only direct dependency on the encrypted
  * session cookie + the local DB.

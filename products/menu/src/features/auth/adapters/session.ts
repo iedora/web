@@ -27,6 +27,20 @@ export type Session = {
     id: string
     email: string
     name: string
+    /**
+     * Zitadel project-role keys asserted on the iedora project (e.g.
+     * `'iedora-admin'`). What the user was literally granted. Kept for
+     * audit / debug. Authorization gates read `permissions` instead.
+     */
+    roles: string[]
+    /**
+     * Flat scope strings (e.g. `'qr-codes:write'`), produced by the
+     * Zitadel Actions v2 webhook at `/api/zitadel/permissions` which
+     * expands bundle role-grants into concrete scopes. Authoritative
+     * for `requireScope(scope)` checks. Frozen at login time — a fresh
+     * grant requires re-auth to take effect.
+     */
+    permissions: string[]
   }
   /** Unix-seconds expiry. Cheap to compare without parsing the JWE. */
   expiresAt: number
@@ -54,6 +68,8 @@ export function makeSessionAdapter(secret: string) {
         sub: session.user.id,
         email: session.user.email,
         name: session.user.name,
+        roles: session.user.roles,
+        permissions: session.user.permissions,
       })
         .setProtectedHeader({ alg: 'dir', enc: 'A256GCM' })
         .setIssuedAt()
@@ -81,8 +97,20 @@ export function makeSessionAdapter(secret: string) {
         ) {
           return null
         }
+        // Forward-compatible additions. Pre-roles cookies (very old) and
+        // pre-permissions cookies (sealed before the Zitadel Action v2
+        // shipped) lack the new fields; treat as `[]` so existing
+        // sessions keep working until they expire and the user re-auths.
+        const rawRoles = payload.roles
+        const roles = Array.isArray(rawRoles)
+          ? rawRoles.filter((r): r is string => typeof r === 'string')
+          : []
+        const rawPermissions = payload.permissions
+        const permissions = Array.isArray(rawPermissions)
+          ? rawPermissions.filter((p): p is string => typeof p === 'string')
+          : []
         return {
-          user: { id: sub, email, name },
+          user: { id: sub, email, name, roles, permissions },
           expiresAt: exp,
         }
       } catch {

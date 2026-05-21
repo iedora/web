@@ -7,6 +7,9 @@ import { getEffectiveOrganizationId as _getEffectiveOrganizationId } from './use
 import { requireActiveOrganization as _requireActiveOrganization } from './use-cases/require-active-organization'
 import { requireRestaurantAccess as _requireRestaurantAccess } from './use-cases/require-restaurant-access'
 import { requireRestaurantBySlug as _requireRestaurantBySlug } from './use-cases/require-restaurant-by-slug'
+import { requireIedoraAdmin as _requireIedoraAdmin } from './use-cases/require-iedora-admin'
+import { requireScope as _requireScope } from './use-cases/require-scope'
+import type { Scope } from './scopes'
 
 /**
  * Public API of the auth slice. These convenience wrappers bind the
@@ -48,5 +51,25 @@ export const requireRestaurantBySlug = cache((slug: string) =>
   _requireRestaurantBySlug(drizzleAuthGateway, zitadelHttpIdentity, slug),
 )
 
-export type { AuthGateway } from './ports'
-export type { Session } from './adapters/session'
+/**
+ * Cross-tenant guard. Requires `iedora-admin` project role (granted via
+ * Zitadel on the iedora project). Use for chrome decisions and legacy
+ * call-sites. New surfaces should reach for `requireScope(scope)` —
+ * fine-grained, capability-based, future-proof.
+ */
+export const requireIedoraAdmin = cache(() => _requireIedoraAdmin(drizzleAuthGateway))
+
+/**
+ * Capability-based guard. Authoritative for cross-tenant admin
+ * surfaces — checks `session.user.permissions` (the flat scope list
+ * injected by the Zitadel Actions v2 webhook). Bundles like
+ * `iedora-admin` resolve to a set of these scopes; per-user atomic
+ * grants top them up.
+ */
+export const requireScope = cache((scope: Scope) =>
+  _requireScope(drizzleAuthGateway, scope),
+)
+
+export type { AuthGateway, Session } from './ports'
+export { IEDORA_ADMIN_ROLE } from './roles'
+export { SCOPES, type Scope } from './scopes'

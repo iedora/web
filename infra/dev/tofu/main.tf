@@ -127,11 +127,20 @@ resource "docker_container" "zitadel_bootstrap_chmod" {
 
 # ── Services ────────────────────────────────────────────────────────────────
 
+# Single dev password for every human-typeable credential in the stack:
+# postgres, openobserve, the Zitadel bootstrap admin, the OTel basic-auth
+# headers. The Zitadel masterkey is excluded (must be exactly 32 chars).
+# The random_password.* secrets (session, signing key) are excluded too
+# — they're machine-only, never typed.
+locals {
+  dev_password = "Password1!"
+}
+
 module "postgres" {
   source = "../../modules/services/postgres"
 
   network_name      = docker_network.iedora.name
-  postgres_password = "postgres"
+  postgres_password = local.dev_password
   data_path         = docker_volume.postgres_data.name
   expose_host_port  = 5432
   # Same canonical init.sql prod uses — creates every known product DB
@@ -168,7 +177,7 @@ module "openobserve" {
   network_name       = docker_network.iedora.name
   data_path          = docker_volume.openobserve_data.name
   root_user_email    = "dev@iedora.local"
-  root_user_password = "dev-password"
+  root_user_password = local.dev_password
   expose_host_port   = 5080
 
   s3 = {
@@ -267,7 +276,7 @@ module "zitadel" {
   external_secure   = false
   login_v2_base_uri = "http://localhost:3001/ui/v2/login"
   postgres_host     = "postgres"
-  postgres_password = "postgres"
+  postgres_password = local.dev_password
   admin_password    = var.menu_admin_password
   # Dev only — the bootstrap password is a known literal ("Password1!"),
   # and `just dev-down && just dev` wipes state often. Forcing a rotate
@@ -325,6 +334,8 @@ resource "docker_image" "house" {
   triggers = {
     source = local.house_source_hash
   }
+  # See `docker_image.menu` — same in-use-image-during-replace conflict.
+  force_remove = true
 
   lifecycle {
     enabled = var.enable_house
@@ -496,6 +507,92 @@ resource "null_resource" "iedora_admin_grants" {
   }
 }
 
+# ── Atomic permission roles + Actions v2 webhook (mirrors prod) ──────────────
+# See prod's infra/tofu/zitadel.tf for the full rationale.
+
+resource "zitadel_project_role" "qr_codes_read" {
+  org_id       = zitadel_org.iedora.id
+  project_id   = zitadel_project.iedora.id
+  role_key     = "qr-codes:read"
+  display_name = "QR codes — read"
+  group        = "qr-codes"
+
+  lifecycle {
+    enabled = local.seed_active
+  }
+}
+
+resource "zitadel_project_role" "qr_codes_write" {
+  org_id       = zitadel_org.iedora.id
+  project_id   = zitadel_project.iedora.id
+  role_key     = "qr-codes:write"
+  display_name = "QR codes — create"
+  group        = "qr-codes"
+
+  lifecycle {
+    enabled = local.seed_active
+  }
+}
+
+resource "zitadel_project_role" "qr_codes_update" {
+  org_id       = zitadel_org.iedora.id
+  project_id   = zitadel_project.iedora.id
+  role_key     = "qr-codes:update"
+  display_name = "QR codes — bind / unbind"
+  group        = "qr-codes"
+
+  lifecycle {
+    enabled = local.seed_active
+  }
+}
+
+resource "zitadel_project_role" "qr_codes_delete" {
+  org_id       = zitadel_org.iedora.id
+  project_id   = zitadel_project.iedora.id
+  role_key     = "qr-codes:delete"
+  display_name = "QR codes — delete"
+  group        = "qr-codes"
+
+  lifecycle {
+    enabled = local.seed_active
+  }
+}
+
+# Webhook endpoint. Zitadel runs inside the docker network and reaches
+# the host's menu (whether containerised or `bun run dev`) via
+# `host.docker.internal:3000`. Matches the common dev workflow
+# (host bun dev); when menu runs in container, the host loopback still
+# resolves to the menu container's published port.
+resource "zitadel_action_target" "menu_permissions" {
+  name               = "menu-permissions"
+  endpoint           = "http://host.docker.internal:3000/api/zitadel/permissions"
+  target_type        = "REST_CALL"
+  timeout            = "5s"
+  interrupt_on_error = false
+
+  lifecycle {
+    enabled = local.seed_active
+  }
+}
+
+resource "zitadel_action_execution_function" "menu_permissions_userinfo" {
+  name       = "preuserinfo"
+  target_ids = [zitadel_action_target.menu_permissions.id]
+
+  lifecycle {
+    enabled = local.seed_active
+  }
+}
+
+resource "zitadel_action_execution_function" "menu_permissions_accesstoken" {
+  name       = "preaccesstoken"
+  target_ids = [zitadel_action_target.menu_permissions.id]
+
+  lifecycle {
+    enabled = local.seed_active
+  }
+}
+
 # Menu service account — same shape as prod's infra/tofu/zitadel.tf.
 # The `zitadel-admin-sa` JSON key is for TF-provider auth only; the
 # menu app itself runs with a separate PAT under `menu-sa`, scoped
@@ -548,11 +645,14 @@ locals {
     zitadel_oauth_client_id     = zitadel_application_oidc.menu.client_id
     zitadel_oauth_client_secret = zitadel_application_oidc.menu.client_secret
     zitadel_management_token    = zitadel_personal_access_token.menu_sa.token
+    zitadel_action_signing_key  = zitadel_action_target.menu_permissions.signing_key
+    iedora_project_id           = zitadel_project.iedora.id
+    iedora_admin_emails         = join(",", var.iedora_admin_emails)
     s3_region                   = "us-east-1"
     s3_access_key               = "test"
     s3_secret_key               = "test"
     s3_bucket                   = "iedora-assets"
-    otel_headers                = "Authorization=Basic%20${base64encode("dev@iedora.local:dev-password")}"
+    otel_headers                = "Authorization=Basic%20${base64encode("dev@iedora.local:${local.dev_password}")}"
     # Browser-facing URLs — same in both variants (browser only ever
     # talks to host-published ports).
     menu_public_url    = "http://localhost:3000"
@@ -563,6 +663,9 @@ locals {
     zitadel_oauth_client_id     = ""
     zitadel_oauth_client_secret = ""
     zitadel_management_token    = ""
+    zitadel_action_signing_key  = ""
+    iedora_project_id           = ""
+    iedora_admin_emails         = ""
     s3_region                   = ""
     s3_access_key               = ""
     s3_secret_key               = ""
@@ -585,13 +688,16 @@ module "menu_env_container" {
   }
 
   node_env                    = "production"
-  database_url                = "postgres://postgres:postgres@infra-postgres:5432/menu"
+  database_url                = "postgres://postgres:${local.dev_password}@infra-postgres:5432/menu"
   menu_public_url             = local.menu_env_shared.menu_public_url
   menu_session_secret         = local.menu_env_shared.menu_session_secret
   zitadel_issuer_url          = local.menu_env_shared.zitadel_issuer_url
   zitadel_oauth_client_id     = local.menu_env_shared.zitadel_oauth_client_id
   zitadel_oauth_client_secret = local.menu_env_shared.zitadel_oauth_client_secret
   zitadel_management_token    = local.menu_env_shared.zitadel_management_token
+  zitadel_action_signing_key  = local.menu_env_shared.zitadel_action_signing_key
+  iedora_project_id           = local.menu_env_shared.iedora_project_id
+  iedora_admin_emails         = local.menu_env_shared.iedora_admin_emails
   s3_endpoint                 = "http://infra-localstack:4566"
   s3_region                   = local.menu_env_shared.s3_region
   s3_access_key               = local.menu_env_shared.s3_access_key
@@ -614,13 +720,16 @@ module "menu_env_host" {
   }
 
   node_env                    = "development"
-  database_url                = "postgresql://postgres:postgres@localhost:5432/menu"
+  database_url                = "postgresql://postgres:${local.dev_password}@localhost:5432/menu"
   menu_public_url             = local.menu_env_shared.menu_public_url
   menu_session_secret         = local.menu_env_shared.menu_session_secret
   zitadel_issuer_url          = local.menu_env_shared.zitadel_issuer_url
   zitadel_oauth_client_id     = local.menu_env_shared.zitadel_oauth_client_id
   zitadel_oauth_client_secret = local.menu_env_shared.zitadel_oauth_client_secret
   zitadel_management_token    = local.menu_env_shared.zitadel_management_token
+  zitadel_action_signing_key  = local.menu_env_shared.zitadel_action_signing_key
+  iedora_project_id           = local.menu_env_shared.iedora_project_id
+  iedora_admin_emails         = local.menu_env_shared.iedora_admin_emails
   s3_endpoint                 = "http://localhost:4566"
   s3_region                   = local.menu_env_shared.s3_region
   s3_access_key               = local.menu_env_shared.s3_access_key
@@ -642,6 +751,13 @@ resource "docker_image" "menu" {
   triggers = {
     source = local.menu_source_hash
   }
+  # On REPLACE (source hash changed), TF removes the old image after
+  # building the new one. Without force_remove the operation collides
+  # with `infra-menu-web` still referencing the old image during the
+  # brief window before container recreation — docker daemon refuses
+  # the removal. Force flag bypasses that gate; the container is then
+  # recreated to point at the fresh image_id.
+  force_remove = true
 
   lifecycle {
     enabled = var.enable_menu

@@ -72,7 +72,13 @@ export async function GET(req: NextRequest): Promise<Response> {
 
   const expiresAt = Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS
   const sessionJwe = await sessions.seal({
-    user: { id: result.sub, email: result.email, name: result.name },
+    user: {
+      id: result.sub,
+      email: result.email,
+      name: result.name,
+      roles: result.roles,
+      permissions: result.permissions,
+    },
     expiresAt,
   })
 

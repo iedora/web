@@ -30,6 +30,12 @@ func step(n int, msg string) {
 	fmt.Printf("%s %d/%d  %s\n", logPrefix, n, totalSteps, msg)
 }
 
+// stepOf is step() with a caller-supplied total — used by the destroy
+// path, which has a different step count than apply.
+func stepOf(n, total int, msg string) {
+	fmt.Printf("%s %d/%d  %s\n", logPrefix, n, total, msg)
+}
+
 func info(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, logPrefix+" "+format+"\n", args...)
 }
@@ -79,6 +85,34 @@ func runQuiet(dir, name string, args ...string) {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	_ = cmd.Run()
+}
+
+// stateRmDevZitadel strips every Zitadel-provider resource and the
+// iedora-admin grants null_resource from Tofu state. Used by the
+// destroy path to skip the refresh round-trip that would otherwise
+// blow up on a stale/missing Zitadel JWT (AUTH-7fs1e). Best-effort —
+// any individual `state rm` failure is silently ignored.
+func stateRmDevZitadel(devTofuDir string) {
+	// `tofu init` is a prerequisite for state ops on a fresh checkout.
+	// Already-initialised directories no-op cheaply.
+	runQuiet(devTofuDir, "tofu", "init", "-input=false")
+
+	out, err := exec.Command("tofu", "-chdir="+devTofuDir, "state", "list").Output()
+	if err != nil {
+		return // no state file yet — destroy below is a pure no-op
+	}
+	for _, addr := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		addr = strings.TrimSpace(addr)
+		if addr == "" {
+			continue
+		}
+		if !strings.HasPrefix(addr, "zitadel_") &&
+			!strings.HasPrefix(addr, "data.zitadel_") &&
+			!strings.HasPrefix(addr, "null_resource.iedora_admin_grants") {
+			continue
+		}
+		_ = exec.Command("tofu", "-chdir="+devTofuDir, "state", "rm", addr).Run()
+	}
 }
 
 // removeInfraContainers force-removes every container with an `infra-`

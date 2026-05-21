@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Transparent wrapper pointing to the Go zitadel-grant-iedora-admins command.
+# Called by Tofu's `null_resource` + `local-exec` (see zitadel.tf) to apply
+# the iedora-admin grant for every email in var.iedora_admin_emails.
+set -euo pipefail
+
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+INFRA_DIR="$(dirname "$DIR")"
+
+exec go run -C "$INFRA_DIR" ./cmd/zitadel-grant-iedora-admins "$@"

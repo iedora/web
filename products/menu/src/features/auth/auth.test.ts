@@ -7,6 +7,10 @@ import type { Session } from './adapters/session'
 import type { AuthGateway } from './ports'
 import { verifySession } from './use-cases/verify-session'
 import { requireRestaurantAccess } from './use-cases/require-restaurant-access'
+import { requireIedoraAdmin } from './use-cases/require-iedora-admin'
+import { requireScope } from './use-cases/require-scope'
+import { IEDORA_ADMIN_ROLE } from './roles'
+import { SCOPES } from './scopes'
 
 // The use-cases call next/navigation's `redirect()`, which only works inside
 // a real Next request scope. In Vitest we replace it with a throw so the
@@ -34,9 +38,19 @@ afterEach(async () => {
   await t.cleanup()
 })
 
-function makeSession(opts: { userId: string }): Session {
+function makeSession(opts: {
+  userId: string
+  roles?: string[]
+  permissions?: string[]
+}): Session {
   return {
-    user: { id: opts.userId, email: 'u@example.test', name: 'U' },
+    user: {
+      id: opts.userId,
+      email: 'u@example.test',
+      name: 'U',
+      roles: opts.roles ?? [],
+      permissions: opts.permissions ?? [],
+    },
     expiresAt: Math.floor(Date.now() / 1000) + 3600,
   }
 }
@@ -202,5 +216,78 @@ describe('requireRestaurantAccess', () => {
     await expect(requireRestaurantAccess(auth, identity, 'r1')).rejects.toThrow(
       '__REDIRECT__:/onboarding',
     )
+  })
+})
+
+describe('requireIedoraAdmin', () => {
+  it('redirects to /api/auth/login when there is no session', async () => {
+    const gw: AuthGateway = {
+      getSession: async () => null,
+    } as unknown as AuthGateway
+
+    await expect(requireIedoraAdmin(gw)).rejects.toThrow(
+      '__REDIRECT__:/api/auth/login',
+    )
+  })
+
+  it('returns the session when the iedora-admin role is present', async () => {
+    const session = makeSession({ userId: 'u1', roles: [IEDORA_ADMIN_ROLE] })
+    const gw: AuthGateway = {
+      getSession: async () => session,
+    } as unknown as AuthGateway
+
+    await expect(requireIedoraAdmin(gw)).resolves.toBe(session)
+  })
+
+  it('404s when the user is signed in but lacks the role — does not advertise the surface', async () => {
+    const session = makeSession({ userId: 'u1', roles: [] })
+    const gw: AuthGateway = {
+      getSession: async () => session,
+    } as unknown as AuthGateway
+
+    await expect(requireIedoraAdmin(gw)).rejects.toThrow('__NOT_FOUND__')
+  })
+})
+
+describe('requireScope', () => {
+  it('redirects to /api/auth/login when there is no session', async () => {
+    const gw: AuthGateway = { getSession: async () => null } as unknown as AuthGateway
+
+    await expect(requireScope(gw, SCOPES.QR_CODES_WRITE)).rejects.toThrow(
+      '__REDIRECT__:/api/auth/login',
+    )
+  })
+
+  it('returns the session when the scope is present in permissions', async () => {
+    const session = makeSession({
+      userId: 'u1',
+      permissions: [SCOPES.QR_CODES_READ, SCOPES.QR_CODES_WRITE],
+    })
+    const gw: AuthGateway = { getSession: async () => session } as unknown as AuthGateway
+
+    await expect(requireScope(gw, SCOPES.QR_CODES_WRITE)).resolves.toBe(session)
+  })
+
+  it('404s when the scope is missing — does not leak the surface', async () => {
+    const session = makeSession({
+      userId: 'u1',
+      permissions: [SCOPES.QR_CODES_READ],
+    })
+    const gw: AuthGateway = { getSession: async () => session } as unknown as AuthGateway
+
+    await expect(requireScope(gw, SCOPES.QR_CODES_DELETE)).rejects.toThrow('__NOT_FOUND__')
+  })
+
+  it('does NOT auto-derive scope from `roles` — only the permissions list counts', async () => {
+    // A user with iedora-admin role but no permissions (e.g. Action
+    // webhook didn't run) should NOT auto-pass. Fail closed.
+    const session = makeSession({
+      userId: 'u1',
+      roles: [IEDORA_ADMIN_ROLE],
+      permissions: [],
+    })
+    const gw: AuthGateway = { getSession: async () => session } as unknown as AuthGateway
+
+    await expect(requireScope(gw, SCOPES.QR_CODES_WRITE)).rejects.toThrow('__NOT_FOUND__')
   })
 })
