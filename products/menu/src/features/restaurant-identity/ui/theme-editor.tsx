@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import {
   Button,
   Field,
+  FieldHint,
   FieldInput,
   FieldLabel,
   FieldTextarea,
@@ -27,6 +28,7 @@ import { LANGUAGE_META, type LanguageCode } from '@/features/i18n'
 import {
   updateIdentity,
   updateLanguageSettings,
+  updateSlug,
   updateTheme,
 } from '../actions'
 
@@ -82,6 +84,8 @@ export function ThemeEditor({
           onChange={setIdentity}
           onSaved={() => router.refresh()}
         />
+        <Separator />
+        <SlugSection currentSlug={slug} />
         <Separator />
         <LanguagesSection
           slug={slug}
@@ -432,6 +436,103 @@ function IdentitySection({
         </Button>
         {saved && !dirty && (
           <span className="text-sm text-muted-foreground">Saved</span>
+        )}
+        {error && <span className="text-sm text-destructive">{error}</span>}
+      </div>
+    </form>
+  )
+}
+
+/**
+ * Slug editor — separate from IdentitySection because the cost model is
+ * different (changing the slug breaks bookmarks to the old URL + drops
+ * the dashboard URL the user is on). Inline preview shows the resulting
+ * `/r/<slug>` URL. On save, we route the dashboard URL to the new slug
+ * so the operator stays on the same page they were editing.
+ */
+function SlugSection({ currentSlug }: { currentSlug: string }) {
+  const router = useRouter()
+  const t = useTranslations('Settings.Slug')
+  const tc = useTranslations('Common')
+  const [draft, setDraft] = useState(currentSlug)
+  const [pending, startTransition] = useTransition()
+  const [error, setError] = useState<string | null>(null)
+  const [saved, setSaved] = useState(false)
+
+  const normalized = draft.trim().toLowerCase()
+  const dirty = normalized !== currentSlug
+  const looksValid =
+    /^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/.test(normalized)
+
+  function onSave() {
+    setError(null)
+    setSaved(false)
+    startTransition(async () => {
+      const res = await updateSlug(currentSlug, normalized)
+      if (!res.ok) {
+        setError(res.error)
+        return
+      }
+      setSaved(true)
+      // Route to the new dashboard URL — the requireRestaurantBySlug guard
+      // on /dashboard/r/<currentSlug> would 404 now that the row's slug
+      // moved. router.replace (not push) so the back button doesn't take
+      // the user to a now-dead URL.
+      router.replace(`/dashboard/r/${res.slug}`)
+      router.refresh()
+    })
+  }
+
+  return (
+    <form
+      className="space-y-4"
+      onSubmit={(e) => {
+        e.preventDefault()
+        if (dirty && looksValid) onSave()
+      }}
+    >
+      <div>
+        <h2 className="text-base font-medium">{t('title')}</h2>
+        <p className="text-xs text-muted-foreground">{t('subtitle')}</p>
+      </div>
+
+      <Field>
+        <FieldLabel htmlFor="slug-input">{t('label')}</FieldLabel>
+        <div className="flex flex-wrap items-baseline gap-1">
+          <span className="text-sm text-muted-foreground">menu.iedora.com/r/</span>
+          <FieldInput
+            id="slug-input"
+            data-testid="slug-input"
+            className="min-w-0 flex-1 sm:min-w-[16ch]"
+            value={draft}
+            onChange={(e) => {
+              setDraft(e.target.value)
+              setSaved(false)
+              setError(null)
+            }}
+            maxLength={40}
+          />
+        </div>
+        <FieldHint>{t('hint')}</FieldHint>
+      </Field>
+
+      {dirty && (
+        <p className="text-xs text-[var(--cinnabar)]" role="status">
+          {t('warning')}
+        </p>
+      )}
+
+      <div className="flex items-center gap-3 pt-1">
+        <Button
+          type="submit"
+          variant="solid"
+          disabled={!dirty || !looksValid || pending}
+          data-testid="slug-save"
+        >
+          {pending ? tc('saving') : t('save')}
+        </Button>
+        {saved && !dirty && (
+          <span className="text-sm text-muted-foreground">{t('saved')}</span>
         )}
         {error && <span className="text-sm text-destructive">{error}</span>}
       </div>

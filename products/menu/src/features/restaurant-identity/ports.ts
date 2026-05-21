@@ -29,4 +29,18 @@ export interface IdentityWritePort {
       descriptionI18n: LocalizedText | null
     },
   ): Promise<void>
+
+  /**
+   * Rename the public slug. Returns `taken` when the slug is already in
+   * use (the DB's unique index is the canonical check; this surfaces
+   * the violation as a typed result instead of throwing). Returns
+   * `ok` on success.
+   *
+   * Callers MUST invalidate BOTH the old and new slug tags after a
+   * rename — the public snapshot cache is slug-keyed.
+   */
+  updateSlug(
+    restaurantId: string,
+    nextSlug: string,
+  ): Promise<{ ok: true } | { ok: false; reason: 'taken' }>
 }

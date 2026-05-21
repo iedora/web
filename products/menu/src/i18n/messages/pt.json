@@ -28,10 +28,9 @@
   "Onboarding": {
     "eyebrow": "primeira sala",
     "title": "Cria o teu primeiro restaurante",
-    "subtitle": "Podes mudar o nome ou adicionar mais tarde. O slug aparece no URL público do menu.",
+    "subtitle": "Só o nome — tratamos do resto. Podes mudar o URL público mais tarde nas definições.",
     "restaurantName": "Nome do restaurante",
     "restaurantNamePlaceholder": "O Bom Garfo",
-    "slug": "URL slug",
     "create": "Criar restaurante",
     "creating": "A criar…"
   },
@@ -105,6 +104,15 @@
       "banner": "Banner",
       "save": "Guardar identidade",
       "saved": "Guardado"
+    },
+    "Slug": {
+      "title": "URL pública",
+      "subtitle": "URL com marca para divulgação — os scans das stickers QR continuam a funcionar.",
+      "label": "URL",
+      "hint": "2 a 40 letras minúsculas, números e hifens.",
+      "warning": "Mudar a URL quebra bookmarks do endereço antigo.",
+      "save": "Atualizar URL",
+      "saved": "Atualizada"
     },
     "Languages": {
       "title": "Idiomas",

@@ -28,10 +28,9 @@
   "Onboarding": {
     "eyebrow": "first course",
     "title": "Create your first restaurant",
-    "subtitle": "You can rename or add more later. The slug is used in your public menu URL.",
+    "subtitle": "Just the name — we'll handle the rest. You can change the public URL later from settings.",
     "restaurantName": "Restaurant name",
     "restaurantNamePlaceholder": "O Bom Garfo",
-    "slug": "URL slug",
     "create": "Create restaurant",
     "creating": "Creating…"
   },
@@ -105,6 +104,15 @@
       "banner": "Banner",
       "save": "Save identity",
       "saved": "Saved"
+    },
+    "Slug": {
+      "title": "Public URL",
+      "subtitle": "Branded URL for marketing — QR sticker scans keep working either way.",
+      "label": "URL",
+      "hint": "2–40 lowercase letters, numbers, and hyphens.",
+      "warning": "Changing the URL breaks bookmarks to the old address.",
+      "save": "Update URL",
+      "saved": "Updated"
     },
     "Languages": {
       "title": "Languages",
