@@ -17,151 +17,37 @@ tofu := "bin/with-secrets tofu -chdir=tofu"
 _default:
     @just --list --unsorted
 
-# Apply every infra resource: Hetzner VPS + Cloudflare R2 / tunnels +
-# GitHub Actions config + all infra containers via the kreuzwerker/docker
-# provider over SSH to the Hetzner box.
+# Apply every infra resource: Hetzner VPS + Cloudflare R2 + GitHub Actions
+# config + all containers. Thin shim over the Go orchestrator at
+# infra/cmd/iedora — every Pass 1/2/3 detail, the cert-ready probe, the
+# DNS-override CONNECT proxy that sidesteps the macOS NXDOMAIN cache, and
+# the BWS write-through of INFRA_HOST_IP all live there.
 #
-# First-time bootstrap is a 3-pass dance, automated here:
-#   Pass 1 — provision Hetzner VPS only (the docker provider needs a
-#            concrete IP before it can configure; `(known after apply)` =
-#            "unable to parse docker host"). Skipped if box already exists.
-#   Pass 2 — full apply: containers land, FirstInstance writes SA key to
-#            /zitadel-bootstrap/. Zitadel TF resources stay gated (count=0)
-#            because INFRA_ZITADEL_SA_KEY_JSON isn't in BWS yet.
-#   Pass 3 — only if no SA key in BWS: `just zitadel-fetch-sa-key` lifts
-#            the JSON from the bootstrap volume → BWS, then re-apply to
-#            land zitadel.tf resources (org import + project create).
-#
-# Steady state (every subsequent call): exactly one `tofu apply`.
-#
-# Write-through to BWS after apply:
-#   - INFRA_HOST_IP = hetzner_ipv4 — used by ad-hoc ssh + secret-rotation tooling
+# Why Go (not bash): the inline bash for `deploy` + `destroy` had grown
+# to a ~150-line octopus that nobody could change without breaking
+# something three lines later. The Go port is type-checked, unit-tested
+# (see `infra/cmd/iedora/*_test.go`), and contains the load-bearing
+# fluency fixes from `docs/deploy-fluency-brief.md`:
+#   - HTTPS_PROXY → localhost dns-override proxy for Pass 3 (bypasses
+#     mDNSResponder NXDOMAIN cache for auth.iedora.com after IP churn).
+#   - Cert-issuer check before declaring Zitadel ready (catches Caddy
+#     mid-ACME serving its internal CA).
+#   - Auto-scrub of the prior IP's ~/.ssh/known_hosts entry on destroy.
 deploy:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    {{tofu}} init -upgrade -input=false >/dev/null
+    bin/iedora deploy
 
-    # Pass 1: provision Hetzner box if it doesn't exist yet. The docker
-    # provider's host is `hcloud_server.iedora.ipv4_address`, unknown until
-    # the server is concrete — so a full apply would fail at plan time.
-    if ! {{tofu}} output -raw hetzner_ipv4 >/dev/null 2>&1; then
-      echo "→ Pass 1/3: provisioning Hetzner VPS (no docker provider yet)..."
-      {{tofu}} apply -auto-approve \
-        -target=hcloud_ssh_key.operator \
-        -target=hcloud_firewall.iedora \
-        -target=hcloud_server.iedora \
-        -target=null_resource.docker_ready
-    fi
-
-    # Pre-populate the operator's known_hosts so the docker provider's SSH
-    # to the Hetzner box doesn't fail with "host key verification failed"
-    # (it uses the system ssh client, which honors StrictHostKeyChecking).
-    # When the IP is recycled (e.g. immediately after `just infra::destroy`),
-    # the stale key fails the handshake, so we always rotate: remove any
-    # existing entry, then ssh-keyscan the fresh key. Skipped in non-
-    # interactive CI where the runner manages known_hosts itself.
-    HETZNER_IPV4=$({{tofu}} output -raw hetzner_ipv4)
-    if [ -t 0 ]; then
-      mkdir -p ~/.ssh
-      ssh-keygen -R "$HETZNER_IPV4" >/dev/null 2>&1 || true
-      ssh-keyscan -H "$HETZNER_IPV4" >> ~/.ssh/known_hosts 2>/dev/null
-    fi
-
-    # Pre-flight Zitadel readiness probe. The zitadel TF provider's
-    # Configure() does OIDC discovery against auth.iedora.com eagerly at
-    # plan time — if Zitadel is mid-restart (e.g. an env change triggered
-    # docker_container replacement) the discovery returns 502 from Caddy
-    # upstream-unavailable and the entire apply fails before any zitadel_*
-    # resource gets a chance.
-    #
-    # Workaround: when /debug/ready isn't 200, do a targeted apply for the
-    # Zitadel containers FIRST with TF_VAR_infra_zitadel_sa_key_json="" so
-    # `local.zitadel_bootstrapped` flips to false → provider uses the
-    # placeholder access_token (no discovery) → containers land cleanly.
-    # Wait for /debug/ready, then re-enter the normal full apply with the
-    # real SA key from BWS — provider Configure() now succeeds.
-    #
-    # No-op when Zitadel is healthy: probe is one HTTP call (~50ms).
-    ZITADEL_HOSTNAME="auth.iedora.com"
-    PROBE_CODE=$(curl -sS -o /dev/null -m 5 -w "%{http_code}" "https://${ZITADEL_HOSTNAME}/debug/ready" 2>/dev/null || echo 000)
-    if [ "$PROBE_CODE" != "200" ]; then
-      echo "→ Pass 1.5: Zitadel /debug/ready returned ${PROBE_CODE}, recovery path..."
-      # The placeholder-token override has to win against BWS-injected
-      # TF_VAR. -var on the command line beats TF_VAR_*, so this works
-      # even though bin/with-secrets sets TF_VAR_infra_zitadel_sa_key_json.
-      {{tofu}} apply -auto-approve -input=false \
-        -var infra_zitadel_sa_key_json= \
-        -target=module.zitadel \
-        -target=module.zitadel_login
-      echo "→ Waiting for Zitadel /debug/ready..."
-      for i in $(seq 1 60); do
-        CODE=$(curl -sS -o /dev/null -m 3 -w "%{http_code}" "https://${ZITADEL_HOSTNAME}/debug/ready" 2>/dev/null || echo 000)
-        if [ "$CODE" = "200" ]; then echo "  ready after $((i*2))s"; break; fi
-        [ $i -eq 60 ] && { echo "✗ Timeout — Zitadel never became ready. Check 'just infra::logs zitadel'."; exit 1; }
-        sleep 2
-      done
-    fi
-
-    echo "→ Pass 2/3: full apply (containers + DNS + everything else)..."
-    {{tofu}} apply -auto-approve
-
-    # Pass 3: bootstrap the Zitadel SA key into BWS the first time the
-    # FirstInstance step mints it. After this the zitadel TF resources
-    # land on the very next apply.
-    #
-    # BWS_PROJECT_ID isn't a recipe env var anymore (no infra/.env); we
-    # derive it the same way bin/with-secrets does, so the recipe doesn't
-    # require operators to maintain a parallel export.
-    if [ -z "${BWS_PROJECT_ID:-}" ]; then
-      BWS_PROJECT_ID=$(bws project list -o json \
-        | jq -r '.[] | select(.name=="iedora-deploy") | .id')
-    fi
-    SA_KEY_ID=$(bws secret list "$BWS_PROJECT_ID" -o json \
-      | jq -r '.[] | select(.key=="INFRA_ZITADEL_SA_KEY_JSON") | .id')
-    if [ -z "$SA_KEY_ID" ]; then
-      echo "→ Pass 3/3: fetching FirstInstance SA key → BWS, then re-applying..."
-      BWS_PROJECT_ID="$BWS_PROJECT_ID" just zitadel-fetch-sa-key
-      {{tofu}} apply -auto-approve
-    fi
-
-# Tear down EVERY Tofu-managed resource — Hetzner VPS + Cloudflare + the
-# infra containers (containers go with the VPS). Destructive: wipes the
-# Hetzner data dir; restore from R2 dump to recover.
-#
-# Three load-bearing flags:
-#
-# `-var allow_masterkey_rotation=true` lifts the lifecycle.prevent_destroy
-# guard on random_password.zitadel_masterkey. The guard exists to block
-# accidental in-place rotation (which would orphan the encrypted projection
-# table); during a full destroy the postgres data dir is wiped too, so
-# there's nothing to orphan. The recipe is the explicit user signal that
-# "yes, this is the destroy-everything case, not a sneaky rotate-in-place".
-#
-# `-var infra_zitadel_sa_key_json=` makes `local.zitadel_bootstrapped` false
-# → zitadel provider Configure() uses the placeholder access_token, never
-# attempts OIDC discovery against auth.iedora.com (which is mid-teardown
-# alongside everything else). Without this, the destroy races: Tofu
-# parallel-destroys Caddy/Hetzner BEFORE the provider finishes calling
-# DELETE on PATs / OIDC apps / project roles, then those calls hit the
-# already-dead Caddy upstream and the destroy aborts mid-way, leaving
-# half-wiped state.
-#
-# State-rm of every zitadel_* + the local-exec null_resources is the same
-# pattern the dev orchestrator uses: refresh during destroy would try to
-# read these via the provider, hit the gone Zitadel, error out. Strip
-# them from state first; the live objects vanish with the VPS anyway.
+# Tear down EVERY Tofu-managed resource. Same orchestrator, see deploy
+# above. The state-rm + placeholder-Zitadel + BWS-scrub logic the old
+# bash carried lives in infra/cmd/iedora/destroy.go now.
 destroy:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    {{tofu}} init -input=false >/dev/null
-    echo "→ Step 1/2: state rm zitadel_* + provisioner null_resources..."
-    {{tofu}} state list 2>/dev/null \
-      | grep -E "^(zitadel_|data\.zitadel_|null_resource\.(iedora_admin_grants|menu_permissions_router_touch))" \
-      | xargs -r -n1 {{tofu}} state rm || true
-    echo "→ Step 2/2: tofu destroy..."
-    {{tofu}} destroy -auto-approve \
-      -var allow_masterkey_rotation=true \
-      -var infra_zitadel_sa_key_json=
+    bin/iedora destroy
+
+# Preflight check — runs locally, no mutation. Verifies bws + tofu + ssh
+# are on PATH, BWS auth works, and every required bootstrap secret is in
+# the iedora-deploy project. Cheap to run before `deploy` if you're not
+# sure the environment is set up.
+doctor:
+    bin/iedora doctor
 
 # Stop + remove the Postgres container AND wipe its bind-mount data dir on
 # the Hetzner box. Destructive: menu + zitadel databases all gone.

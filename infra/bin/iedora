@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Transparent wrapper for the Go iedora command. Same pattern as bin/with-secrets
+# and bin/zitadel-grant-iedora-admins: shells `go run` so we don't have to ship
+# a pre-built binary or maintain a separate build step. `with-secrets` is
+# layered on so BWS-backed TF_VAR_* env vars are populated for the tofu calls
+# the orchestrator makes.
+set -euo pipefail
+
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+INFRA_DIR="$(dirname "$DIR")"
+
+# Pre-compile into the user's GOCACHE on first run; subsequent invocations
+# reuse the cached binary (sub-50ms startup). This matters for the inner
+# tofu runs — a 2-3s `go run` re-compile prefix on every deploy is grating.
+exec "$DIR/with-secrets" go run -C "$INFRA_DIR" ./cmd/iedora "$@"

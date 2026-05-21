@@ -253,6 +253,10 @@ Cost: ~30 lines duplicated per root (versions.tf, credentials, `data.cloudflare_
 
 ## Troubleshooting
 
+> **Where the deploy logic lives.** The `just infra::deploy`/`destroy`/`doctor` recipes are 1-line shims into `infra/cmd/iedora/` — a Go orchestrator with unit tests under `*_test.go`. Pass 1/2/3 logic, the DNS-override CONNECT proxy that sidesteps the macOS NXDOMAIN cache, and the Let's-Encrypt-vs-internal-CA cert probe all live there. For the catalogue of every failure mode the recipe has tripped over (with detection signature + fix), see [`tasks/deploy-fluency/failure-modes.md`](../tasks/deploy-fluency/failure-modes.md).
+
+**Run `just infra::doctor` first.** It validates PATH, BWS auth, and every required bootstrap secret before mutating anything — catches 90% of the bad-environment foot-guns below in <1s.
+
 **`just infra::deploy` errors with `BWS_ACCESS_TOKEN missing`** — export it in your shell (e.g. `source ~/.secrets`) before running. That's the only env var the wrapper requires; everything else self-discovers (see Step 5).
 
 **`just infra::deploy` errors with `INFRA_X missing in BWS`** — that secret hasn't been populated. Add it with `bws secret create INFRA_X <value> $(bws project list -o json | jq -r '.[]|select(.name=="iedora-deploy")|.id') -o none`.

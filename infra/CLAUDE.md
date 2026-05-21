@@ -38,7 +38,17 @@ Containers attach to `docker_network.iedora` (`name = "iedora"`); container-DNS 
 
 ```
 infra/
-  justfile                              deploy / backup / restore / wipe-postgres / build-backup / rotate-secret
+  justfile                              thin shims for deploy / destroy / doctor (→ bin/iedora) +
+                                        day-2 ops (logs / console / backup / restore / wipe-postgres /
+                                        build-backup / rotate-secret / zitadel-rebootstrap)
+  cmd/iedora/                           Go orchestrator behind deploy / destroy / doctor.
+                                        Owns the Pass 1/2/3 dance, the localhost HTTPS_PROXY that
+                                        sidesteps the macOS NXDOMAIN cache for the zitadel TF
+                                        provider, and the cert-issuer probe (LE vs Caddy internal).
+                                        Unit-tested via *_test.go. See docs/deploy-fluency-brief.md
+                                        + tasks/deploy-fluency/ for the brief and post-mortem.
+  bin/iedora                            BWS-wrapped entrypoint for the orchestrator (callable
+                                        directly; the justfile shims just exec this).
   bin/with-secrets                      BWS wrapper. Operator only needs `BWS_ACCESS_TOKEN` in shell; the wrapper discovers `BWS_PROJECT_ID` via `bws project list` and `CLOUDFLARE_ACCOUNT_ID` via CF /accounts API, then exports every BWS secret as `TF_VAR_*`. No on-disk `infra/.env`.
   tofu/                                 single encrypted root
     versions.tf                         providers: hcloud, cloudflare ~> 5.19, github ~> 6.12,
@@ -62,8 +72,9 @@ infra/
 ## Commands
 
 ```
-just infra::deploy        # tofu apply — VPS + Cloudflare + GitHub + every container
-just infra::destroy       # tofu destroy — tears down the VPS + every resource
+just infra::deploy        # → bin/iedora deploy (Go orchestrator — see cmd/iedora/)
+just infra::destroy       # → bin/iedora destroy
+just infra::doctor        # → bin/iedora doctor (preflight: PATH, BWS auth, bootstrap secrets)
 just infra::wipe-postgres # destructive — drops the data dir on the host (use after destroy)
 just infra::logs <svc>    # ssh + docker logs -f infra-<svc> (or menu_web)
 just infra::console       # ssh + docker exec -it infra-postgres psql -U postgres
@@ -73,7 +84,7 @@ just infra::build-backup  # rebuild + push the backup image (only on Postgres ma
 just infra::rotate-secret # prompt-driven BWS secret rotation
 ```
 
-`bin/with-secrets <cmd>` wraps any command with BWS env + `TF_VAR_*` aliases loaded. Used by the justfile recipes; run it directly for ad-hoc `tofu state` operations.
+`bin/iedora` is the BWS-wrapped Go entrypoint behind the deploy/destroy/doctor shims. Logic is in `infra/cmd/iedora/`, with unit tests for the load-bearing pieces (DNS-override proxy, cert-issuer probe). `bin/with-secrets <cmd>` wraps any other command with BWS env + `TF_VAR_*` aliases loaded — used internally by `bin/iedora` and for ad-hoc `tofu state` operations.
 
 ## See also
 

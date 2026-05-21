@@ -167,6 +167,18 @@ resource "zitadel_project_role" "qr_codes_delete" {
   }
 }
 
+resource "zitadel_project_role" "qr_codes_list" {
+  org_id       = zitadel_org.iedora.id
+  project_id   = zitadel_project.iedora.id
+  role_key     = "qr-codes:list"
+  display_name = "QR codes — list"
+  group        = "qr-codes"
+
+  lifecycle {
+    enabled = local.zitadel_bootstrapped
+  }
+}
+
 # ── Actions v2 — bundle expansion webhook ────────────────────────────────────
 # Zitadel POSTs the token-mint event to `menu_permissions_endpoint`. The
 # menu webhook (`/api/zitadel/permissions`) returns

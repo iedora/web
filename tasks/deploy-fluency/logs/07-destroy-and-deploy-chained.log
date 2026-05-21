@@ -1,0 +1,130 @@
+START 2026-05-21T04:43:26+0100
+→ tofu init
+→ Step 1/3: state-rm 17 Zitadel-coupled resources
+Removed data.zitadel_orgs.iedora
+Successfully removed 1 resource instance(s).
+Removed null_resource.iedora_admin_grants[0]
+Successfully removed 1 resource instance(s).
+Removed zitadel_action_execution_function.menu_permissions_accesstoken
+Successfully removed 1 resource instance(s).
+Removed zitadel_action_execution_function.menu_permissions_userinfo
+Successfully removed 1 resource instance(s).
+Removed zitadel_action_target.menu_permissions
+Successfully removed 1 resource instance(s).
+Removed zitadel_application_oidc.menu
+Successfully removed 1 resource instance(s).
+Removed zitadel_instance_member.menu_sa_iam_owner
+Successfully removed 1 resource instance(s).
+Removed zitadel_machine_user.menu_sa
+Successfully removed 1 resource instance(s).
+Removed zitadel_org.iedora
+Successfully removed 1 resource instance(s).
+Removed zitadel_personal_access_token.menu_sa
+Successfully removed 1 resource instance(s).
+Removed zitadel_project.iedora
+Successfully removed 1 resource instance(s).
+Removed zitadel_project_role.iedora_admin
+Successfully removed 1 resource instance(s).
+Removed zitadel_project_role.qr_codes_delete
+Successfully removed 1 resource instance(s).
+Removed zitadel_project_role.qr_codes_list
+Successfully removed 1 resource instance(s).
+Removed zitadel_project_role.qr_codes_read
+Successfully removed 1 resource instance(s).
+Removed zitadel_project_role.qr_codes_update
+Successfully removed 1 resource instance(s).
+Removed zitadel_project_role.qr_codes_write
+Successfully removed 1 resource instance(s).
+→ Step 2/3: tofu destroy
+[0m[1mrandom_password.zitadel_masterkey: Refreshing state... [id=none][0m
+[0m[1mrandom_password.menu_session_secret: Refreshing state... [id=none][0m
+[0m[1mrandom_password.postgres: Refreshing state... [id=none][0m
+[0m[1mrandom_password.backup_passphrase: Refreshing state... [id=none][0m
+[0m[1mrandom_password.openobserve_password: Refreshing state... [id=none][0m
+[0m[1mrandom_password.zitadel_first_admin: Refreshing state... [id=none][0m
+[0m[1mterraform_data.bws_sync_autogen["AUTOGEN_INFRA_OPENOBSERVE_ROOT_USER_PASSWORD"]: Refreshing state... [id=1a8a573d-3dbd-16c6-32ab-aa9692620f4d][0m
+[0m[1mterraform_data.bws_sync_autogen["AUTOGEN_INFRA_ZITADEL_FIRST_ADMIN_PASSWORD"]: Refreshing state... [id=86365526-2611-748a-56d4-cacd10736d84][0m
+[0m[1mdata.tls_public_key.operator: Reading...[0m[0m
+[0m[1mterraform_data.bws_sync_autogen["AUTOGEN_INFRA_BACKUP_PASSPHRASE"]: Refreshing state... [id=37998cd8-b42e-7838-1739-fa6ffe1bbad2][0m
+[0m[1mterraform_data.bws_sync_autogen["AUTOGEN_INFRA_ZITADEL_MASTERKEY"]: Refreshing state... [id=91edd1c8-c243-924a-f2d2-1f4b0f47148a][0m
+[0m[1mterraform_data.bws_sync_autogen["AUTOGEN_INFRA_POSTGRES_PASSWORD"]: Refreshing state... [id=29ce70fb-7832-5ece-ce62-beb1d7cc7931][0m
+[0m[1mdata.tls_public_key.operator: Read complete after 0s [id=d23ee54af38186f519ff670641d90bb76cb39162][0m
+[0m[1mcloudflare_r2_bucket.data: Refreshing state... [id=iedora-data][0m
+[0m[1mcloudflare_r2_bucket.assets: Refreshing state... [id=iedora-assets][0m
+[0m[1mdata.cloudflare_zone.iedora: Reading...[0m[0m
+[0m[1mdata.cloudflare_zone.iedora: Still reading... [10s elapsed][0m[0m
+[0m[1mdata.cloudflare_zone.iedora: Still reading... [20s elapsed][0m[0m
+[0m[1mdata.cloudflare_zone.iedora: Still reading... [30s elapsed][0m[0m
+[0m[1mdata.cloudflare_zone.iedora: Still reading... [40s elapsed][0m[0m
+[0m[1mdata.cloudflare_zone.iedora: Still reading... [50s elapsed][0m[0m
+[0m[1mdata.cloudflare_zone.iedora: Still reading... [1m0s elapsed][0m[0m
+[0m[1mgithub_actions_variable.vars["BWS_PROJECT_ID"]: Refreshing state... [id=iedora:BWS_PROJECT_ID][0m
+[0m[1mgithub_actions_variable.vars["CLOUDFLARE_ACCOUNT_ID"]: Refreshing state... [id=iedora:CLOUDFLARE_ACCOUNT_ID][0m
+[0m[1mgithub_actions_variable.vars["MENU_PUBLIC_HOSTNAME"]: Refreshing state... [id=iedora:MENU_PUBLIC_HOSTNAME][0m
+[0m[1mgithub_actions_secret.secrets["CLAUDE_CODE_OAUTH_TOKEN"]: Refreshing state... [id=iedora:CLAUDE_CODE_OAUTH_TOKEN][0m
+[0m[1mgithub_actions_secret.secrets["INFRA_SSH_PRIVATE_KEY"]: Refreshing state... [id=iedora:INFRA_SSH_PRIVATE_KEY][0m
+[0m[1mgithub_actions_secret.secrets["BWS_ACCESS_TOKEN"]: Refreshing state... [id=iedora:BWS_ACCESS_TOKEN][0m
+[0m[1mhcloud_ssh_key.operator: Refreshing state... [id=112589930][0m
+[0m[1mhcloud_firewall.iedora: Refreshing state... [id=11003055][0m
+[0m[1mdata.cloudflare_zone.iedora: Still reading... [1m10s elapsed][0m[0m
+[0m[1mdata.cloudflare_zone.iedora: Still reading... [1m20s elapsed][0m[0m
+[0m[1mdata.cloudflare_zone.iedora: Still reading... [1m30s elapsed][0m[0m
+[0m[1mdata.cloudflare_zone.iedora: Still reading... [1m40s elapsed][0m[0m
+[0m[1mdata.cloudflare_zone.iedora: Still reading... [1m50s elapsed][0m[0m
+[31m╷[0m[0m
+[31m│[0m [0m[1m[31mError: [0m[0m[1mAPI request failed[0m
+[31m│[0m [0m
+[31m│[0m [0m[0m  with hcloud_ssh_key.operator,
+[31m│[0m [0m  on hetzner.tf line 21, in resource "hcloud_ssh_key" "operator":
+[31m│[0m [0m  21: resource "hcloud_ssh_key" "operator" [4m{[0m[0m
+[31m│[0m [0m
+[31m│[0m [0mAn unexpected error was encountered during an API request.
+[31m│[0m [0m
+[31m│[0m [0mGet "https://api.hetzner.cloud/v1/ssh_keys/112589930": dial tcp
+[31m│[0m [0m213.239.246.73:443: connect: network is unreachable
+[31m│[0m [0m
+[31m╵[0m[0m
+[31m╷[0m[0m
+[31m│[0m [0m[1m[31mError: [0m[0m[1mGet "https://api.hetzner.cloud/v1/firewalls/11003055": dial tcp 213.239.246.73:443: connect: network is unreachable[0m
+[31m│[0m [0m
+[31m│[0m [0m[0m  with hcloud_firewall.iedora,
+[31m│[0m [0m  on hetzner.tf line 29, in resource "hcloud_firewall" "iedora":
+[31m│[0m [0m  29: resource "hcloud_firewall" "iedora" [4m{[0m[0m
+[31m│[0m [0m
+[31m╵[0m[0m
+[31m╷[0m[0m
+[31m│[0m [0m[1m[31mError: [0m[0m[1mfailed to make http request[0m
+[31m│[0m [0m
+[31m│[0m [0m[0m  with data.cloudflare_zone.iedora,
+[31m│[0m [0m  on main.tf line 26, in data "cloudflare_zone" "iedora":
+[31m│[0m [0m  26: data "cloudflare_zone" "iedora" [4m{[0m[0m
+[31m│[0m [0m
+[31m│[0m [0mGet "https://api.cloudflare.com/client/v4/zones?name=iedora.com": dial tcp
+[31m│[0m [0m104.19.192.175:443: i/o timeout
+[31m╵[0m[0m
+[31m╷[0m[0m
+[31m│[0m [0m[1m[31mError: [0m[0m[1mfailed to make http request[0m
+[31m│[0m [0m
+[31m│[0m [0m[0m  with cloudflare_r2_bucket.data,
+[31m│[0m [0m  on main.tf line 34, in resource "cloudflare_r2_bucket" "data":
+[31m│[0m [0m  34: resource "cloudflare_r2_bucket" "data" [4m{[0m[0m
+[31m│[0m [0m
+[31m│[0m [0mGet
+[31m│[0m [0m"https://api.cloudflare.com/client/v4/accounts/2716bf6ee8be2880904e70f19050d2ef/r2/buckets/iedora-data":
+[31m│[0m [0mdial tcp 104.19.192.175:443: i/o timeout
+[31m╵[0m[0m
+[31m╷[0m[0m
+[31m│[0m [0m[1m[31mError: [0m[0m[1mfailed to make http request[0m
+[31m│[0m [0m
+[31m│[0m [0m[0m  with cloudflare_r2_bucket.assets,
+[31m│[0m [0m  on main.tf line 60, in resource "cloudflare_r2_bucket" "assets":
+[31m│[0m [0m  60: resource "cloudflare_r2_bucket" "assets" [4m{[0m[0m
+[31m│[0m [0m
+[31m│[0m [0mGet
+[31m│[0m [0m"https://api.cloudflare.com/client/v4/accounts/2716bf6ee8be2880904e70f19050d2ef/r2/buckets/iedora-assets":
+[31m│[0m [0mdial tcp 104.19.192.175:443: i/o timeout
+[31m╵[0m[0m
+iedora destroy: destroy: exit status 1
+exit status 1
+exit status 1
+END 2026-05-21T04:45:34+0100

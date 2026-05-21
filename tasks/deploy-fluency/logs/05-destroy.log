@@ -1,0 +1,1436 @@
+START 2026-05-21T04:39:31+0100
+→ tofu init
+→ Step 1/3: state-rm 17 Zitadel-coupled resources
+Removed data.zitadel_orgs.iedora
+Successfully removed 1 resource instance(s).
+Removed null_resource.iedora_admin_grants[0]
+Successfully removed 1 resource instance(s).
+Removed zitadel_action_execution_function.menu_permissions_accesstoken
+Successfully removed 1 resource instance(s).
+Removed zitadel_action_execution_function.menu_permissions_userinfo
+Successfully removed 1 resource instance(s).
+Removed zitadel_action_target.menu_permissions
+Successfully removed 1 resource instance(s).
+Removed zitadel_application_oidc.menu
+Successfully removed 1 resource instance(s).
+Removed zitadel_instance_member.menu_sa_iam_owner
+Successfully removed 1 resource instance(s).
+Removed zitadel_machine_user.menu_sa
+Successfully removed 1 resource instance(s).
+Removed zitadel_org.iedora
+Successfully removed 1 resource instance(s).
+Removed zitadel_personal_access_token.menu_sa
+Successfully removed 1 resource instance(s).
+Removed zitadel_project.iedora
+Successfully removed 1 resource instance(s).
+Removed zitadel_project_role.iedora_admin
+Successfully removed 1 resource instance(s).
+Removed zitadel_project_role.qr_codes_delete
+Successfully removed 1 resource instance(s).
+Removed zitadel_project_role.qr_codes_list
+Successfully removed 1 resource instance(s).
+Removed zitadel_project_role.qr_codes_read
+Successfully removed 1 resource instance(s).
+Removed zitadel_project_role.qr_codes_update
+Successfully removed 1 resource instance(s).
+Removed zitadel_project_role.qr_codes_write
+Successfully removed 1 resource instance(s).
+→ Step 2/3: tofu destroy
+[0m[1mrandom_password.zitadel_first_admin: Refreshing state... [id=none][0m
+[0m[1mrandom_password.backup_passphrase: Refreshing state... [id=none][0m
+[0m[1mrandom_password.postgres: Refreshing state... [id=none][0m
+[0m[1mrandom_password.openobserve_password: Refreshing state... [id=none][0m
+[0m[1mrandom_password.zitadel_masterkey: Refreshing state... [id=none][0m
+[0m[1mrandom_password.menu_session_secret: Refreshing state... [id=none][0m
+[0m[1mterraform_data.bws_sync_autogen["AUTOGEN_INFRA_POSTGRES_PASSWORD"]: Refreshing state... [id=7d26755e-72f2-b799-01a3-2a845e7eeaf2][0m
+[0m[1mterraform_data.bws_sync_autogen["AUTOGEN_INFRA_ZITADEL_FIRST_ADMIN_PASSWORD"]: Refreshing state... [id=881cf8a3-d1dd-50fe-410f-02d5363462cd][0m
+[0m[1mterraform_data.bws_sync_autogen["AUTOGEN_INFRA_ZITADEL_MASTERKEY"]: Refreshing state... [id=a66637c2-7345-edcd-fbaa-c9d6887d98e6][0m
+[0m[1mterraform_data.bws_sync_autogen["AUTOGEN_INFRA_OPENOBSERVE_ROOT_USER_PASSWORD"]: Refreshing state... [id=9a7495d1-4ea9-1eea-523f-af63a415ee77][0m
+[0m[1mterraform_data.bws_sync_autogen["AUTOGEN_INFRA_BACKUP_PASSPHRASE"]: Refreshing state... [id=1a81bae6-9df0-62c6-cff1-66716d56138a][0m
+[0m[1mdata.tls_public_key.operator: Reading...[0m[0m
+[0m[1mdata.tls_public_key.operator: Read complete after 0s [id=d23ee54af38186f519ff670641d90bb76cb39162][0m
+[0m[1mcloudflare_r2_bucket.assets: Refreshing state... [id=iedora-assets][0m
+[0m[1mcloudflare_r2_bucket.data: Refreshing state... [id=iedora-data][0m
+[0m[1mdata.cloudflare_zone.iedora: Reading...[0m[0m
+[0m[1mgithub_actions_secret.secrets["CLAUDE_CODE_OAUTH_TOKEN"]: Refreshing state... [id=iedora:CLAUDE_CODE_OAUTH_TOKEN][0m
+[0m[1mgithub_actions_variable.vars["MENU_PUBLIC_HOSTNAME"]: Refreshing state... [id=iedora:MENU_PUBLIC_HOSTNAME][0m
+[0m[1mgithub_actions_variable.vars["BWS_PROJECT_ID"]: Refreshing state... [id=iedora:BWS_PROJECT_ID][0m
+[0m[1mgithub_actions_variable.vars["CLOUDFLARE_ACCOUNT_ID"]: Refreshing state... [id=iedora:CLOUDFLARE_ACCOUNT_ID][0m
+[0m[1mgithub_actions_secret.secrets["BWS_ACCESS_TOKEN"]: Refreshing state... [id=iedora:BWS_ACCESS_TOKEN][0m
+[0m[1mgithub_actions_secret.secrets["INFRA_SSH_PRIVATE_KEY"]: Refreshing state... [id=iedora:INFRA_SSH_PRIVATE_KEY][0m
+[0m[1mhcloud_firewall.iedora: Refreshing state... [id=11003033][0m
+[0m[1mhcloud_ssh_key.operator: Refreshing state... [id=112589587][0m
+[0m[1mcloudflare_r2_bucket_cors.assets: Refreshing state...[0m
+[0m[1mcloudflare_api_token.assets_r2: Refreshing state... [id=2bfdc1f612c427dbf0ef20c95c03023b][0m
+[0m[1mcloudflare_api_token.data_r2: Refreshing state... [id=39df3037d1b5e9354ed360bdd5ff2d96][0m
+[0m[1mhcloud_server.iedora: Refreshing state... [id=132137845][0m
+[0m[1mdata.cloudflare_zone.iedora: Read complete after 0s [id=2f4b847754f2c34e7fcb12ba21c48c54][0m
+[0m[1mcloudflare_r2_custom_domain.assets: Refreshing state...[0m
+[0m[1mnull_resource.docker_ready: Refreshing state... [id=1000057507237131688][0m
+[0m[1mcloudflare_dns_record.menu_iedora: Refreshing state... [id=38cb47193cbbc6316befd9548ee04d95][0m
+[0m[1mcloudflare_dns_record.auth_iedora: Refreshing state... [id=825b6e9cb3eb9c31ef6c49cb236bdc49][0m
+[0m[1mdocker_image.menu: Refreshing state... [id=sha256:19273455614f407586206ae7d5638cb5b4b2e1c5351590410bb9f6fd778e723aghcr.io/eduvhc/menu:latest][0m
+[0m[1mdocker_network.iedora: Refreshing state... [id=d4f57be255be44093b5aeccfc19b4916ec643ce9ad9c6b21693f877515b466f0][0m
+[0m[1mdocker_volume.caddy_data: Refreshing state... [id=caddy-data][0m
+[0m[1mdocker_volume.zitadel_bootstrap: Refreshing state... [id=zitadel-bootstrap][0m
+[0m[1mdocker_container.zitadel_bootstrap_chmod: Refreshing state... [id=dc30430fa9051f486ca3c6be1c949b8c4d45df2e9ca2b5554c27edf2bafd9778][0m
+[0m[1mdocker_container.backups: Refreshing state... [id=5125d1303c5ac6bc6c83381154f707518b3afc140d5232e5bf1012ff98c1e7dd][0m
+[0m[1mmodule.openobserve.docker_container.this: Refreshing state... [id=cca61ae218aa6768f0e7a9edebef8d4ce12cfb4771a505045edc96f5ebf5278f][0m
+[0m[1mmodule.postgres.docker_container.this: Refreshing state... [id=598eb597a528bc92834bea268f788f2469c867a9dd09e214cb3d3e2782d3399e][0m
+[0m[1mdocker_container.menu_web: Refreshing state... [id=0206c46c145f3324abae9aaebfc61b600fa8c44069bca29534dee87cd521e7aa][0m
+[0m[1mmodule.zitadel.docker_container.this: Refreshing state... [id=25a56c7e614bc88d25138fca53dfaddce5aa97a7e8f32557571734c504f43394][0m
+[0m[1mmodule.zitadel_login.docker_container.this: Refreshing state... [id=5261e475904cea0f723fd3388fabd2ff7435be899d6d835e7cc26473df39ff49][0m
+[0m[1mdocker_container.caddy: Refreshing state... [id=c253b620f4fe029282681eed159be8563e3940caafa2664fe5b4e6d37b7aa6b2][0m
+
+OpenTofu used the selected providers to generate the following execution
+plan. Resource actions are indicated with the following symbols:
+  [31m-[0m destroy[0m
+
+OpenTofu will perform the following actions:
+
+[1m  # cloudflare_api_token.assets_r2[0m will be [1m[31mdestroyed[0m
+[0m  [31m-[0m[0m resource "cloudflare_api_token" "assets_r2" {
+      [31m-[0m[0m id          = "2bfdc1f612c427dbf0ef20c95c03023b" [90m-> null[0m[0m
+      [31m-[0m[0m issued_on   = "2026-05-21T03:29:44Z" [90m-> null[0m[0m
+      [31m-[0m[0m modified_on = "2026-05-21T03:29:44Z" [90m-> null[0m[0m
+      [31m-[0m[0m name        = "iedora-assets-r2" [90m-> null[0m[0m
+      [31m-[0m[0m policies    = [
+          [31m-[0m[0m {
+              [31m-[0m[0m effect            = "allow" [90m-> null[0m[0m
+              [31m-[0m[0m permission_groups = [
+                  [31m-[0m[0m {
+                      [31m-[0m[0m id = "2efd5506f9c8494dacb1fa10a3e7d5b6" [90m-> null[0m[0m
+                    },
+                ] [90m-> null[0m[0m
+              [31m-[0m[0m resources         = jsonencode(
+                    {
+                      [31m-[0m[0m "com.cloudflare.edge.r2.bucket.2716bf6ee8be2880904e70f19050d2ef_default_iedora-assets" = "*"
+                    }
+                ) [90m-> null[0m[0m
+            },
+        ] [90m-> null[0m[0m
+      [31m-[0m[0m status      = "active" [90m-> null[0m[0m
+      [31m-[0m[0m value       = (sensitive value) [90m-> null[0m[0m
+    }
+
+[1m  # cloudflare_api_token.data_r2[0m will be [1m[31mdestroyed[0m
+[0m  [31m-[0m[0m resource "cloudflare_api_token" "data_r2" {
+      [31m-[0m[0m id          = "39df3037d1b5e9354ed360bdd5ff2d96" [90m-> null[0m[0m
+      [31m-[0m[0m issued_on   = "2026-05-21T03:29:43Z" [90m-> null[0m[0m
+      [31m-[0m[0m modified_on = "2026-05-21T03:29:44Z" [90m-> null[0m[0m
+      [31m-[0m[0m name        = "iedora-data-r2" [90m-> null[0m[0m
+      [31m-[0m[0m policies    = [
+          [31m-[0m[0m {
+              [31m-[0m[0m effect            = "allow" [90m-> null[0m[0m
+              [31m-[0m[0m permission_groups = [
+                  [31m-[0m[0m {
+                      [31m-[0m[0m id = "2efd5506f9c8494dacb1fa10a3e7d5b6" [90m-> null[0m[0m
+                    },
+                ] [90m-> null[0m[0m
+              [31m-[0m[0m resources         = jsonencode(
+                    {
+                      [31m-[0m[0m "com.cloudflare.edge.r2.bucket.2716bf6ee8be2880904e70f19050d2ef_default_iedora-data" = "*"
+                    }
+                ) [90m-> null[0m[0m
+            },
+        ] [90m-> null[0m[0m
+      [31m-[0m[0m status      = "active" [90m-> null[0m[0m
+      [31m-[0m[0m value       = (sensitive value) [90m-> null[0m[0m
+    }
+
+[1m  # cloudflare_dns_record.auth_iedora[0m will be [1m[31mdestroyed[0m
+[0m  [31m-[0m[0m resource "cloudflare_dns_record" "auth_iedora" {
+      [31m-[0m[0m comment             = "Direct to Hetzner — grey cloud bypasses CF Free gRPC block (#19)" [90m-> null[0m[0m
+      [31m-[0m[0m comment_modified_on = "2026-05-21T03:29:55Z" [90m-> null[0m[0m
+      [31m-[0m[0m content             = "46.224.162.208" [90m-> null[0m[0m
+      [31m-[0m[0m created_on          = "2026-05-21T03:29:55Z" [90m-> null[0m[0m
+      [31m-[0m[0m id                  = "825b6e9cb3eb9c31ef6c49cb236bdc49" [90m-> null[0m[0m
+      [31m-[0m[0m meta                = jsonencode({})
+      [31m-[0m[0m modified_on         = "2026-05-21T03:29:55Z" [90m-> null[0m[0m
+      [31m-[0m[0m name                = "auth.iedora.com" [90m-> null[0m[0m
+      [31m-[0m[0m proxiable           = true [90m-> null[0m[0m
+      [31m-[0m[0m proxied             = false [90m-> null[0m[0m
+      [31m-[0m[0m settings            = {} [90m-> null[0m[0m
+      [31m-[0m[0m tags                = [] [90m-> null[0m[0m
+      [31m-[0m[0m ttl                 = 60 [90m-> null[0m[0m
+      [31m-[0m[0m type                = "A" [90m-> null[0m[0m
+      [31m-[0m[0m zone_id             = "2f4b847754f2c34e7fcb12ba21c48c54" [90m-> null[0m[0m
+    }
+
+[1m  # cloudflare_dns_record.menu_iedora[0m will be [1m[31mdestroyed[0m
+[0m  [31m-[0m[0m resource "cloudflare_dns_record" "menu_iedora" {
+      [31m-[0m[0m comment             = "Direct to Hetzner — Caddy terminates TLS, no CF on path" [90m-> null[0m[0m
+      [31m-[0m[0m comment_modified_on = "2026-05-21T03:29:55Z" [90m-> null[0m[0m
+      [31m-[0m[0m content             = "46.224.162.208" [90m-> null[0m[0m
+      [31m-[0m[0m created_on          = "2026-05-21T03:29:55Z" [90m-> null[0m[0m
+      [31m-[0m[0m id                  = "38cb47193cbbc6316befd9548ee04d95" [90m-> null[0m[0m
+      [31m-[0m[0m meta                = jsonencode({})
+      [31m-[0m[0m modified_on         = "2026-05-21T03:29:55Z" [90m-> null[0m[0m
+      [31m-[0m[0m name                = "menu.iedora.com" [90m-> null[0m[0m
+      [31m-[0m[0m proxiable           = true [90m-> null[0m[0m
+      [31m-[0m[0m proxied             = false [90m-> null[0m[0m
+      [31m-[0m[0m settings            = {} [90m-> null[0m[0m
+      [31m-[0m[0m tags                = [] [90m-> null[0m[0m
+      [31m-[0m[0m ttl                 = 60 [90m-> null[0m[0m
+      [31m-[0m[0m type                = "A" [90m-> null[0m[0m
+      [31m-[0m[0m zone_id             = "2f4b847754f2c34e7fcb12ba21c48c54" [90m-> null[0m[0m
+    }
+
+[1m  # cloudflare_r2_bucket.assets[0m will be [1m[31mdestroyed[0m
+[0m  [31m-[0m[0m resource "cloudflare_r2_bucket" "assets" {
+      [31m-[0m[0m account_id    = "2716bf6ee8be2880904e70f19050d2ef" [90m-> null[0m[0m
+      [31m-[0m[0m creation_date = "2026-05-21T03:29:43.810Z" [90m-> null[0m[0m
+      [31m-[0m[0m id            = "iedora-assets" [90m-> null[0m[0m
+      [31m-[0m[0m jurisdiction  = "default" [90m-> null[0m[0m
+      [31m-[0m[0m location      = "EEUR" [90m-> null[0m[0m
+      [31m-[0m[0m name          = "iedora-assets" [90m-> null[0m[0m
+      [31m-[0m[0m storage_class = "Standard" [90m-> null[0m[0m
+    }
+
+[1m  # cloudflare_r2_bucket.data[0m will be [1m[31mdestroyed[0m
+[0m  [31m-[0m[0m resource "cloudflare_r2_bucket" "data" {
+      [31m-[0m[0m account_id    = "2716bf6ee8be2880904e70f19050d2ef" [90m-> null[0m[0m
+      [31m-[0m[0m creation_date = "2026-05-21T03:29:43.375Z" [90m-> null[0m[0m
+      [31m-[0m[0m id            = "iedora-data" [90m-> null[0m[0m
+      [31m-[0m[0m jurisdiction  = "default" [90m-> null[0m[0m
+      [31m-[0m[0m location      = "EEUR" [90m-> null[0m[0m
+      [31m-[0m[0m name          = "iedora-data" [90m-> null[0m[0m
+      [31m-[0m[0m storage_class = "Standard" [90m-> null[0m[0m
+    }
+
+[1m  # cloudflare_r2_bucket_cors.assets[0m will be [1m[31mdestroyed[0m
+[0m  [31m-[0m[0m resource "cloudflare_r2_bucket_cors" "assets" {
+      [31m-[0m[0m account_id   = "2716bf6ee8be2880904e70f19050d2ef" [90m-> null[0m[0m
+      [31m-[0m[0m bucket_name  = "iedora-assets" [90m-> null[0m[0m
+      [31m-[0m[0m jurisdiction = "default" [90m-> null[0m[0m
+      [31m-[0m[0m rules        = [
+          [31m-[0m[0m {
+              [31m-[0m[0m allowed         = {
+                  [31m-[0m[0m headers = [
+                      [31m-[0m[0m "Content-Type",
+                    ] [90m-> null[0m[0m
+                  [31m-[0m[0m methods = [
+                      [31m-[0m[0m "PUT",
+                      [31m-[0m[0m "HEAD",
+                    ] [90m-> null[0m[0m
+                  [31m-[0m[0m origins = [
+                      [31m-[0m[0m "https://menu.iedora.com",
+                    ] [90m-> null[0m[0m
+                } [90m-> null[0m[0m
+              [31m-[0m[0m expose_headers  = [
+                  [31m-[0m[0m "ETag",
+                ] [90m-> null[0m[0m
+              [31m-[0m[0m max_age_seconds = 3000 [90m-> null[0m[0m
+            },
+        ] [90m-> null[0m[0m
+    }
+
+[1m  # cloudflare_r2_custom_domain.assets[0m will be [1m[31mdestroyed[0m
+[0m  [31m-[0m[0m resource "cloudflare_r2_custom_domain" "assets" {
+      [31m-[0m[0m account_id   = "2716bf6ee8be2880904e70f19050d2ef" [90m-> null[0m[0m
+      [31m-[0m[0m bucket_name  = "iedora-assets" [90m-> null[0m[0m
+      [31m-[0m[0m domain       = "assets.iedora.com" [90m-> null[0m[0m
+      [31m-[0m[0m enabled      = true [90m-> null[0m[0m
+      [31m-[0m[0m jurisdiction = "default" [90m-> null[0m[0m
+      [31m-[0m[0m min_tls      = "1.2" [90m-> null[0m[0m
+      [31m-[0m[0m status       = {
+          [31m-[0m[0m ownership = "active" [90m-> null[0m[0m
+          [31m-[0m[0m ssl       = "active" [90m-> null[0m[0m
+        } [90m-> null[0m[0m
+      [31m-[0m[0m zone_id      = "2f4b847754f2c34e7fcb12ba21c48c54" [90m-> null[0m[0m
+      [31m-[0m[0m zone_name    = "iedora.com" [90m-> null[0m[0m
+    }
+
+[1m  # docker_container.backups[0m will be [1m[31mdestroyed[0m
+[0m  [31m-[0m[0m resource "docker_container" "backups" {
+      [31m-[0m[0m attach                                      = false [90m-> null[0m[0m
+      [31m-[0m[0m command                                     = [
+          [31m-[0m[0m "/run.sh",
+        ] [90m-> null[0m[0m
+      [31m-[0m[0m container_read_refresh_timeout_milliseconds = 15000 [90m-> null[0m[0m
+      [31m-[0m[0m cpu_shares                                  = 0 [90m-> null[0m[0m
+      [31m-[0m[0m dns                                         = [] [90m-> null[0m[0m
+      [31m-[0m[0m dns_opts                                    = [] [90m-> null[0m[0m
+      [31m-[0m[0m dns_search                                  = [] [90m-> null[0m[0m
+      [31m-[0m[0m entrypoint                                  = [
+          [31m-[0m[0m "/sbin/tini",
+          [31m-[0m[0m "--",
+        ] [90m-> null[0m[0m
+      [31m-[0m[0m env                                         = (sensitive value) [90m-> null[0m[0m
+      [31m-[0m[0m group_add                                   = [] [90m-> null[0m[0m
+      [31m-[0m[0m hostname                                    = "5125d1303c5a" [90m-> null[0m[0m
+      [31m-[0m[0m id                                          = "5125d1303c5ac6bc6c83381154f707518b3afc140d5232e5bf1012ff98c1e7dd" [90m-> null[0m[0m
+      [31m-[0m[0m image                                       = "ghcr.io/eduvhc/iedora-backup:18" [90m-> null[0m[0m
+      [31m-[0m[0m init                                        = false [90m-> null[0m[0m
+      [31m-[0m[0m ipc_mode                                    = "private" [90m-> null[0m[0m
+      [31m-[0m[0m log_driver                                  = "json-file" [90m-> null[0m[0m
+      [31m-[0m[0m log_opts                                    = {
+          [31m-[0m[0m "max-size" = "10m"
+        } [90m-> null[0m[0m
+      [31m-[0m[0m logs                                        = false [90m-> null[0m[0m
+      [31m-[0m[0m max_retry_count                             = 0 [90m-> null[0m[0m
+      [31m-[0m[0m memory                                      = 0 [90m-> null[0m[0m
+      [31m-[0m[0m memory_reservation                          = 0 [90m-> null[0m[0m
+      [31m-[0m[0m memory_swap                                 = 0 [90m-> null[0m[0m
+      [31m-[0m[0m must_run                                    = true [90m-> null[0m[0m
+      [31m-[0m[0m name                                        = "infra-backups" [90m-> null[0m[0m
+      [31m-[0m[0m network_data                                = [
+          [31m-[0m[0m {
+              [31m-[0m[0m gateway                   = "172.18.0.1"
+              [31m-[0m[0m global_ipv6_address       = ""
+              [31m-[0m[0m global_ipv6_prefix_length = 0
+              [31m-[0m[0m ip_address                = "172.18.0.4"
+              [31m-[0m[0m ip_prefix_length          = 16
+              [31m-[0m[0m ipv6_gateway              = ""
+              [31m-[0m[0m mac_address               = "72:f6:af:ac:ab:0f"
+              [31m-[0m[0m network_name              = "iedora"
+            },
+        ] [90m-> null[0m[0m
+      [31m-[0m[0m network_mode                                = "bridge" [90m-> null[0m[0m
+      [31m-[0m[0m privileged                                  = false [90m-> null[0m[0m
+      [31m-[0m[0m publish_all_ports                           = false [90m-> null[0m[0m
+      [31m-[0m[0m read_only                                   = false [90m-> null[0m[0m
+      [31m-[0m[0m remove_volumes                              = true [90m-> null[0m[0m
+      [31m-[0m[0m restart                                     = "unless-stopped" [90m-> null[0m[0m
+      [31m-[0m[0m rm                                          = false [90m-> null[0m[0m
+      [31m-[0m[0m runtime                                     = "runc" [90m-> null[0m[0m
+      [31m-[0m[0m security_opts                               = [] [90m-> null[0m[0m
+      [31m-[0m[0m shm_size                                    = 64 [90m-> null[0m[0m
+      [31m-[0m[0m start                                       = true [90m-> null[0m[0m
+      [31m-[0m[0m stdin_open                                  = false [90m-> null[0m[0m
+      [31m-[0m[0m stop_signal                                 = "SIGINT" [90m-> null[0m[0m
+      [31m-[0m[0m stop_timeout                                = 0 [90m-> null[0m[0m
+      [31m-[0m[0m storage_opts                                = {} [90m-> null[0m[0m
+      [31m-[0m[0m sysctls                                     = {} [90m-> null[0m[0m
+      [31m-[0m[0m tmpfs                                       = {} [90m-> null[0m[0m
+      [31m-[0m[0m tty                                         = false [90m-> null[0m[0m
+      [31m-[0m[0m user                                        = "postgres" [90m-> null[0m[0m
+      [31m-[0m[0m wait                                        = false [90m-> null[0m[0m
+      [31m-[0m[0m wait_timeout                                = 60 [90m-> null[0m[0m
+      [31m-[0m[0m working_dir                                 = "/" [90m-> null[0m[0m
+
+      [31m-[0m[0m networks_advanced {
+          [31m-[0m[0m aliases = [] [90m-> null[0m[0m
+          [31m-[0m[0m name    = "iedora" [90m-> null[0m[0m
+        }
+    }
+
+[1m  # docker_container.caddy[0m will be [1m[31mdestroyed[0m
+[0m  [31m-[0m[0m resource "docker_container" "caddy" {
+      [31m-[0m[0m attach                                      = false [90m-> null[0m[0m
+      [31m-[0m[0m command                                     = [
+          [31m-[0m[0m "caddy",
+          [31m-[0m[0m "run",
+          [31m-[0m[0m "--config",
+          [31m-[0m[0m "/etc/caddy/Caddyfile",
+          [31m-[0m[0m "--adapter",
+          [31m-[0m[0m "caddyfile",
+        ] [90m-> null[0m[0m
+      [31m-[0m[0m container_read_refresh_timeout_milliseconds = 15000 [90m-> null[0m[0m
+      [31m-[0m[0m cpu_shares                                  = 0 [90m-> null[0m[0m
+      [31m-[0m[0m dns                                         = [] [90m-> null[0m[0m
+      [31m-[0m[0m dns_opts                                    = [] [90m-> null[0m[0m
+      [31m-[0m[0m dns_search                                  = [] [90m-> null[0m[0m
+      [31m-[0m[0m entrypoint                                  = [] [90m-> null[0m[0m
+      [31m-[0m[0m env                                         = [] [90m-> null[0m[0m
+      [31m-[0m[0m group_add                                   = [] [90m-> null[0m[0m
+      [31m-[0m[0m hostname                                    = "c253b620f4fe" [90m-> null[0m[0m
+      [31m-[0m[0m id                                          = "c253b620f4fe029282681eed159be8563e3940caafa2664fe5b4e6d37b7aa6b2" [90m-> null[0m[0m
+      [31m-[0m[0m image                                       = "caddy:2.11-alpine" [90m-> null[0m[0m
+      [31m-[0m[0m init                                        = false [90m-> null[0m[0m
+      [31m-[0m[0m ipc_mode                                    = "private" [90m-> null[0m[0m
+      [31m-[0m[0m log_driver                                  = "json-file" [90m-> null[0m[0m
+      [31m-[0m[0m log_opts                                    = {
+          [31m-[0m[0m "max-size" = "10m"
+        } [90m-> null[0m[0m
+      [31m-[0m[0m logs                                        = false [90m-> null[0m[0m
+      [31m-[0m[0m max_retry_count                             = 0 [90m-> null[0m[0m
+      [31m-[0m[0m memory                                      = 0 [90m-> null[0m[0m
+      [31m-[0m[0m memory_reservation                          = 0 [90m-> null[0m[0m
+      [31m-[0m[0m memory_swap                                 = 0 [90m-> null[0m[0m
+      [31m-[0m[0m must_run                                    = true [90m-> null[0m[0m
+      [31m-[0m[0m name                                        = "infra-caddy" [90m-> null[0m[0m
+      [31m-[0m[0m network_data                                = [
+          [31m-[0m[0m {
+              [31m-[0m[0m gateway                   = "172.18.0.1"
+              [31m-[0m[0m global_ipv6_address       = ""
+              [31m-[0m[0m global_ipv6_prefix_length = 0
+              [31m-[0m[0m ip_address                = "172.18.0.7"
+              [31m-[0m[0m ip_prefix_length          = 16
+              [31m-[0m[0m ipv6_gateway              = ""
+              [31m-[0m[0m mac_address               = "86:e0:a3:90:d5:00"
+              [31m-[0m[0m network_name              = "iedora"
+            },
+        ] [90m-> null[0m[0m
+      [31m-[0m[0m network_mode                                = "bridge" [90m-> null[0m[0m
+      [31m-[0m[0m privileged                                  = false [90m-> null[0m[0m
+      [31m-[0m[0m publish_all_ports                           = false [90m-> null[0m[0m
+      [31m-[0m[0m read_only                                   = false [90m-> null[0m[0m
+      [31m-[0m[0m remove_volumes                              = true [90m-> null[0m[0m
+      [31m-[0m[0m restart                                     = "unless-stopped" [90m-> null[0m[0m
+      [31m-[0m[0m rm                                          = false [90m-> null[0m[0m
+      [31m-[0m[0m runtime                                     = "runc" [90m-> null[0m[0m
+      [31m-[0m[0m security_opts                               = [] [90m-> null[0m[0m
+      [31m-[0m[0m shm_size                                    = 64 [90m-> null[0m[0m
+      [31m-[0m[0m start                                       = true [90m-> null[0m[0m
+      [31m-[0m[0m stdin_open                                  = false [90m-> null[0m[0m
+      [31m-[0m[0m stop_timeout                                = 0 [90m-> null[0m[0m
+      [31m-[0m[0m storage_opts                                = {} [90m-> null[0m[0m
+      [31m-[0m[0m sysctls                                     = {} [90m-> null[0m[0m
+      [31m-[0m[0m tmpfs                                       = {} [90m-> null[0m[0m
+      [31m-[0m[0m tty                                         = false [90m-> null[0m[0m
+      [31m-[0m[0m wait                                        = false [90m-> null[0m[0m
+      [31m-[0m[0m wait_timeout                                = 60 [90m-> null[0m[0m
+      [31m-[0m[0m working_dir                                 = "/srv" [90m-> null[0m[0m
+
+      [31m-[0m[0m networks_advanced {
+          [31m-[0m[0m aliases = [
+              [31m-[0m[0m "infra-caddy",
+            ] [90m-> null[0m[0m
+          [31m-[0m[0m name    = "iedora" [90m-> null[0m[0m
+        }
+
+      [31m-[0m[0m ports {
+          [31m-[0m[0m external = 80 [90m-> null[0m[0m
+          [31m-[0m[0m internal = 80 [90m-> null[0m[0m
+          [31m-[0m[0m ip       = "0.0.0.0" [90m-> null[0m[0m
+          [31m-[0m[0m protocol = "tcp" [90m-> null[0m[0m
+        }
+      [31m-[0m[0m ports {
+          [31m-[0m[0m external = 443 [90m-> null[0m[0m
+          [31m-[0m[0m internal = 443 [90m-> null[0m[0m
+          [31m-[0m[0m ip       = "0.0.0.0" [90m-> null[0m[0m
+          [31m-[0m[0m protocol = "tcp" [90m-> null[0m[0m
+        }
+
+      [31m-[0m[0m upload {
+          # At least one attribute in this block is (or was) sensitive,
+          # so its contents will not be displayed.
+        }
+
+      [31m-[0m[0m volumes {
+          [31m-[0m[0m container_path = "/data" [90m-> null[0m[0m
+          [31m-[0m[0m read_only      = false [90m-> null[0m[0m
+          [31m-[0m[0m volume_name    = "caddy-data" [90m-> null[0m[0m
+        }
+    }
+
+[1m  # docker_container.menu_web[0m will be [1m[31mdestroyed[0m
+[0m  [31m-[0m[0m resource "docker_container" "menu_web" {
+      [31m-[0m[0m attach                                      = false [90m-> null[0m[0m
+      [31m-[0m[0m command                                     = [
+          [31m-[0m[0m "sh",
+          [31m-[0m[0m "-c",
+          [31m-[0m[0m "node scripts/migrate.mjs && node server.js",
+        ] [90m-> null[0m[0m
+      [31m-[0m[0m container_read_refresh_timeout_milliseconds = 15000 [90m-> null[0m[0m
+      [31m-[0m[0m cpu_shares                                  = 0 [90m-> null[0m[0m
+      [31m-[0m[0m dns                                         = [] [90m-> null[0m[0m
+      [31m-[0m[0m dns_opts                                    = [] [90m-> null[0m[0m
+      [31m-[0m[0m dns_search                                  = [] [90m-> null[0m[0m
+      [31m-[0m[0m entrypoint                                  = [
+          [31m-[0m[0m "docker-entrypoint.sh",
+        ] [90m-> null[0m[0m
+      [31m-[0m[0m env                                         = (sensitive value) [90m-> null[0m[0m
+      [31m-[0m[0m group_add                                   = [] [90m-> null[0m[0m
+      [31m-[0m[0m hostname                                    = "0206c46c145f" [90m-> null[0m[0m
+      [31m-[0m[0m id                                          = "0206c46c145f3324abae9aaebfc61b600fa8c44069bca29534dee87cd521e7aa" [90m-> null[0m[0m
+      [31m-[0m[0m image                                       = "sha256:19273455614f407586206ae7d5638cb5b4b2e1c5351590410bb9f6fd778e723a" [90m-> null[0m[0m
+      [31m-[0m[0m init                                        = false [90m-> null[0m[0m
+      [31m-[0m[0m ipc_mode                                    = "private" [90m-> null[0m[0m
+      [31m-[0m[0m log_driver                                  = "json-file" [90m-> null[0m[0m
+      [31m-[0m[0m log_opts                                    = {
+          [31m-[0m[0m "max-size" = "10m"
+        } [90m-> null[0m[0m
+      [31m-[0m[0m logs                                        = false [90m-> null[0m[0m
+      [31m-[0m[0m max_retry_count                             = 0 [90m-> null[0m[0m
+      [31m-[0m[0m memory                                      = 0 [90m-> null[0m[0m
+      [31m-[0m[0m memory_reservation                          = 0 [90m-> null[0m[0m
+      [31m-[0m[0m memory_swap                                 = 0 [90m-> null[0m[0m
+      [31m-[0m[0m must_run                                    = true [90m-> null[0m[0m
+      [31m-[0m[0m name                                        = "infra-menu-web" [90m-> null[0m[0m
+      [31m-[0m[0m network_data                                = [
+          [31m-[0m[0m {
+              [31m-[0m[0m gateway                   = "172.18.0.1"
+              [31m-[0m[0m global_ipv6_address       = ""
+              [31m-[0m[0m global_ipv6_prefix_length = 0
+              [31m-[0m[0m ip_address                = "172.18.0.8"
+              [31m-[0m[0m ip_prefix_length          = 16
+              [31m-[0m[0m ipv6_gateway              = ""
+              [31m-[0m[0m mac_address               = "0a:84:f8:fc:2f:5f"
+              [31m-[0m[0m network_name              = "iedora"
+            },
+        ] [90m-> null[0m[0m
+      [31m-[0m[0m network_mode                                = "bridge" [90m-> null[0m[0m
+      [31m-[0m[0m privileged                                  = false [90m-> null[0m[0m
+      [31m-[0m[0m publish_all_ports                           = false [90m-> null[0m[0m
+      [31m-[0m[0m read_only                                   = false [90m-> null[0m[0m
+      [31m-[0m[0m remove_volumes                              = true [90m-> null[0m[0m
+      [31m-[0m[0m restart                                     = "unless-stopped" [90m-> null[0m[0m
+      [31m-[0m[0m rm                                          = false [90m-> null[0m[0m
+      [31m-[0m[0m runtime                                     = "runc" [90m-> null[0m[0m
+      [31m-[0m[0m security_opts                               = [] [90m-> null[0m[0m
+      [31m-[0m[0m shm_size                                    = 64 [90m-> null[0m[0m
+      [31m-[0m[0m start                                       = true [90m-> null[0m[0m
+      [31m-[0m[0m stdin_open                                  = false [90m-> null[0m[0m
+      [31m-[0m[0m stop_timeout                                = 0 [90m-> null[0m[0m
+      [31m-[0m[0m storage_opts                                = {} [90m-> null[0m[0m
+      [31m-[0m[0m sysctls                                     = {} [90m-> null[0m[0m
+      [31m-[0m[0m tmpfs                                       = {} [90m-> null[0m[0m
+      [31m-[0m[0m tty                                         = false [90m-> null[0m[0m
+      [31m-[0m[0m user                                        = "nextjs" [90m-> null[0m[0m
+      [31m-[0m[0m wait                                        = false [90m-> null[0m[0m
+      [31m-[0m[0m wait_timeout                                = 60 [90m-> null[0m[0m
+      [31m-[0m[0m working_dir                                 = "/app/products/menu" [90m-> null[0m[0m
+
+      [31m-[0m[0m healthcheck {
+          [31m-[0m[0m interval       = "30s" [90m-> null[0m[0m
+          [31m-[0m[0m retries        = 3 [90m-> null[0m[0m
+          [31m-[0m[0m start_interval = "0s" [90m-> null[0m[0m
+          [31m-[0m[0m start_period   = "20s" [90m-> null[0m[0m
+          [31m-[0m[0m test           = [
+              [31m-[0m[0m "CMD-SHELL",
+              [31m-[0m[0m "node -e \"fetch('http://127.0.0.1:3000/up').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"",
+            ] [90m-> null[0m[0m
+          [31m-[0m[0m timeout        = "5s" [90m-> null[0m[0m
+        }
+
+      [31m-[0m[0m networks_advanced {
+          [31m-[0m[0m aliases = [
+              [31m-[0m[0m "infra-menu-web",
+            ] [90m-> null[0m[0m
+          [31m-[0m[0m name    = "iedora" [90m-> null[0m[0m
+        }
+    }
+
+[1m  # docker_container.zitadel_bootstrap_chmod[0m will be [1m[31mdestroyed[0m
+[0m  [31m-[0m[0m resource "docker_container" "zitadel_bootstrap_chmod" {
+      [31m-[0m[0m attach                                      = true [90m-> null[0m[0m
+      [31m-[0m[0m command                                     = [
+          [31m-[0m[0m "chmod",
+          [31m-[0m[0m "777",
+          [31m-[0m[0m "/x",
+        ] [90m-> null[0m[0m
+      [31m-[0m[0m container_read_refresh_timeout_milliseconds = 15000 [90m-> null[0m[0m
+      [31m-[0m[0m cpu_shares                                  = 0 [90m-> null[0m[0m
+      [31m-[0m[0m dns                                         = [] [90m-> null[0m[0m
+      [31m-[0m[0m dns_opts                                    = [] [90m-> null[0m[0m
+      [31m-[0m[0m dns_search                                  = [] [90m-> null[0m[0m
+      [31m-[0m[0m entrypoint                                  = [] [90m-> null[0m[0m
+      [31m-[0m[0m env                                         = [] [90m-> null[0m[0m
+      [31m-[0m[0m exit_code                                   = 0 [90m-> null[0m[0m
+      [31m-[0m[0m group_add                                   = [] [90m-> null[0m[0m
+      [31m-[0m[0m hostname                                    = "dc30430fa905" [90m-> null[0m[0m
+      [31m-[0m[0m id                                          = "dc30430fa9051f486ca3c6be1c949b8c4d45df2e9ca2b5554c27edf2bafd9778" [90m-> null[0m[0m
+      [31m-[0m[0m image                                       = "busybox:1.37" [90m-> null[0m[0m
+      [31m-[0m[0m init                                        = false [90m-> null[0m[0m
+      [31m-[0m[0m ipc_mode                                    = "private" [90m-> null[0m[0m
+      [31m-[0m[0m log_driver                                  = "json-file" [90m-> null[0m[0m
+      [31m-[0m[0m log_opts                                    = {} [90m-> null[0m[0m
+      [31m-[0m[0m logs                                        = false [90m-> null[0m[0m
+      [31m-[0m[0m max_retry_count                             = 0 [90m-> null[0m[0m
+      [31m-[0m[0m memory                                      = 0 [90m-> null[0m[0m
+      [31m-[0m[0m memory_reservation                          = 0 [90m-> null[0m[0m
+      [31m-[0m[0m memory_swap                                 = 0 [90m-> null[0m[0m
+      [31m-[0m[0m must_run                                    = false [90m-> null[0m[0m
+      [31m-[0m[0m name                                        = "infra-zitadel-bootstrap-chmod" [90m-> null[0m[0m
+      [31m-[0m[0m network_data                                = [
+          [31m-[0m[0m {
+              [31m-[0m[0m gateway                   = ""
+              [31m-[0m[0m global_ipv6_address       = ""
+              [31m-[0m[0m global_ipv6_prefix_length = 0
+              [31m-[0m[0m ip_address                = ""
+              [31m-[0m[0m ip_prefix_length          = 0
+              [31m-[0m[0m ipv6_gateway              = ""
+              [31m-[0m[0m mac_address               = ""
+              [31m-[0m[0m network_name              = "bridge"
+            },
+        ] [90m-> null[0m[0m
+      [31m-[0m[0m network_mode                                = "bridge" [90m-> null[0m[0m
+      [31m-[0m[0m privileged                                  = false [90m-> null[0m[0m
+      [31m-[0m[0m publish_all_ports                           = false [90m-> null[0m[0m
+      [31m-[0m[0m read_only                                   = false [90m-> null[0m[0m
+      [31m-[0m[0m remove_volumes                              = true [90m-> null[0m[0m
+      [31m-[0m[0m restart                                     = "no" [90m-> null[0m[0m
+      [31m-[0m[0m rm                                          = false [90m-> null[0m[0m
+      [31m-[0m[0m runtime                                     = "runc" [90m-> null[0m[0m
+      [31m-[0m[0m security_opts                               = [] [90m-> null[0m[0m
+      [31m-[0m[0m shm_size                                    = 64 [90m-> null[0m[0m
+      [31m-[0m[0m start                                       = true [90m-> null[0m[0m
+      [31m-[0m[0m stdin_open                                  = false [90m-> null[0m[0m
+      [31m-[0m[0m stop_timeout                                = 0 [90m-> null[0m[0m
+      [31m-[0m[0m storage_opts                                = {} [90m-> null[0m[0m
+      [31m-[0m[0m sysctls                                     = {} [90m-> null[0m[0m
+      [31m-[0m[0m tmpfs                                       = {} [90m-> null[0m[0m
+      [31m-[0m[0m tty                                         = false [90m-> null[0m[0m
+      [31m-[0m[0m wait                                        = false [90m-> null[0m[0m
+      [31m-[0m[0m wait_timeout                                = 60 [90m-> null[0m[0m
+
+      [31m-[0m[0m volumes {
+          [31m-[0m[0m container_path = "/x" [90m-> null[0m[0m
+          [31m-[0m[0m read_only      = false [90m-> null[0m[0m
+          [31m-[0m[0m volume_name    = "zitadel-bootstrap" [90m-> null[0m[0m
+        }
+    }
+
+[1m  # docker_image.menu[0m will be [1m[31mdestroyed[0m
+[0m  [31m-[0m[0m resource "docker_image" "menu" {
+      [31m-[0m[0m id           = "sha256:19273455614f407586206ae7d5638cb5b4b2e1c5351590410bb9f6fd778e723aghcr.io/eduvhc/menu:latest" [90m-> null[0m[0m
+      [31m-[0m[0m image_id     = "sha256:19273455614f407586206ae7d5638cb5b4b2e1c5351590410bb9f6fd778e723a" [90m-> null[0m[0m
+      [31m-[0m[0m keep_locally = true [90m-> null[0m[0m
+      [31m-[0m[0m name         = "ghcr.io/eduvhc/menu:latest" [90m-> null[0m[0m
+      [31m-[0m[0m repo_digest  = "ghcr.io/eduvhc/menu@sha256:19273455614f407586206ae7d5638cb5b4b2e1c5351590410bb9f6fd778e723a" [90m-> null[0m[0m
+    }
+
+[1m  # docker_network.iedora[0m will be [1m[31mdestroyed[0m
+[0m  [31m-[0m[0m resource "docker_network" "iedora" {
+      [31m-[0m[0m attachable   = false [90m-> null[0m[0m
+      [31m-[0m[0m driver       = "bridge" [90m-> null[0m[0m
+      [31m-[0m[0m id           = "d4f57be255be44093b5aeccfc19b4916ec643ce9ad9c6b21693f877515b466f0" [90m-> null[0m[0m
+      [31m-[0m[0m ingress      = false [90m-> null[0m[0m
+      [31m-[0m[0m internal     = false [90m-> null[0m[0m
+      [31m-[0m[0m ipam_driver  = "default" [90m-> null[0m[0m
+      [31m-[0m[0m ipam_options = {} [90m-> null[0m[0m
+      [31m-[0m[0m ipv6         = false [90m-> null[0m[0m
+      [31m-[0m[0m name         = "iedora" [90m-> null[0m[0m
+      [31m-[0m[0m options      = {} [90m-> null[0m[0m
+      [31m-[0m[0m scope        = "local" [90m-> null[0m[0m
+
+      [31m-[0m[0m ipam_config {
+          [31m-[0m[0m aux_address = {} [90m-> null[0m[0m
+          [31m-[0m[0m gateway     = "172.18.0.1" [90m-> null[0m[0m
+          [31m-[0m[0m subnet      = "172.18.0.0/16" [90m-> null[0m[0m
+        }
+    }
+
+[1m  # docker_volume.caddy_data[0m will be [1m[31mdestroyed[0m
+[0m  [31m-[0m[0m resource "docker_volume" "caddy_data" {
+      [31m-[0m[0m driver      = "local" [90m-> null[0m[0m
+      [31m-[0m[0m driver_opts = {} [90m-> null[0m[0m
+      [31m-[0m[0m id          = "caddy-data" [90m-> null[0m[0m
+      [31m-[0m[0m mountpoint  = "/var/lib/docker/volumes/caddy-data/_data" [90m-> null[0m[0m
+      [31m-[0m[0m name        = "caddy-data" [90m-> null[0m[0m
+    }
+
+[1m  # docker_volume.zitadel_bootstrap[0m will be [1m[31mdestroyed[0m
+[0m  [31m-[0m[0m resource "docker_volume" "zitadel_bootstrap" {
+      [31m-[0m[0m driver      = "local" [90m-> null[0m[0m
+      [31m-[0m[0m driver_opts = {} [90m-> null[0m[0m
+      [31m-[0m[0m id          = "zitadel-bootstrap" [90m-> null[0m[0m
+      [31m-[0m[0m mountpoint  = "/var/lib/docker/volumes/zitadel-bootstrap/_data" [90m-> null[0m[0m
+      [31m-[0m[0m name        = "zitadel-bootstrap" [90m-> null[0m[0m
+    }
+
+[1m  # github_actions_secret.secrets["BWS_ACCESS_TOKEN"][0m will be [1m[31mdestroyed[0m
+[0m  [31m-[0m[0m resource "github_actions_secret" "secrets" {
+      [31m-[0m[0m created_at        = "2026-05-21 03:29:52 +0000 UTC" [90m-> null[0m[0m
+      [31m-[0m[0m id                = "iedora:BWS_ACCESS_TOKEN" [90m-> null[0m[0m
+      [31m-[0m[0m key_id            = "3380204578043523366" [90m-> null[0m[0m
+      [31m-[0m[0m remote_updated_at = "2026-05-21 03:29:52 +0000 UTC" [90m-> null[0m[0m
+      [31m-[0m[0m repository        = "iedora" [90m-> null[0m[0m
+      [31m-[0m[0m repository_id     = 1229002965 [90m-> null[0m[0m
+      [31m-[0m[0m secret_name       = "BWS_ACCESS_TOKEN" [90m-> null[0m[0m
+      [31m-[0m[0m updated_at        = "2026-05-21 03:29:52 +0000 UTC" [90m-> null[0m[0m
+      [31m-[0m[0m value             = (sensitive value) [90m-> null[0m[0m
+    }
+
+[1m  # github_actions_secret.secrets["CLAUDE_CODE_OAUTH_TOKEN"][0m will be [1m[31mdestroyed[0m
+[0m  [31m-[0m[0m resource "github_actions_secret" "secrets" {
+      [31m-[0m[0m created_at        = "2026-05-21 03:29:51 +0000 UTC" [90m-> null[0m[0m
+      [31m-[0m[0m id                = "iedora:CLAUDE_CODE_OAUTH_TOKEN" [90m-> null[0m[0m
+      [31m-[0m[0m key_id            = "3380204578043523366" [90m-> null[0m[0m
+      [31m-[0m[0m remote_updated_at = "2026-05-21 03:29:51 +0000 UTC" [90m-> null[0m[0m
+      [31m-[0m[0m repository        = "iedora" [90m-> null[0m[0m
+      [31m-[0m[0m repository_id     = 1229002965 [90m-> null[0m[0m
+      [31m-[0m[0m secret_name       = "CLAUDE_CODE_OAUTH_TOKEN" [90m-> null[0m[0m
+      [31m-[0m[0m updated_at        = "2026-05-21 03:29:51 +0000 UTC" [90m-> null[0m[0m
+      [31m-[0m[0m value             = (sensitive value) [90m-> null[0m[0m
+    }
+
+[1m  # github_actions_secret.secrets["INFRA_SSH_PRIVATE_KEY"][0m will be [1m[31mdestroyed[0m
+[0m  [31m-[0m[0m resource "github_actions_secret" "secrets" {
+      [31m-[0m[0m created_at        = "2026-05-21 03:29:50 +0000 UTC" [90m-> null[0m[0m
+      [31m-[0m[0m id                = "iedora:INFRA_SSH_PRIVATE_KEY" [90m-> null[0m[0m
+      [31m-[0m[0m key_id            = "3380204578043523366" [90m-> null[0m[0m
+      [31m-[0m[0m remote_updated_at = "2026-05-21 03:29:50 +0000 UTC" [90m-> null[0m[0m
+      [31m-[0m[0m repository        = "iedora" [90m-> null[0m[0m
+      [31m-[0m[0m repository_id     = 1229002965 [90m-> null[0m[0m
+      [31m-[0m[0m secret_name       = "INFRA_SSH_PRIVATE_KEY" [90m-> null[0m[0m
+      [31m-[0m[0m updated_at        = "2026-05-21 03:29:50 +0000 UTC" [90m-> null[0m[0m
+      [31m-[0m[0m value             = (sensitive value) [90m-> null[0m[0m
+    }
+
+[1m  # github_actions_variable.vars["BWS_PROJECT_ID"][0m will be [1m[31mdestroyed[0m
+[0m  [31m-[0m[0m resource "github_actions_variable" "vars" {
+      [31m-[0m[0m created_at    = "2026-05-21 03:29:44 +0000 UTC" [90m-> null[0m[0m
+      [31m-[0m[0m id            = "iedora:BWS_PROJECT_ID" [90m-> null[0m[0m
+      [31m-[0m[0m repository    = "iedora" [90m-> null[0m[0m
+      [31m-[0m[0m repository_id = 1229002965 [90m-> null[0m[0m
+      [31m-[0m[0m updated_at    = "2026-05-21 03:29:44 +0000 UTC" [90m-> null[0m[0m
+      [31m-[0m[0m value         = "e0f72a13-b559-44cc-a2a7-b44b01860f39" [90m-> null[0m[0m
+      [31m-[0m[0m variable_name = "BWS_PROJECT_ID" [90m-> null[0m[0m
+    }
+
+[1m  # github_actions_variable.vars["CLOUDFLARE_ACCOUNT_ID"][0m will be [1m[31mdestroyed[0m
+[0m  [31m-[0m[0m resource "github_actions_variable" "vars" {
+      [31m-[0m[0m created_at    = "2026-05-21 03:29:43 +0000 UTC" [90m-> null[0m[0m
+      [31m-[0m[0m id            = "iedora:CLOUDFLARE_ACCOUNT_ID" [90m-> null[0m[0m
+      [31m-[0m[0m repository    = "iedora" [90m-> null[0m[0m
+      [31m-[0m[0m repository_id = 1229002965 [90m-> null[0m[0m
+      [31m-[0m[0m updated_at    = "2026-05-21 03:29:43 +0000 UTC" [90m-> null[0m[0m
+      [31m-[0m[0m value         = "2716bf6ee8be2880904e70f19050d2ef" [90m-> null[0m[0m
+      [31m-[0m[0m variable_name = "CLOUDFLARE_ACCOUNT_ID" [90m-> null[0m[0m
+    }
+
+[1m  # github_actions_variable.vars["MENU_PUBLIC_HOSTNAME"][0m will be [1m[31mdestroyed[0m
+[0m  [31m-[0m[0m resource "github_actions_variable" "vars" {
+      [31m-[0m[0m created_at    = "2026-05-21 03:29:46 +0000 UTC" [90m-> null[0m[0m
+      [31m-[0m[0m id            = "iedora:MENU_PUBLIC_HOSTNAME" [90m-> null[0m[0m
+      [31m-[0m[0m repository    = "iedora" [90m-> null[0m[0m
+      [31m-[0m[0m repository_id = 1229002965 [90m-> null[0m[0m
+      [31m-[0m[0m updated_at    = "2026-05-21 03:29:46 +0000 UTC" [90m-> null[0m[0m
+      [31m-[0m[0m value         = "menu.iedora.com" [90m-> null[0m[0m
+      [31m-[0m[0m variable_name = "MENU_PUBLIC_HOSTNAME" [90m-> null[0m[0m
+    }
+
+[1m  # hcloud_firewall.iedora[0m will be [1m[31mdestroyed[0m
+[0m  [31m-[0m[0m resource "hcloud_firewall" "iedora" {
+      [31m-[0m[0m id     = "11003033" [90m-> null[0m[0m
+      [31m-[0m[0m labels = {} [90m-> null[0m[0m
+      [31m-[0m[0m name   = "iedora" [90m-> null[0m[0m
+
+      [31m-[0m[0m apply_to {
+          [31m-[0m[0m server = 132137845 [90m-> null[0m[0m
+        }
+
+      [31m-[0m[0m rule {
+          [31m-[0m[0m description     = "HTTP (Caddy for auth.iedora.com + Let's Encrypt ACME challenges)" [90m-> null[0m[0m
+          [31m-[0m[0m destination_ips = [] [90m-> null[0m[0m
+          [31m-[0m[0m direction       = "in" [90m-> null[0m[0m
+          [31m-[0m[0m port            = "80" [90m-> null[0m[0m
+          [31m-[0m[0m protocol        = "tcp" [90m-> null[0m[0m
+          [31m-[0m[0m source_ips      = [
+              [31m-[0m[0m "0.0.0.0/0",
+              [31m-[0m[0m "::/0",
+            ] [90m-> null[0m[0m
+        }
+      [31m-[0m[0m rule {
+          [31m-[0m[0m description     = "HTTPS (Caddy fronts auth.iedora.com — direct path, no CF in the way)" [90m-> null[0m[0m
+          [31m-[0m[0m destination_ips = [] [90m-> null[0m[0m
+          [31m-[0m[0m direction       = "in" [90m-> null[0m[0m
+          [31m-[0m[0m port            = "443" [90m-> null[0m[0m
+          [31m-[0m[0m protocol        = "tcp" [90m-> null[0m[0m
+          [31m-[0m[0m source_ips      = [
+              [31m-[0m[0m "0.0.0.0/0",
+              [31m-[0m[0m "::/0",
+            ] [90m-> null[0m[0m
+        }
+      [31m-[0m[0m rule {
+          [31m-[0m[0m description     = "ICMP / ping (operational debugging)" [90m-> null[0m[0m
+          [31m-[0m[0m destination_ips = [] [90m-> null[0m[0m
+          [31m-[0m[0m direction       = "in" [90m-> null[0m[0m
+          [31m-[0m[0m protocol        = "icmp" [90m-> null[0m[0m
+          [31m-[0m[0m source_ips      = [
+              [31m-[0m[0m "0.0.0.0/0",
+              [31m-[0m[0m "::/0",
+            ] [90m-> null[0m[0m
+        }
+      [31m-[0m[0m rule {
+          [31m-[0m[0m description     = "SSH (key-only auth enforced by sshd_config)" [90m-> null[0m[0m
+          [31m-[0m[0m destination_ips = [] [90m-> null[0m[0m
+          [31m-[0m[0m direction       = "in" [90m-> null[0m[0m
+          [31m-[0m[0m port            = "22" [90m-> null[0m[0m
+          [31m-[0m[0m protocol        = "tcp" [90m-> null[0m[0m
+          [31m-[0m[0m source_ips      = [
+              [31m-[0m[0m "0.0.0.0/0",
+              [31m-[0m[0m "::/0",
+            ] [90m-> null[0m[0m
+        }
+    }
+
+[1m  # hcloud_server.iedora[0m will be [1m[31mdestroyed[0m
+[0m  [31m-[0m[0m resource "hcloud_server" "iedora" {
+      [31m-[0m[0m allow_deprecated_images    = false [90m-> null[0m[0m
+      [31m-[0m[0m backups                    = false [90m-> null[0m[0m
+      [31m-[0m[0m datacenter                 = "fsn1-dc14" [90m-> null[0m[0m
+      [31m-[0m[0m delete_protection          = false [90m-> null[0m[0m
+      [31m-[0m[0m firewall_ids               = [
+          [31m-[0m[0m 11003033,
+        ] [90m-> null[0m[0m
+      [31m-[0m[0m id                         = "132137845" [90m-> null[0m[0m
+      [31m-[0m[0m ignore_remote_firewall_ids = false [90m-> null[0m[0m
+      [31m-[0m[0m image                      = "ubuntu-24.04" [90m-> null[0m[0m
+      [31m-[0m[0m ipv4_address               = "46.224.162.208" [90m-> null[0m[0m
+      [31m-[0m[0m ipv6_address               = "2a01:4f8:c014:616a::1" [90m-> null[0m[0m
+      [31m-[0m[0m ipv6_network               = "2a01:4f8:c014:616a::/64" [90m-> null[0m[0m
+      [31m-[0m[0m keep_disk                  = false [90m-> null[0m[0m
+      [31m-[0m[0m labels                     = {
+          [31m-[0m[0m "project" = "iedora"
+          [31m-[0m[0m "role"    = "infra"
+        } [90m-> null[0m[0m
+      [31m-[0m[0m location                   = "fsn1" [90m-> null[0m[0m
+      [31m-[0m[0m name                       = "iedora" [90m-> null[0m[0m
+      [31m-[0m[0m placement_group_id         = 0 [90m-> null[0m[0m
+      [31m-[0m[0m primary_disk_size          = 80 [90m-> null[0m[0m
+      [31m-[0m[0m rebuild_protection         = false [90m-> null[0m[0m
+      [31m-[0m[0m server_type                = "cpx22" [90m-> null[0m[0m
+      [31m-[0m[0m shutdown_before_deletion   = false [90m-> null[0m[0m
+      [31m-[0m[0m ssh_keys                   = [
+          [31m-[0m[0m "112589587",
+        ] [90m-> null[0m[0m
+      [31m-[0m[0m status                     = "running" [90m-> null[0m[0m
+      [31m-[0m[0m user_data                  = "r7gCxFok+NX3+68vsNVnpy8CIdA=" [90m-> null[0m[0m
+
+      [31m-[0m[0m public_net {
+          [31m-[0m[0m ipv4         = 0 [90m-> null[0m[0m
+          [31m-[0m[0m ipv4_enabled = true [90m-> null[0m[0m
+          [31m-[0m[0m ipv6         = 0 [90m-> null[0m[0m
+          [31m-[0m[0m ipv6_enabled = true [90m-> null[0m[0m
+        }
+    }
+
+[1m  # hcloud_ssh_key.operator[0m will be [1m[31mdestroyed[0m
+[0m  [31m-[0m[0m resource "hcloud_ssh_key" "operator" {
+      [31m-[0m[0m fingerprint = "f9:80:e2:ca:b9:5e:85:f9:fd:0b:e8:25:0e:65:db:d5" [90m-> null[0m[0m
+      [31m-[0m[0m id          = "112589587" [90m-> null[0m[0m
+      [31m-[0m[0m labels      = {} [90m-> null[0m[0m
+      [31m-[0m[0m name        = "iedora-operator" [90m-> null[0m[0m
+      [31m-[0m[0m public_key  = <<-EOT
+            ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFoUmdn8H77Bx//AbdyVznetjt/RT0UmvqEynH8Ngntv
+        EOT [90m-> null[0m[0m
+    }
+
+[1m  # null_resource.docker_ready[0m will be [1m[31mdestroyed[0m
+[0m  [31m-[0m[0m resource "null_resource" "docker_ready" {
+      [31m-[0m[0m id       = "1000057507237131688" [90m-> null[0m[0m
+      [31m-[0m[0m triggers = {
+          [31m-[0m[0m "server_id" = "132137845"
+        } [90m-> null[0m[0m
+    }
+
+[1m  # random_password.backup_passphrase[0m will be [1m[31mdestroyed[0m
+[0m  [31m-[0m[0m resource "random_password" "backup_passphrase" {
+      [31m-[0m[0m bcrypt_hash = (sensitive value) [90m-> null[0m[0m
+      [31m-[0m[0m id          = "none" [90m-> null[0m[0m
+      [31m-[0m[0m length      = 64 [90m-> null[0m[0m
+      [31m-[0m[0m lower       = true [90m-> null[0m[0m
+      [31m-[0m[0m min_lower   = 0 [90m-> null[0m[0m
+      [31m-[0m[0m min_numeric = 0 [90m-> null[0m[0m
+      [31m-[0m[0m min_special = 0 [90m-> null[0m[0m
+      [31m-[0m[0m min_upper   = 0 [90m-> null[0m[0m
+      [31m-[0m[0m number      = true [90m-> null[0m[0m
+      [31m-[0m[0m numeric     = true [90m-> null[0m[0m
+      [31m-[0m[0m result      = (sensitive value) [90m-> null[0m[0m
+      [31m-[0m[0m special     = false [90m-> null[0m[0m
+      [31m-[0m[0m upper       = true [90m-> null[0m[0m
+    }
+
+[1m  # random_password.menu_session_secret[0m will be [1m[31mdestroyed[0m
+[0m  [31m-[0m[0m resource "random_password" "menu_session_secret" {
+      [31m-[0m[0m bcrypt_hash = (sensitive value) [90m-> null[0m[0m
+      [31m-[0m[0m id          = "none" [90m-> null[0m[0m
+      [31m-[0m[0m length      = 48 [90m-> null[0m[0m
+      [31m-[0m[0m lower       = true [90m-> null[0m[0m
+      [31m-[0m[0m min_lower   = 0 [90m-> null[0m[0m
+      [31m-[0m[0m min_numeric = 0 [90m-> null[0m[0m
+      [31m-[0m[0m min_special = 0 [90m-> null[0m[0m
+      [31m-[0m[0m min_upper   = 0 [90m-> null[0m[0m
+      [31m-[0m[0m number      = true [90m-> null[0m[0m
+      [31m-[0m[0m numeric     = true [90m-> null[0m[0m
+      [31m-[0m[0m result      = (sensitive value) [90m-> null[0m[0m
+      [31m-[0m[0m special     = false [90m-> null[0m[0m
+      [31m-[0m[0m upper       = true [90m-> null[0m[0m
+    }
+
+[1m  # random_password.openobserve_password[0m will be [1m[31mdestroyed[0m
+[0m  [31m-[0m[0m resource "random_password" "openobserve_password" {
+      [31m-[0m[0m bcrypt_hash = (sensitive value) [90m-> null[0m[0m
+      [31m-[0m[0m id          = "none" [90m-> null[0m[0m
+      [31m-[0m[0m length      = 32 [90m-> null[0m[0m
+      [31m-[0m[0m lower       = true [90m-> null[0m[0m
+      [31m-[0m[0m min_lower   = 0 [90m-> null[0m[0m
+      [31m-[0m[0m min_numeric = 0 [90m-> null[0m[0m
+      [31m-[0m[0m min_special = 0 [90m-> null[0m[0m
+      [31m-[0m[0m min_upper   = 0 [90m-> null[0m[0m
+      [31m-[0m[0m number      = true [90m-> null[0m[0m
+      [31m-[0m[0m numeric     = true [90m-> null[0m[0m
+      [31m-[0m[0m result      = (sensitive value) [90m-> null[0m[0m
+      [31m-[0m[0m special     = false [90m-> null[0m[0m
+      [31m-[0m[0m upper       = true [90m-> null[0m[0m
+    }
+
+[1m  # random_password.postgres[0m will be [1m[31mdestroyed[0m
+[0m  [31m-[0m[0m resource "random_password" "postgres" {
+      [31m-[0m[0m bcrypt_hash = (sensitive value) [90m-> null[0m[0m
+      [31m-[0m[0m id          = "none" [90m-> null[0m[0m
+      [31m-[0m[0m length      = 48 [90m-> null[0m[0m
+      [31m-[0m[0m lower       = true [90m-> null[0m[0m
+      [31m-[0m[0m min_lower   = 0 [90m-> null[0m[0m
+      [31m-[0m[0m min_numeric = 0 [90m-> null[0m[0m
+      [31m-[0m[0m min_special = 0 [90m-> null[0m[0m
+      [31m-[0m[0m min_upper   = 0 [90m-> null[0m[0m
+      [31m-[0m[0m number      = true [90m-> null[0m[0m
+      [31m-[0m[0m numeric     = true [90m-> null[0m[0m
+      [31m-[0m[0m result      = (sensitive value) [90m-> null[0m[0m
+      [31m-[0m[0m special     = false [90m-> null[0m[0m
+      [31m-[0m[0m upper       = true [90m-> null[0m[0m
+    }
+
+[1m  # random_password.zitadel_first_admin[0m will be [1m[31mdestroyed[0m
+[0m  [31m-[0m[0m resource "random_password" "zitadel_first_admin" {
+      [31m-[0m[0m bcrypt_hash = (sensitive value) [90m-> null[0m[0m
+      [31m-[0m[0m id          = "none" [90m-> null[0m[0m
+      [31m-[0m[0m length      = 24 [90m-> null[0m[0m
+      [31m-[0m[0m lower       = true [90m-> null[0m[0m
+      [31m-[0m[0m min_lower   = 0 [90m-> null[0m[0m
+      [31m-[0m[0m min_numeric = 0 [90m-> null[0m[0m
+      [31m-[0m[0m min_special = 0 [90m-> null[0m[0m
+      [31m-[0m[0m min_upper   = 0 [90m-> null[0m[0m
+      [31m-[0m[0m number      = true [90m-> null[0m[0m
+      [31m-[0m[0m numeric     = true [90m-> null[0m[0m
+      [31m-[0m[0m result      = (sensitive value) [90m-> null[0m[0m
+      [31m-[0m[0m special     = true [90m-> null[0m[0m
+      [31m-[0m[0m upper       = true [90m-> null[0m[0m
+    }
+
+[1m  # random_password.zitadel_masterkey[0m will be [1m[31mdestroyed[0m
+[0m  [31m-[0m[0m resource "random_password" "zitadel_masterkey" {
+      [31m-[0m[0m bcrypt_hash = (sensitive value) [90m-> null[0m[0m
+      [31m-[0m[0m id          = "none" [90m-> null[0m[0m
+      [31m-[0m[0m length      = 32 [90m-> null[0m[0m
+      [31m-[0m[0m lower       = true [90m-> null[0m[0m
+      [31m-[0m[0m min_lower   = 0 [90m-> null[0m[0m
+      [31m-[0m[0m min_numeric = 0 [90m-> null[0m[0m
+      [31m-[0m[0m min_special = 0 [90m-> null[0m[0m
+      [31m-[0m[0m min_upper   = 0 [90m-> null[0m[0m
+      [31m-[0m[0m number      = true [90m-> null[0m[0m
+      [31m-[0m[0m numeric     = true [90m-> null[0m[0m
+      [31m-[0m[0m result      = (sensitive value) [90m-> null[0m[0m
+      [31m-[0m[0m special     = false [90m-> null[0m[0m
+      [31m-[0m[0m upper       = true [90m-> null[0m[0m
+    }
+
+[1m  # terraform_data.bws_sync_autogen["AUTOGEN_INFRA_BACKUP_PASSPHRASE"][0m will be [1m[31mdestroyed[0m
+[0m  [31m-[0m[0m resource "terraform_data" "bws_sync_autogen" {
+      [31m-[0m[0m id               = "1a81bae6-9df0-62c6-cff1-66716d56138a" [90m-> null[0m[0m
+      [31m-[0m[0m triggers_replace = (sensitive value) [90m-> null[0m[0m
+    }
+
+[1m  # terraform_data.bws_sync_autogen["AUTOGEN_INFRA_OPENOBSERVE_ROOT_USER_PASSWORD"][0m will be [1m[31mdestroyed[0m
+[0m  [31m-[0m[0m resource "terraform_data" "bws_sync_autogen" {
+      [31m-[0m[0m id               = "9a7495d1-4ea9-1eea-523f-af63a415ee77" [90m-> null[0m[0m
+      [31m-[0m[0m triggers_replace = (sensitive value) [90m-> null[0m[0m
+    }
+
+[1m  # terraform_data.bws_sync_autogen["AUTOGEN_INFRA_POSTGRES_PASSWORD"][0m will be [1m[31mdestroyed[0m
+[0m  [31m-[0m[0m resource "terraform_data" "bws_sync_autogen" {
+      [31m-[0m[0m id               = "7d26755e-72f2-b799-01a3-2a845e7eeaf2" [90m-> null[0m[0m
+      [31m-[0m[0m triggers_replace = (sensitive value) [90m-> null[0m[0m
+    }
+
+[1m  # terraform_data.bws_sync_autogen["AUTOGEN_INFRA_ZITADEL_FIRST_ADMIN_PASSWORD"][0m will be [1m[31mdestroyed[0m
+[0m  [31m-[0m[0m resource "terraform_data" "bws_sync_autogen" {
+      [31m-[0m[0m id               = "881cf8a3-d1dd-50fe-410f-02d5363462cd" [90m-> null[0m[0m
+      [31m-[0m[0m triggers_replace = (sensitive value) [90m-> null[0m[0m
+    }
+
+[1m  # terraform_data.bws_sync_autogen["AUTOGEN_INFRA_ZITADEL_MASTERKEY"][0m will be [1m[31mdestroyed[0m
+[0m  [31m-[0m[0m resource "terraform_data" "bws_sync_autogen" {
+      [31m-[0m[0m id               = "a66637c2-7345-edcd-fbaa-c9d6887d98e6" [90m-> null[0m[0m
+      [31m-[0m[0m triggers_replace = (sensitive value) [90m-> null[0m[0m
+    }
+
+[1m  # module.openobserve.docker_container.this[0m will be [1m[31mdestroyed[0m
+[0m  [31m-[0m[0m resource "docker_container" "this" {
+      [31m-[0m[0m attach                                      = false [90m-> null[0m[0m
+      [31m-[0m[0m command                                     = [
+          [31m-[0m[0m "/openobserve",
+        ] [90m-> null[0m[0m
+      [31m-[0m[0m container_read_refresh_timeout_milliseconds = 15000 [90m-> null[0m[0m
+      [31m-[0m[0m cpu_shares                                  = 0 [90m-> null[0m[0m
+      [31m-[0m[0m dns                                         = [] [90m-> null[0m[0m
+      [31m-[0m[0m dns_opts                                    = [] [90m-> null[0m[0m
+      [31m-[0m[0m dns_search                                  = [] [90m-> null[0m[0m
+      [31m-[0m[0m entrypoint                                  = [] [90m-> null[0m[0m
+      [31m-[0m[0m env                                         = (sensitive value) [90m-> null[0m[0m
+      [31m-[0m[0m group_add                                   = [] [90m-> null[0m[0m
+      [31m-[0m[0m hostname                                    = "cca61ae218aa" [90m-> null[0m[0m
+      [31m-[0m[0m id                                          = "cca61ae218aa6768f0e7a9edebef8d4ce12cfb4771a505045edc96f5ebf5278f" [90m-> null[0m[0m
+      [31m-[0m[0m image                                       = "public.ecr.aws/zinclabs/openobserve:v0.90.0" [90m-> null[0m[0m
+      [31m-[0m[0m init                                        = false [90m-> null[0m[0m
+      [31m-[0m[0m ipc_mode                                    = "private" [90m-> null[0m[0m
+      [31m-[0m[0m log_driver                                  = "json-file" [90m-> null[0m[0m
+      [31m-[0m[0m log_opts                                    = {
+          [31m-[0m[0m "max-size" = "10m"
+        } [90m-> null[0m[0m
+      [31m-[0m[0m logs                                        = false [90m-> null[0m[0m
+      [31m-[0m[0m max_retry_count                             = 0 [90m-> null[0m[0m
+      [31m-[0m[0m memory                                      = 0 [90m-> null[0m[0m
+      [31m-[0m[0m memory_reservation                          = 0 [90m-> null[0m[0m
+      [31m-[0m[0m memory_swap                                 = 0 [90m-> null[0m[0m
+      [31m-[0m[0m must_run                                    = true [90m-> null[0m[0m
+      [31m-[0m[0m name                                        = "infra-openobserve" [90m-> null[0m[0m
+      [31m-[0m[0m network_data                                = [
+          [31m-[0m[0m {
+              [31m-[0m[0m gateway                   = "172.18.0.1"
+              [31m-[0m[0m global_ipv6_address       = ""
+              [31m-[0m[0m global_ipv6_prefix_length = 0
+              [31m-[0m[0m ip_address                = "172.18.0.3"
+              [31m-[0m[0m ip_prefix_length          = 16
+              [31m-[0m[0m ipv6_gateway              = ""
+              [31m-[0m[0m mac_address               = "5e:dd:e7:99:3d:d0"
+              [31m-[0m[0m network_name              = "iedora"
+            },
+        ] [90m-> null[0m[0m
+      [31m-[0m[0m network_mode                                = "bridge" [90m-> null[0m[0m
+      [31m-[0m[0m privileged                                  = false [90m-> null[0m[0m
+      [31m-[0m[0m publish_all_ports                           = false [90m-> null[0m[0m
+      [31m-[0m[0m read_only                                   = false [90m-> null[0m[0m
+      [31m-[0m[0m remove_volumes                              = true [90m-> null[0m[0m
+      [31m-[0m[0m restart                                     = "unless-stopped" [90m-> null[0m[0m
+      [31m-[0m[0m rm                                          = false [90m-> null[0m[0m
+      [31m-[0m[0m runtime                                     = "runc" [90m-> null[0m[0m
+      [31m-[0m[0m security_opts                               = [] [90m-> null[0m[0m
+      [31m-[0m[0m shm_size                                    = 64 [90m-> null[0m[0m
+      [31m-[0m[0m start                                       = true [90m-> null[0m[0m
+      [31m-[0m[0m stdin_open                                  = false [90m-> null[0m[0m
+      [31m-[0m[0m stop_timeout                                = 0 [90m-> null[0m[0m
+      [31m-[0m[0m storage_opts                                = {} [90m-> null[0m[0m
+      [31m-[0m[0m sysctls                                     = {} [90m-> null[0m[0m
+      [31m-[0m[0m tmpfs                                       = {} [90m-> null[0m[0m
+      [31m-[0m[0m tty                                         = false [90m-> null[0m[0m
+      [31m-[0m[0m user                                        = "0" [90m-> null[0m[0m
+      [31m-[0m[0m wait                                        = false [90m-> null[0m[0m
+      [31m-[0m[0m wait_timeout                                = 60 [90m-> null[0m[0m
+      [31m-[0m[0m working_dir                                 = "/" [90m-> null[0m[0m
+
+      [31m-[0m[0m networks_advanced {
+          [31m-[0m[0m aliases = [
+              [31m-[0m[0m "infra-openobserve",
+              [31m-[0m[0m "openobserve",
+            ] [90m-> null[0m[0m
+          [31m-[0m[0m name    = "iedora" [90m-> null[0m[0m
+        }
+
+      [31m-[0m[0m volumes {
+          [31m-[0m[0m container_path = "/data" [90m-> null[0m[0m
+          [31m-[0m[0m host_path      = "/root/infra-openobserve/openobserve-data" [90m-> null[0m[0m
+          [31m-[0m[0m read_only      = false [90m-> null[0m[0m
+        }
+    }
+
+[1m  # module.postgres.docker_container.this[0m will be [1m[31mdestroyed[0m
+[0m  [31m-[0m[0m resource "docker_container" "this" {
+      [31m-[0m[0m attach                                      = false [90m-> null[0m[0m
+      [31m-[0m[0m command                                     = [
+          [31m-[0m[0m "postgres",
+        ] [90m-> null[0m[0m
+      [31m-[0m[0m container_read_refresh_timeout_milliseconds = 15000 [90m-> null[0m[0m
+      [31m-[0m[0m cpu_shares                                  = 0 [90m-> null[0m[0m
+      [31m-[0m[0m dns                                         = [] [90m-> null[0m[0m
+      [31m-[0m[0m dns_opts                                    = [] [90m-> null[0m[0m
+      [31m-[0m[0m dns_search                                  = [] [90m-> null[0m[0m
+      [31m-[0m[0m entrypoint                                  = [
+          [31m-[0m[0m "docker-entrypoint.sh",
+        ] [90m-> null[0m[0m
+      [31m-[0m[0m env                                         = (sensitive value) [90m-> null[0m[0m
+      [31m-[0m[0m group_add                                   = [] [90m-> null[0m[0m
+      [31m-[0m[0m hostname                                    = "598eb597a528" [90m-> null[0m[0m
+      [31m-[0m[0m id                                          = "598eb597a528bc92834bea268f788f2469c867a9dd09e214cb3d3e2782d3399e" [90m-> null[0m[0m
+      [31m-[0m[0m image                                       = "postgres:18.4-alpine" [90m-> null[0m[0m
+      [31m-[0m[0m init                                        = false [90m-> null[0m[0m
+      [31m-[0m[0m ipc_mode                                    = "private" [90m-> null[0m[0m
+      [31m-[0m[0m log_driver                                  = "json-file" [90m-> null[0m[0m
+      [31m-[0m[0m log_opts                                    = {
+          [31m-[0m[0m "max-size" = "10m"
+        } [90m-> null[0m[0m
+      [31m-[0m[0m logs                                        = false [90m-> null[0m[0m
+      [31m-[0m[0m max_retry_count                             = 0 [90m-> null[0m[0m
+      [31m-[0m[0m memory                                      = 0 [90m-> null[0m[0m
+      [31m-[0m[0m memory_reservation                          = 0 [90m-> null[0m[0m
+      [31m-[0m[0m memory_swap                                 = 0 [90m-> null[0m[0m
+      [31m-[0m[0m must_run                                    = true [90m-> null[0m[0m
+      [31m-[0m[0m name                                        = "infra-postgres" [90m-> null[0m[0m
+      [31m-[0m[0m network_data                                = [
+          [31m-[0m[0m {
+              [31m-[0m[0m gateway                   = "172.18.0.1"
+              [31m-[0m[0m global_ipv6_address       = ""
+              [31m-[0m[0m global_ipv6_prefix_length = 0
+              [31m-[0m[0m ip_address                = "172.18.0.2"
+              [31m-[0m[0m ip_prefix_length          = 16
+              [31m-[0m[0m ipv6_gateway              = ""
+              [31m-[0m[0m mac_address               = "36:0e:10:93:1c:e0"
+              [31m-[0m[0m network_name              = "iedora"
+            },
+        ] [90m-> null[0m[0m
+      [31m-[0m[0m network_mode                                = "bridge" [90m-> null[0m[0m
+      [31m-[0m[0m privileged                                  = false [90m-> null[0m[0m
+      [31m-[0m[0m publish_all_ports                           = false [90m-> null[0m[0m
+      [31m-[0m[0m read_only                                   = false [90m-> null[0m[0m
+      [31m-[0m[0m remove_volumes                              = true [90m-> null[0m[0m
+      [31m-[0m[0m restart                                     = "unless-stopped" [90m-> null[0m[0m
+      [31m-[0m[0m rm                                          = false [90m-> null[0m[0m
+      [31m-[0m[0m runtime                                     = "runc" [90m-> null[0m[0m
+      [31m-[0m[0m security_opts                               = [] [90m-> null[0m[0m
+      [31m-[0m[0m shm_size                                    = 64 [90m-> null[0m[0m
+      [31m-[0m[0m start                                       = true [90m-> null[0m[0m
+      [31m-[0m[0m stdin_open                                  = false [90m-> null[0m[0m
+      [31m-[0m[0m stop_signal                                 = "SIGINT" [90m-> null[0m[0m
+      [31m-[0m[0m stop_timeout                                = 0 [90m-> null[0m[0m
+      [31m-[0m[0m storage_opts                                = {} [90m-> null[0m[0m
+      [31m-[0m[0m sysctls                                     = {} [90m-> null[0m[0m
+      [31m-[0m[0m tmpfs                                       = {} [90m-> null[0m[0m
+      [31m-[0m[0m tty                                         = false [90m-> null[0m[0m
+      [31m-[0m[0m wait                                        = false [90m-> null[0m[0m
+      [31m-[0m[0m wait_timeout                                = 60 [90m-> null[0m[0m
+      [31m-[0m[0m working_dir                                 = "/" [90m-> null[0m[0m
+
+      [31m-[0m[0m healthcheck {
+          [31m-[0m[0m interval       = "5s" [90m-> null[0m[0m
+          [31m-[0m[0m retries        = 5 [90m-> null[0m[0m
+          [31m-[0m[0m start_interval = "0s" [90m-> null[0m[0m
+          [31m-[0m[0m start_period   = "0s" [90m-> null[0m[0m
+          [31m-[0m[0m test           = [
+              [31m-[0m[0m "CMD-SHELL",
+              [31m-[0m[0m "pg_isready -U postgres",
+            ] [90m-> null[0m[0m
+          [31m-[0m[0m timeout        = "5s" [90m-> null[0m[0m
+        }
+
+      [31m-[0m[0m networks_advanced {
+          [31m-[0m[0m aliases = [
+              [31m-[0m[0m "infra-postgres",
+              [31m-[0m[0m "postgres",
+            ] [90m-> null[0m[0m
+          [31m-[0m[0m name    = "iedora" [90m-> null[0m[0m
+        }
+
+      [31m-[0m[0m upload {
+          [31m-[0m[0m content    = <<-EOT
+                -- Postgres init script — runs ONCE when the data volume is empty
+                -- (Postgres image executes everything in /docker-entrypoint-initdb.d/
+                -- in sorted order during the very first boot).
+                --
+                -- One database per iedora product. Each product's migrate.mjs then
+                -- connects to its own database and runs Drizzle migrations.
+                --
+                -- Adding a new product = one line here + `just infra::wipe-postgres` +
+                -- `just infra::deploy` (only viable on a clean wipe; for incremental
+                -- adds against an existing cluster, run `CREATE DATABASE` manually).
+                
+                CREATE DATABASE menu;
+                CREATE DATABASE zitadel;
+            EOT [90m-> null[0m[0m
+          [31m-[0m[0m executable = false [90m-> null[0m[0m
+          [31m-[0m[0m file       = "/docker-entrypoint-initdb.d/init.sql" [90m-> null[0m[0m
+        }
+
+      [31m-[0m[0m volumes {
+          [31m-[0m[0m container_path = "/var/lib/postgresql" [90m-> null[0m[0m
+          [31m-[0m[0m host_path      = "/root/infra-postgres/data" [90m-> null[0m[0m
+          [31m-[0m[0m read_only      = false [90m-> null[0m[0m
+        }
+    }
+
+[1m  # module.zitadel.docker_container.this[0m will be [1m[31mdestroyed[0m
+[0m  [31m-[0m[0m resource "docker_container" "this" {
+      [31m-[0m[0m attach                                      = false [90m-> null[0m[0m
+      [31m-[0m[0m command                                     = [
+          [31m-[0m[0m "start-from-init",
+          [31m-[0m[0m "--masterkeyFromEnv",
+          [31m-[0m[0m "--tlsMode",
+          [31m-[0m[0m "external",
+        ] [90m-> null[0m[0m
+      [31m-[0m[0m container_read_refresh_timeout_milliseconds = 15000 [90m-> null[0m[0m
+      [31m-[0m[0m cpu_shares                                  = 0 [90m-> null[0m[0m
+      [31m-[0m[0m dns                                         = [] [90m-> null[0m[0m
+      [31m-[0m[0m dns_opts                                    = [] [90m-> null[0m[0m
+      [31m-[0m[0m dns_search                                  = [] [90m-> null[0m[0m
+      [31m-[0m[0m entrypoint                                  = [
+          [31m-[0m[0m "/app/zitadel",
+        ] [90m-> null[0m[0m
+      [31m-[0m[0m env                                         = (sensitive value) [90m-> null[0m[0m
+      [31m-[0m[0m group_add                                   = [] [90m-> null[0m[0m
+      [31m-[0m[0m hostname                                    = "25a56c7e614b" [90m-> null[0m[0m
+      [31m-[0m[0m id                                          = "25a56c7e614bc88d25138fca53dfaddce5aa97a7e8f32557571734c504f43394" [90m-> null[0m[0m
+      [31m-[0m[0m image                                       = "ghcr.io/zitadel/zitadel:v4.15.0" [90m-> null[0m[0m
+      [31m-[0m[0m init                                        = false [90m-> null[0m[0m
+      [31m-[0m[0m ipc_mode                                    = "private" [90m-> null[0m[0m
+      [31m-[0m[0m log_driver                                  = "json-file" [90m-> null[0m[0m
+      [31m-[0m[0m log_opts                                    = {
+          [31m-[0m[0m "max-size" = "10m"
+        } [90m-> null[0m[0m
+      [31m-[0m[0m logs                                        = false [90m-> null[0m[0m
+      [31m-[0m[0m max_retry_count                             = 0 [90m-> null[0m[0m
+      [31m-[0m[0m memory                                      = 0 [90m-> null[0m[0m
+      [31m-[0m[0m memory_reservation                          = 0 [90m-> null[0m[0m
+      [31m-[0m[0m memory_swap                                 = 0 [90m-> null[0m[0m
+      [31m-[0m[0m must_run                                    = true [90m-> null[0m[0m
+      [31m-[0m[0m name                                        = "infra-zitadel" [90m-> null[0m[0m
+      [31m-[0m[0m network_data                                = [
+          [31m-[0m[0m {
+              [31m-[0m[0m gateway                   = "172.18.0.1"
+              [31m-[0m[0m global_ipv6_address       = ""
+              [31m-[0m[0m global_ipv6_prefix_length = 0
+              [31m-[0m[0m ip_address                = "172.18.0.5"
+              [31m-[0m[0m ip_prefix_length          = 16
+              [31m-[0m[0m ipv6_gateway              = ""
+              [31m-[0m[0m mac_address               = "8a:8c:6c:b1:c9:00"
+              [31m-[0m[0m network_name              = "iedora"
+            },
+        ] [90m-> null[0m[0m
+      [31m-[0m[0m network_mode                                = "bridge" [90m-> null[0m[0m
+      [31m-[0m[0m privileged                                  = false [90m-> null[0m[0m
+      [31m-[0m[0m publish_all_ports                           = false [90m-> null[0m[0m
+      [31m-[0m[0m read_only                                   = false [90m-> null[0m[0m
+      [31m-[0m[0m remove_volumes                              = true [90m-> null[0m[0m
+      [31m-[0m[0m restart                                     = "unless-stopped" [90m-> null[0m[0m
+      [31m-[0m[0m rm                                          = false [90m-> null[0m[0m
+      [31m-[0m[0m runtime                                     = "runc" [90m-> null[0m[0m
+      [31m-[0m[0m security_opts                               = [] [90m-> null[0m[0m
+      [31m-[0m[0m shm_size                                    = 64 [90m-> null[0m[0m
+      [31m-[0m[0m start                                       = true [90m-> null[0m[0m
+      [31m-[0m[0m stdin_open                                  = false [90m-> null[0m[0m
+      [31m-[0m[0m stop_timeout                                = 0 [90m-> null[0m[0m
+      [31m-[0m[0m storage_opts                                = {} [90m-> null[0m[0m
+      [31m-[0m[0m sysctls                                     = {} [90m-> null[0m[0m
+      [31m-[0m[0m tmpfs                                       = {} [90m-> null[0m[0m
+      [31m-[0m[0m tty                                         = false [90m-> null[0m[0m
+      [31m-[0m[0m user                                        = "zitadel" [90m-> null[0m[0m
+      [31m-[0m[0m wait                                        = false [90m-> null[0m[0m
+      [31m-[0m[0m wait_timeout                                = 60 [90m-> null[0m[0m
+      [31m-[0m[0m working_dir                                 = "/" [90m-> null[0m[0m
+
+      [31m-[0m[0m healthcheck {
+          [31m-[0m[0m interval       = "0s" [90m-> null[0m[0m
+          [31m-[0m[0m retries        = 0 [90m-> null[0m[0m
+          [31m-[0m[0m start_interval = "0s" [90m-> null[0m[0m
+          [31m-[0m[0m start_period   = "0s" [90m-> null[0m[0m
+          [31m-[0m[0m test           = [
+              [31m-[0m[0m "NONE",
+            ] [90m-> null[0m[0m
+          [31m-[0m[0m timeout        = "0s" [90m-> null[0m[0m
+        }
+
+      [31m-[0m[0m networks_advanced {
+          [31m-[0m[0m aliases = [
+              [31m-[0m[0m "infra-zitadel",
+              [31m-[0m[0m "zitadel",
+            ] [90m-> null[0m[0m
+          [31m-[0m[0m name    = "iedora" [90m-> null[0m[0m
+        }
+
+      [31m-[0m[0m volumes {
+          [31m-[0m[0m container_path = "/zitadel-bootstrap" [90m-> null[0m[0m
+          [31m-[0m[0m read_only      = false [90m-> null[0m[0m
+          [31m-[0m[0m volume_name    = "zitadel-bootstrap" [90m-> null[0m[0m
+        }
+    }
+
+[1m  # module.zitadel_login.docker_container.this[0m will be [1m[31mdestroyed[0m
+[0m  [31m-[0m[0m resource "docker_container" "this" {
+      [31m-[0m[0m attach                                      = false [90m-> null[0m[0m
+      [31m-[0m[0m command                                     = [] [90m-> null[0m[0m
+      [31m-[0m[0m container_read_refresh_timeout_milliseconds = 15000 [90m-> null[0m[0m
+      [31m-[0m[0m cpu_shares                                  = 0 [90m-> null[0m[0m
+      [31m-[0m[0m dns                                         = [] [90m-> null[0m[0m
+      [31m-[0m[0m dns_opts                                    = [] [90m-> null[0m[0m
+      [31m-[0m[0m dns_search                                  = [] [90m-> null[0m[0m
+      [31m-[0m[0m entrypoint                                  = [
+          [31m-[0m[0m "/app/entrypoint.sh",
+          [31m-[0m[0m "node",
+          [31m-[0m[0m "apps/login/server.js",
+        ] [90m-> null[0m[0m
+      [31m-[0m[0m env                                         = [
+          [31m-[0m[0m "EMAIL_VERIFICATION=false",
+          [31m-[0m[0m "NEXT_PUBLIC_BASE_PATH=/ui/v2/login",
+          [31m-[0m[0m "ZITADEL_API_URL=https://auth.iedora.com",
+          [31m-[0m[0m "ZITADEL_SERVICE_USER_TOKEN_FILE=/zitadel-bootstrap/login-client.pat",
+          [31m-[0m[0m "ZITADEL_TLS_ENABLED=false",
+        ] [90m-> null[0m[0m
+      [31m-[0m[0m group_add                                   = [] [90m-> null[0m[0m
+      [31m-[0m[0m hostname                                    = "5261e475904c" [90m-> null[0m[0m
+      [31m-[0m[0m id                                          = "5261e475904cea0f723fd3388fabd2ff7435be899d6d835e7cc26473df39ff49" [90m-> null[0m[0m
+      [31m-[0m[0m image                                       = "ghcr.io/zitadel/zitadel-login:v4.15.0" [90m-> null[0m[0m
+      [31m-[0m[0m init                                        = false [90m-> null[0m[0m
+      [31m-[0m[0m ipc_mode                                    = "private" [90m-> null[0m[0m
+      [31m-[0m[0m log_driver                                  = "json-file" [90m-> null[0m[0m
+      [31m-[0m[0m log_opts                                    = {
+          [31m-[0m[0m "max-size" = "10m"
+        } [90m-> null[0m[0m
+      [31m-[0m[0m logs                                        = false [90m-> null[0m[0m
+      [31m-[0m[0m max_retry_count                             = 0 [90m-> null[0m[0m
+      [31m-[0m[0m memory                                      = 0 [90m-> null[0m[0m
+      [31m-[0m[0m memory_reservation                          = 0 [90m-> null[0m[0m
+      [31m-[0m[0m memory_swap                                 = 0 [90m-> null[0m[0m
+      [31m-[0m[0m must_run                                    = true [90m-> null[0m[0m
+      [31m-[0m[0m name                                        = "infra-zitadel-login" [90m-> null[0m[0m
+      [31m-[0m[0m network_data                                = [
+          [31m-[0m[0m {
+              [31m-[0m[0m gateway                   = "172.18.0.1"
+              [31m-[0m[0m global_ipv6_address       = ""
+              [31m-[0m[0m global_ipv6_prefix_length = 0
+              [31m-[0m[0m ip_address                = "172.18.0.6"
+              [31m-[0m[0m ip_prefix_length          = 16
+              [31m-[0m[0m ipv6_gateway              = ""
+              [31m-[0m[0m mac_address               = "e6:c1:27:01:4c:7a"
+              [31m-[0m[0m network_name              = "iedora"
+            },
+        ] [90m-> null[0m[0m
+      [31m-[0m[0m network_mode                                = "bridge" [90m-> null[0m[0m
+      [31m-[0m[0m privileged                                  = false [90m-> null[0m[0m
+      [31m-[0m[0m publish_all_ports                           = false [90m-> null[0m[0m
+      [31m-[0m[0m read_only                                   = false [90m-> null[0m[0m
+      [31m-[0m[0m remove_volumes                              = true [90m-> null[0m[0m
+      [31m-[0m[0m restart                                     = "unless-stopped" [90m-> null[0m[0m
+      [31m-[0m[0m rm                                          = false [90m-> null[0m[0m
+      [31m-[0m[0m runtime                                     = "runc" [90m-> null[0m[0m
+      [31m-[0m[0m security_opts                               = [] [90m-> null[0m[0m
+      [31m-[0m[0m shm_size                                    = 64 [90m-> null[0m[0m
+      [31m-[0m[0m start                                       = true [90m-> null[0m[0m
+      [31m-[0m[0m stdin_open                                  = false [90m-> null[0m[0m
+      [31m-[0m[0m stop_timeout                                = 0 [90m-> null[0m[0m
+      [31m-[0m[0m storage_opts                                = {} [90m-> null[0m[0m
+      [31m-[0m[0m sysctls                                     = {} [90m-> null[0m[0m
+      [31m-[0m[0m tmpfs                                       = {} [90m-> null[0m[0m
+      [31m-[0m[0m tty                                         = false [90m-> null[0m[0m
+      [31m-[0m[0m user                                        = "nextjs" [90m-> null[0m[0m
+      [31m-[0m[0m wait                                        = false [90m-> null[0m[0m
+      [31m-[0m[0m wait_timeout                                = 60 [90m-> null[0m[0m
+      [31m-[0m[0m working_dir                                 = "/app" [90m-> null[0m[0m
+
+      [31m-[0m[0m healthcheck {
+          [31m-[0m[0m interval       = "30s" [90m-> null[0m[0m
+          [31m-[0m[0m retries        = 3 [90m-> null[0m[0m
+          [31m-[0m[0m start_interval = "0s" [90m-> null[0m[0m
+          [31m-[0m[0m start_period   = "5s" [90m-> null[0m[0m
+          [31m-[0m[0m test           = [
+              [31m-[0m[0m "CMD",
+              [31m-[0m[0m "/usr/local/bin/node",
+              [31m-[0m[0m "/app/healthcheck.mjs",
+              [31m-[0m[0m "/ui/v2/login/ready",
+            ] [90m-> null[0m[0m
+          [31m-[0m[0m timeout        = "10s" [90m-> null[0m[0m
+        }
+
+      [31m-[0m[0m host {
+          [31m-[0m[0m host = "auth.iedora.com" [90m-> null[0m[0m
+          [31m-[0m[0m ip   = "host-gateway" [90m-> null[0m[0m
+        }
+
+      [31m-[0m[0m networks_advanced {
+          [31m-[0m[0m aliases = [
+              [31m-[0m[0m "infra-zitadel-login",
+              [31m-[0m[0m "zitadel-login",
+            ] [90m-> null[0m[0m
+          [31m-[0m[0m name    = "iedora" [90m-> null[0m[0m
+        }
+
+      [31m-[0m[0m volumes {
+          [31m-[0m[0m container_path = "/zitadel-bootstrap" [90m-> null[0m[0m
+          [31m-[0m[0m read_only      = true [90m-> null[0m[0m
+          [31m-[0m[0m volume_name    = "zitadel-bootstrap" [90m-> null[0m[0m
+        }
+    }
+
+[1mPlan:[0m 0 to add, 0 to change, 41 to destroy.
+[0m
+Changes to Outputs:
+  [31m-[0m[0m assets_bucket_name = "iedora-assets" [90m-> null[0m[0m
+  [31m-[0m[0m assets_public_url  = "https://assets.iedora.com" [90m-> null[0m[0m
+  [31m-[0m[0m data_bucket_name   = "iedora-data" [90m-> null[0m[0m
+  [31m-[0m[0m hetzner_ipv4       = "46.224.162.208" [90m-> null[0m[0m
+  [31m-[0m[0m hetzner_ipv6       = "2a01:4f8:c014:616a::1" [90m-> null[0m[0m
+[0m[1mterraform_data.bws_sync_autogen["AUTOGEN_INFRA_POSTGRES_PASSWORD"]: Destroying... [id=7d26755e-72f2-b799-01a3-2a845e7eeaf2][0m[0m
+[0m[1mterraform_data.bws_sync_autogen["AUTOGEN_INFRA_BACKUP_PASSPHRASE"]: Destroying... [id=1a81bae6-9df0-62c6-cff1-66716d56138a][0m[0m
+[0m[1mterraform_data.bws_sync_autogen["AUTOGEN_INFRA_ZITADEL_FIRST_ADMIN_PASSWORD"]: Destroying... [id=881cf8a3-d1dd-50fe-410f-02d5363462cd][0m[0m
+[0m[1mterraform_data.bws_sync_autogen["AUTOGEN_INFRA_ZITADEL_MASTERKEY"]: Destroying... [id=a66637c2-7345-edcd-fbaa-c9d6887d98e6][0m[0m
+[0m[1mterraform_data.bws_sync_autogen["AUTOGEN_INFRA_OPENOBSERVE_ROOT_USER_PASSWORD"]: Destroying... [id=9a7495d1-4ea9-1eea-523f-af63a415ee77][0m[0m
+[0m[1mterraform_data.bws_sync_autogen["AUTOGEN_INFRA_ZITADEL_FIRST_ADMIN_PASSWORD"]: Destruction complete after 0s[0m
+[0m[1mterraform_data.bws_sync_autogen["AUTOGEN_INFRA_ZITADEL_MASTERKEY"]: Destruction complete after 0s[0m
+[0m[1mterraform_data.bws_sync_autogen["AUTOGEN_INFRA_POSTGRES_PASSWORD"]: Destruction complete after 0s[0m
+[0m[1mterraform_data.bws_sync_autogen["AUTOGEN_INFRA_BACKUP_PASSPHRASE"]: Destruction complete after 0s[0m
+[0m[1mterraform_data.bws_sync_autogen["AUTOGEN_INFRA_OPENOBSERVE_ROOT_USER_PASSWORD"]: Destruction complete after 0s[0m
+[0m[1mcloudflare_r2_custom_domain.assets: Destroying...[0m[0m
+[0m[1mcloudflare_r2_bucket_cors.assets: Destroying...[0m[0m
+[0m[1mcloudflare_dns_record.auth_iedora: Destroying... [id=825b6e9cb3eb9c31ef6c49cb236bdc49][0m[0m
+[0m[1mcloudflare_dns_record.menu_iedora: Destroying... [id=38cb47193cbbc6316befd9548ee04d95][0m[0m
+[0m[1mcloudflare_r2_bucket_cors.assets: Destruction complete after 0s[0m
+[0m[1mgithub_actions_variable.vars["MENU_PUBLIC_HOSTNAME"]: Destroying... [id=iedora:MENU_PUBLIC_HOSTNAME][0m[0m
+[0m[1mgithub_actions_secret.secrets["INFRA_SSH_PRIVATE_KEY"]: Destroying... [id=iedora:INFRA_SSH_PRIVATE_KEY][0m[0m
+[0m[1mgithub_actions_variable.vars["CLOUDFLARE_ACCOUNT_ID"]: Destroying... [id=iedora:CLOUDFLARE_ACCOUNT_ID][0m[0m
+[0m[1mgithub_actions_variable.vars["BWS_PROJECT_ID"]: Destroying... [id=iedora:BWS_PROJECT_ID][0m[0m
+[0m[1mgithub_actions_secret.secrets["CLAUDE_CODE_OAUTH_TOKEN"]: Destroying... [id=iedora:CLAUDE_CODE_OAUTH_TOKEN][0m[0m
+[0m[1mgithub_actions_secret.secrets["BWS_ACCESS_TOKEN"]: Destroying... [id=iedora:BWS_ACCESS_TOKEN][0m[0m
+[0m[1mcloudflare_dns_record.auth_iedora: Destruction complete after 0s[0m
+[0m[1mmodule.openobserve.docker_container.this: Destroying... [id=cca61ae218aa6768f0e7a9edebef8d4ce12cfb4771a505045edc96f5ebf5278f][0m[0m
+[0m[1mdocker_container.caddy: Destroying... [id=c253b620f4fe029282681eed159be8563e3940caafa2664fe5b4e6d37b7aa6b2][0m[0m
+[0m[1mgithub_actions_variable.vars["MENU_PUBLIC_HOSTNAME"]: Destruction complete after 1s[0m
+[0m[1mdocker_container.menu_web: Destroying... [id=0206c46c145f3324abae9aaebfc61b600fa8c44069bca29534dee87cd521e7aa][0m[0m
+[0m[1mcloudflare_dns_record.menu_iedora: Destruction complete after 1s[0m
+[0m[1mdocker_container.backups: Destroying... [id=5125d1303c5ac6bc6c83381154f707518b3afc140d5232e5bf1012ff98c1e7dd][0m[0m
+[0m[1mgithub_actions_variable.vars["BWS_PROJECT_ID"]: Destruction complete after 2s[0m
+[0m[1mdocker_container.caddy: Destruction complete after 1s[0m
+[0m[1mdocker_volume.caddy_data: Destroying... [id=caddy-data][0m[0m
+[0m[1mmodule.openobserve.docker_container.this: Destruction complete after 1s[0m
+[0m[1mmodule.zitadel_login.docker_container.this: Destroying... [id=5261e475904cea0f723fd3388fabd2ff7435be899d6d835e7cc26473df39ff49][0m[0m
+[0m[1mdocker_container.menu_web: Destruction complete after 1s[0m
+[0m[1mcloudflare_api_token.assets_r2: Destroying... [id=2bfdc1f612c427dbf0ef20c95c03023b][0m[0m
+[0m[1mrandom_password.openobserve_password: Destroying... [id=none][0m[0m
+[0m[1mrandom_password.openobserve_password: Destruction complete after 0s[0m
+[0m[1mrandom_password.menu_session_secret: Destroying... [id=none][0m[0m
+[0m[1mrandom_password.menu_session_secret: Destruction complete after 0s[0m
+[0m[1mdocker_image.menu: Destroying... [id=sha256:19273455614f407586206ae7d5638cb5b4b2e1c5351590410bb9f6fd778e723aghcr.io/eduvhc/menu:latest][0m[0m
+[0m[1mdocker_image.menu: Destruction complete after 0s[0m
+[0m[1mmodule.zitadel_login.docker_container.this: Destruction complete after 0s[0m
+[0m[1mmodule.zitadel.docker_container.this: Destroying... [id=25a56c7e614bc88d25138fca53dfaddce5aa97a7e8f32557571734c504f43394][0m[0m
+[0m[1mdocker_container.backups: Destruction complete after 2s[0m
+[0m[1mrandom_password.backup_passphrase: Destroying... [id=none][0m[0m
+[0m[1mcloudflare_api_token.data_r2: Destroying... [id=39df3037d1b5e9354ed360bdd5ff2d96][0m[0m
+[0m[1mrandom_password.backup_passphrase: Destruction complete after 0s[0m
+[0m[1mmodule.zitadel.docker_container.this: Destruction complete after 1s[0m
+[0m[1mrandom_password.zitadel_masterkey: Destroying... [id=none][0m[0m
+[0m[1mrandom_password.zitadel_masterkey: Destruction complete after 0s[0m
+[0m[1mrandom_password.zitadel_first_admin: Destroying... [id=none][0m[0m
+[0m[1mrandom_password.zitadel_first_admin: Destruction complete after 0s[0m
+[0m[1mmodule.postgres.docker_container.this: Destroying... [id=598eb597a528bc92834bea268f788f2469c867a9dd09e214cb3d3e2782d3399e][0m[0m
+[0m[1mdocker_container.zitadel_bootstrap_chmod: Destroying... [id=dc30430fa9051f486ca3c6be1c949b8c4d45df2e9ca2b5554c27edf2bafd9778][0m[0m
+[0m[1mcloudflare_api_token.assets_r2: Destruction complete after 1s[0m
+[0m[1mmodule.postgres.docker_container.this: Destruction complete after 0s[0m
+[0m[1mrandom_password.postgres: Destroying... [id=none][0m[0m
+[0m[1mdocker_network.iedora: Destroying... [id=d4f57be255be44093b5aeccfc19b4916ec643ce9ad9c6b21693f877515b466f0][0m[0m
+[0m[1mrandom_password.postgres: Destruction complete after 0s[0m
+[0m[1mgithub_actions_variable.vars["CLOUDFLARE_ACCOUNT_ID"]: Destruction complete after 3s[0m
+[0m[1mcloudflare_api_token.data_r2: Destruction complete after 0s[0m
+[0m[1mcloudflare_r2_bucket.data: Destroying... [id=iedora-data][0m[0m
+[0m[1mcloudflare_r2_bucket.data: Destruction complete after 1s[0m
+[0m[1mdocker_container.zitadel_bootstrap_chmod: Destruction complete after 1s[0m
+[0m[1mdocker_volume.zitadel_bootstrap: Destroying... [id=zitadel-bootstrap][0m[0m
+[0m[1mcloudflare_r2_custom_domain.assets: Destruction complete after 4s[0m
+[0m[1mcloudflare_r2_bucket.assets: Destroying... [id=iedora-assets][0m[0m
+[0m[1mdocker_volume.caddy_data: Destruction complete after 2s[0m
+[0m[1mcloudflare_r2_bucket.assets: Destruction complete after 0s[0m
+[0m[1mgithub_actions_secret.secrets["INFRA_SSH_PRIVATE_KEY"]: Destruction complete after 5s[0m
+[0m[1mdocker_network.iedora: Destruction complete after 2s[0m
+[0m[1mdocker_volume.zitadel_bootstrap: Destruction complete after 2s[0m
+[0m[1mnull_resource.docker_ready: Destroying... [id=1000057507237131688][0m[0m
+[0m[1mnull_resource.docker_ready: Destruction complete after 0s[0m
+[0m[1mhcloud_server.iedora: Destroying... [id=132137845][0m[0m
+[0m[1mgithub_actions_secret.secrets["CLAUDE_CODE_OAUTH_TOKEN"]: Destruction complete after 6s[0m
+[0m[1mgithub_actions_secret.secrets["BWS_ACCESS_TOKEN"]: Destruction complete after 7s[0m
+[0m[1mhcloud_server.iedora: Still destroying... [id=132137845, 10s elapsed][0m[0m
+[0m[1mhcloud_server.iedora: Still destroying... [id=132137845, 20s elapsed][0m[0m
+[0m[1mhcloud_server.iedora: Still destroying... [id=132137845, 30s elapsed][0m[0m
+[0m[1mhcloud_server.iedora: Destruction complete after 32s[0m
+[0m[1mhcloud_ssh_key.operator: Destroying... [id=112589587][0m[0m
+[0m[1mhcloud_firewall.iedora: Destroying... [id=11003033][0m[0m
+[0m[1mhcloud_ssh_key.operator: Destruction complete after 0s[0m
+[0m[1mhcloud_firewall.iedora: Destruction complete after 0s[0m
+[0m[1m[32m
+Destroy complete! Resources: 41 destroyed.
+[0m→ Step 3/3: scrub instance-bound BWS secrets + known_hosts
+  - INFRA_ZITADEL_SA_KEY_JSON scrubbed
+  - INFRA_HOST_IP scrubbed
+  - known_hosts entry for 46.224.162.208 removed
+✓ destroy complete
+END 2026-05-21T04:40:40+0100

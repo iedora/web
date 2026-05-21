@@ -1,0 +1,135 @@
+START 2026-05-21T04:35:23+0100
+→ tofu init
+→ Pass 1/3: targeted Hetzner apply (always — gates docker provider)
+[0m[1mdata.tls_public_key.operator: Reading...[0m[0m
+[0m[1mdata.tls_public_key.operator: Read complete after 0s [id=d23ee54af38186f519ff670641d90bb76cb39162][0m
+[0m[1mhcloud_ssh_key.operator: Refreshing state... [id=112589587][0m
+[0m[1mhcloud_firewall.iedora: Refreshing state... [id=11003033][0m
+[0m[1mhcloud_server.iedora: Refreshing state... [id=132137845][0m
+[0m[1mnull_resource.docker_ready: Refreshing state... [id=1000057507237131688][0m
+
+[0m[1m[32mNo changes.[0m[1m Your infrastructure matches the configuration.[0m
+
+[0mOpenTofu has compared your real infrastructure against your configuration and
+found no differences, so no changes are needed.
+[33m╷[0m[0m
+[33m│[0m [0m[1m[33mWarning: [0m[0m[1mResource targeting is in effect[0m
+[33m│[0m [0m
+[33m│[0m [0m[0mYou are creating a plan with either the -target option or the -exclude
+[33m│[0m [0moption, which means that the result of this plan may not represent all of
+[33m│[0m [0mthe changes requested by the current configuration.
+[33m│[0m [0m
+[33m│[0m [0mThe -target and -exclude options are not for routine use, and are provided
+[33m│[0m [0monly for exceptional situations such as recovering from errors or mistakes,
+[33m│[0m [0mor when OpenTofu specifically suggests to use it as part of an error
+[33m│[0m [0mmessage.
+[33m╵[0m[0m
+[33m╷[0m[0m
+[33m│[0m [0m[1m[33mWarning: [0m[0m[1mApplied changes may be incomplete[0m
+[33m│[0m [0m
+[33m│[0m [0m[0mThe plan was created with the -target or the -exclude option in effect, so
+[33m│[0m [0msome changes requested in the configuration may have been ignored and the
+[33m│[0m [0moutput values may not be fully updated. Run the following command to verify
+[33m│[0m [0mthat no other changes are pending:
+[33m│[0m [0m    tofu plan
+[33m│[0m [0m	
+[33m│[0m [0mNote that the -target and -exclude options are not suitable for routine
+[33m│[0m [0muse, and are provided only for exceptional situations such as recovering
+[33m│[0m [0mfrom errors or mistakes, or when OpenTofu specifically suggests to use it
+[33m│[0m [0mas part of an error message.
+[33m╵[0m[0m
+[0m[1m[32m
+Apply complete! Resources: 0 added, 0 changed, 0 destroyed.
+[0m[0m[1m[32m
+Outputs:
+
+[0massets_bucket_name = "iedora-assets"
+assets_public_url = "https://assets.iedora.com"
+data_bucket_name = "iedora-data"
+hetzner_ipv4 = "46.224.162.208"
+hetzner_ipv6 = "2a01:4f8:c014:616a::1"
+→ Pass 2/3: apply (placeholder Zitadel mode)
+[0m[1mdata.tls_public_key.operator: Reading...[0m[0m
+[0m[1mdata.tls_public_key.operator: Read complete after 0s [id=d23ee54af38186f519ff670641d90bb76cb39162][0m
+[0m[1mrandom_password.backup_passphrase: Refreshing state... [id=none][0m
+[0m[1mrandom_password.zitadel_first_admin: Refreshing state... [id=none][0m
+[0m[1mrandom_password.postgres: Refreshing state... [id=none][0m
+[0m[1mrandom_password.zitadel_masterkey: Refreshing state... [id=none][0m
+[0m[1mrandom_password.openobserve_password: Refreshing state... [id=none][0m
+[0m[1mrandom_password.menu_session_secret: Refreshing state... [id=none][0m
+[0m[1mterraform_data.bws_sync_autogen["AUTOGEN_INFRA_ZITADEL_FIRST_ADMIN_PASSWORD"]: Refreshing state... [id=881cf8a3-d1dd-50fe-410f-02d5363462cd][0m
+[0m[1mterraform_data.bws_sync_autogen["AUTOGEN_INFRA_POSTGRES_PASSWORD"]: Refreshing state... [id=7d26755e-72f2-b799-01a3-2a845e7eeaf2][0m
+[0m[1mterraform_data.bws_sync_autogen["AUTOGEN_INFRA_OPENOBSERVE_ROOT_USER_PASSWORD"]: Refreshing state... [id=9a7495d1-4ea9-1eea-523f-af63a415ee77][0m
+[0m[1mterraform_data.bws_sync_autogen["AUTOGEN_INFRA_ZITADEL_MASTERKEY"]: Refreshing state... [id=a66637c2-7345-edcd-fbaa-c9d6887d98e6][0m
+[0m[1mterraform_data.bws_sync_autogen["AUTOGEN_INFRA_BACKUP_PASSPHRASE"]: Refreshing state... [id=1a81bae6-9df0-62c6-cff1-66716d56138a][0m
+[0m[1mcloudflare_r2_bucket.assets: Refreshing state... [id=iedora-assets][0m
+[0m[1mcloudflare_r2_bucket.data: Refreshing state... [id=iedora-data][0m
+[0m[1mdata.cloudflare_zone.iedora: Reading...[0m[0m
+[0m[1mhcloud_ssh_key.operator: Refreshing state... [id=112589587][0m
+[0m[1mhcloud_firewall.iedora: Refreshing state... [id=11003033][0m
+[0m[1mhcloud_server.iedora: Refreshing state... [id=132137845][0m
+[0m[1mnull_resource.docker_ready: Refreshing state... [id=1000057507237131688][0m
+[0m[1mgithub_actions_variable.vars["MENU_PUBLIC_HOSTNAME"]: Refreshing state... [id=iedora:MENU_PUBLIC_HOSTNAME][0m
+[0m[1mgithub_actions_variable.vars["BWS_PROJECT_ID"]: Refreshing state... [id=iedora:BWS_PROJECT_ID][0m
+[0m[1mgithub_actions_secret.secrets["CLAUDE_CODE_OAUTH_TOKEN"]: Refreshing state... [id=iedora:CLAUDE_CODE_OAUTH_TOKEN][0m
+[0m[1mgithub_actions_variable.vars["CLOUDFLARE_ACCOUNT_ID"]: Refreshing state... [id=iedora:CLOUDFLARE_ACCOUNT_ID][0m
+[0m[1mgithub_actions_secret.secrets["INFRA_SSH_PRIVATE_KEY"]: Refreshing state... [id=iedora:INFRA_SSH_PRIVATE_KEY][0m
+[0m[1mgithub_actions_secret.secrets["BWS_ACCESS_TOKEN"]: Refreshing state... [id=iedora:BWS_ACCESS_TOKEN][0m
+[0m[1mzitadel_action_target.menu_permissions: Refreshing state... [id=373860916896202757][0m
+[0m[1mdocker_volume.zitadel_bootstrap: Refreshing state... [id=zitadel-bootstrap][0m
+[0m[1mdocker_image.menu: Refreshing state... [id=sha256:19273455614f407586206ae7d5638cb5b4b2e1c5351590410bb9f6fd778e723aghcr.io/eduvhc/menu:latest][0m
+[0m[1mdocker_network.iedora: Refreshing state... [id=d4f57be255be44093b5aeccfc19b4916ec643ce9ad9c6b21693f877515b466f0][0m
+[0m[1mdata.cloudflare_zone.iedora: Read complete after 1s [id=2f4b847754f2c34e7fcb12ba21c48c54][0m
+[0m[1mdocker_volume.caddy_data: Refreshing state... [id=caddy-data][0m
+[0m[1mzitadel_org.iedora: Refreshing state... [id=373860860877144069][0m
+[0m[1mcloudflare_api_token.assets_r2: Refreshing state... [id=2bfdc1f612c427dbf0ef20c95c03023b][0m
+[0m[1mcloudflare_api_token.data_r2: Refreshing state... [id=39df3037d1b5e9354ed360bdd5ff2d96][0m
+[0m[1mcloudflare_r2_bucket_cors.assets: Refreshing state...[0m
+[0m[1mcloudflare_dns_record.auth_iedora: Refreshing state... [id=825b6e9cb3eb9c31ef6c49cb236bdc49][0m
+[0m[1mcloudflare_r2_custom_domain.assets: Refreshing state...[0m
+[0m[1mcloudflare_dns_record.menu_iedora: Refreshing state... [id=38cb47193cbbc6316befd9548ee04d95][0m
+[0m[1mdocker_container.zitadel_bootstrap_chmod: Refreshing state... [id=dc30430fa9051f486ca3c6be1c949b8c4d45df2e9ca2b5554c27edf2bafd9778][0m
+[0m[1mdocker_container.backups: Refreshing state... [id=5125d1303c5ac6bc6c83381154f707518b3afc140d5232e5bf1012ff98c1e7dd][0m
+[0m[1mmodule.openobserve.docker_container.this: Refreshing state... [id=cca61ae218aa6768f0e7a9edebef8d4ce12cfb4771a505045edc96f5ebf5278f][0m
+[0m[1mmodule.postgres.docker_container.this: Refreshing state... [id=598eb597a528bc92834bea268f788f2469c867a9dd09e214cb3d3e2782d3399e][0m
+[0m[1mmodule.zitadel.docker_container.this: Refreshing state... [id=25a56c7e614bc88d25138fca53dfaddce5aa97a7e8f32557571734c504f43394][0m
+[0m[1mmodule.zitadel_login.docker_container.this: Refreshing state... [id=5261e475904cea0f723fd3388fabd2ff7435be899d6d835e7cc26473df39ff49][0m
+[0m[1mdocker_container.caddy: Refreshing state... [id=c253b620f4fe029282681eed159be8563e3940caafa2664fe5b4e6d37b7aa6b2][0m
+
+OpenTofu used the selected providers to generate the following execution
+plan. Resource actions are indicated with the following symbols:
+  [31m-[0m destroy[0m
+
+OpenTofu planned the following actions, but then encountered a problem:
+
+[1m  # docker_image.menu[0m will be [1m[31mdestroyed[0m
+  # (because enabled is false)
+[0m  [31m-[0m[0m resource "docker_image" "menu" {
+      [31m-[0m[0m id           = "sha256:19273455614f407586206ae7d5638cb5b4b2e1c5351590410bb9f6fd778e723aghcr.io/eduvhc/menu:latest" [90m-> null[0m[0m
+      [31m-[0m[0m image_id     = "sha256:19273455614f407586206ae7d5638cb5b4b2e1c5351590410bb9f6fd778e723a" [90m-> null[0m[0m
+      [31m-[0m[0m keep_locally = true [90m-> null[0m[0m
+      [31m-[0m[0m name         = "ghcr.io/eduvhc/menu:latest" [90m-> null[0m[0m
+      [31m-[0m[0m repo_digest  = "ghcr.io/eduvhc/menu@sha256:19273455614f407586206ae7d5638cb5b4b2e1c5351590410bb9f6fd778e723a" [90m-> null[0m[0m
+    }
+
+[1mPlan:[0m 0 to add, 0 to change, 1 to destroy.
+[0m[31m╷[0m[0m
+[31m│[0m [0m[1m[31mError: [0m[0m[1merror while getting org by id 373860860877144069: rpc error: code = Unauthenticated desc = Errors.Token.Invalid (AUTH-7fs1e)[0m
+[31m│[0m [0m
+[31m│[0m [0m[0m  with zitadel_org.iedora,
+[31m│[0m [0m  on zitadel.tf line 71, in resource "zitadel_org" "iedora":
+[31m│[0m [0m  71: resource "zitadel_org" "iedora" [4m{[0m[0m
+[31m│[0m [0m
+[31m╵[0m[0m
+[31m╷[0m[0m
+[31m│[0m [0m[1m[31mError: [0m[0m[1mfailed to get target: rpc error: code = Unauthenticated desc = Errors.Token.Invalid (AUTH-7fs1e)[0m
+[31m│[0m [0m
+[31m│[0m [0m[0m  with zitadel_action_target.menu_permissions,
+[31m│[0m [0m  on zitadel.tf line 202, in resource "zitadel_action_target" "menu_permissions":
+[31m│[0m [0m 202: resource "zitadel_action_target" "menu_permissions" [4m{[0m[0m
+[31m│[0m [0m
+[31m╵[0m[0m
+iedora deploy: pass 2 apply: exit status 1
+exit status 1
+exit status 1
+END 2026-05-21T04:35:38+0100
