@@ -10,6 +10,7 @@ import {
 } from '@/features/auth/adapters/session'
 import { sessionStore } from '@/features/sessions'
 import { env } from '@/shared/env'
+import { publicUrl } from '@/shared/url'
 
 /**
  * `GET /api/auth/callback?code=…&state=…`
@@ -22,6 +23,14 @@ import { env } from '@/shared/env'
  * error) we clear the flow cookie and bounce to `/?auth=failed` so the
  * landing page can render a friendly message. We deliberately do NOT
  * surface the raw OIDC error to the user.
+ *
+ * Every URL built here goes through `publicUrl()` (see `@/shared/url`).
+ * Caddy fronts Next in prod; the upstream Next bind is
+ * `HOSTNAME=0.0.0.0 PORT=3000`, so any URL constructed from `req.url`
+ * / `req.nextUrl.origin` / `req.headers.get('host')` carries that
+ * bind. Browsers can't follow it (`http://0.0.0.0:3000/...`) and
+ * Zitadel rejects token exchanges against it (`invalid_grant:
+ * redirect_uri does not correspond`).
  */
 const flowCookies = makeOidcFlowAdapter(env.MENU_SESSION_SECRET)
 const sessions = makeSessionCookie(env.MENU_SESSION_SECRET)
@@ -41,15 +50,9 @@ function ipHashFromRequest(req: NextRequest): string | null {
 }
 
 function failure(): NextResponse {
-  // Use the canonical MENU_PUBLIC_URL — NOT `req.nextUrl.origin`.
-  // Behind Caddy, Next sees its own internal bind (HOSTNAME=0.0.0.0
-  // PORT=3000 from the runner stage of products/menu/Dockerfile),
-  // and req.nextUrl.origin reconstructs as `http://0.0.0.0:3000` —
-  // a URL the browser can't follow. Same pattern as the login +
-  // logout routes already use.
-  const url = new URL('/', env.MENU_PUBLIC_URL)
-  url.searchParams.set('auth', 'failed')
-  const res = NextResponse.redirect(url, { status: 302 })
+  const res = NextResponse.redirect(publicUrl('/', { auth: 'failed' }), {
+    status: 302,
+  })
   res.cookies.delete(OIDC_FLOW_COOKIE)
   return res
 }
@@ -61,18 +64,10 @@ export async function GET(req: NextRequest): Promise<Response> {
   const flow = await flowCookies.open(flowJwe)
   if (!flow) return failure()
 
-  // Rebuild currentUrl from MENU_PUBLIC_URL + the actual path/query.
-  // The naive `new URL(req.url)` would carry `http://0.0.0.0:3000/...`
-  // (Next's own internal bind), which openid-client then sends as the
-  // `redirect_uri` in the token exchange — Zitadel rejects with
-  // `invalid_grant: redirect_uri does not correspond` because the
-  // registered URI is the public one. The path + query are what the
-  // OIDC library cares about (code + state); the host MUST be the same
-  // one /authorize was started from.
-  const currentUrl = new URL(
-    `${req.nextUrl.pathname}?${req.nextUrl.searchParams.toString()}`,
-    env.MENU_PUBLIC_URL,
-  )
+  // openid-client reads code + state off `currentUrl.searchParams`; it
+  // only cares about the path + query. The host MUST be the public one
+  // we started /authorize from, or Zitadel rejects the token exchange.
+  const currentUrl = publicUrl(req.nextUrl.pathname, req.nextUrl.searchParams)
 
   let result
   try {
@@ -108,10 +103,10 @@ export async function GET(req: NextRequest): Promise<Response> {
     exp: expiresAtSec,
   })
 
-  // Same fix as failure() — use the canonical public URL, not the
-  // request's reconstructed origin.
-  const nextUrl = new URL(flow.next, env.MENU_PUBLIC_URL)
-  const res = NextResponse.redirect(nextUrl, { status: 302 })
+  // `flow.next` was validated as a same-origin path by isSameOriginPath
+  // when the flow cookie was minted, and again when it was opened. Now
+  // `publicUrl()` anchors the absolute Location at env.MENU_PUBLIC_URL.
+  const res = NextResponse.redirect(publicUrl(flow.next), { status: 302 })
 
   res.cookies.set(SESSION_COOKIE, sessionJwe, {
     httpOnly: true,

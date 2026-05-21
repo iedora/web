@@ -6,6 +6,7 @@ import {
 } from '@/features/auth/adapters/session'
 import { revokeSession } from '@/features/sessions'
 import { env } from '@/shared/env'
+import { publicUrl } from '@/shared/url'
 
 /**
  * `POST /api/auth/logout` — revokes the server-side session row, clears
@@ -39,7 +40,8 @@ async function handle(req: NextRequest): Promise<Response> {
     }
   }
 
-  const postLogout = `${env.MENU_PUBLIC_URL}/`
+  // `publicUrl('/')` anchors at env.MENU_PUBLIC_URL (see `@/shared/url`).
+  const postLogout = publicUrl('/').toString()
   const end = buildEndSessionUrl({ postLogoutRedirectUri: postLogout })
   const res = NextResponse.redirect(end, { status: 302 })
   res.cookies.delete({ name: SESSION_COOKIE, path: '/' })

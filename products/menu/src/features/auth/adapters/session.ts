@@ -1,6 +1,7 @@
 import 'server-only'
 import { createHash } from 'node:crypto'
 import { EncryptJWT, jwtDecrypt, base64url } from 'jose'
+import { isSameOriginPath } from '@/shared/url-validate'
 
 /**
  * Menu's session is a server-side row (see `@/features/sessions`) plus a
@@ -181,16 +182,13 @@ export function makeOidcFlowAdapter(secret: string) {
 }
 
 /**
- * Same-origin path validator. Rejects absolute URLs, protocol-relative
- * URLs (`//evil`), and the `/\\` bypass trick. Re-used by login + callback.
+ * Re-exported from `@/shared/url-validate`. URL hygiene (path
+ * validation + absolute URL building) lives in `@/shared/url*` as the
+ * single source of truth; this re-export keeps in-slice imports
+ * stable. New consumers should import from `@/shared/url-validate`
+ * (validation) or `@/shared/url` (building) directly.
  */
-export function isSameOriginPath(raw: string): boolean {
-  if (!raw) return false
-  if (!raw.startsWith('/')) return false
-  if (raw.startsWith('//')) return false
-  if (raw.startsWith('/\\')) return false
-  return true
-}
+export { isSameOriginPath }
 
 /**
  * The bytes used to derive the JWE key from an arbitrary secret. Exposed so
