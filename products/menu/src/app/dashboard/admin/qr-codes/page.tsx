@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { asc } from 'drizzle-orm'
 import { requireScope, SCOPES } from '@/features/auth'
 import { listQrCodesForAdmin } from '@/features/qr-codes'
+import { computeQrStats } from '@/features/qr-codes/stats'
 import { QrCodesAdmin } from '@/features/qr-codes/ui/qr-codes-admin'
 import { db } from '@/shared/db/client'
 import { restaurant } from '@/shared/db/schema'
@@ -40,6 +41,9 @@ export default async function QrCodesAdminPage() {
   const proto = h.get('x-forwarded-proto') ?? (host.startsWith('localhost') ? 'http' : 'https')
   const publicOrigin = `${proto}://${host}`
 
+  const stats = computeQrStats(rows)
+  const snapshotAt = new Date().toISOString()
+
   return (
     <div className="space-y-6">
       <h1 className="flex flex-wrap items-baseline gap-2 text-sm font-normal text-muted-foreground">
@@ -54,6 +58,8 @@ export default async function QrCodesAdminPage() {
         rows={rows}
         restaurants={restaurants}
         publicOrigin={publicOrigin}
+        stats={stats}
+        snapshotAt={snapshotAt}
       />
     </div>
   )

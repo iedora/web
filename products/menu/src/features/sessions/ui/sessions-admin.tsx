@@ -2,13 +2,19 @@
 
 import { useState, useTransition } from 'react'
 import { Button, Table, Td, Th } from '@iedora/design-system'
+import { Histogram, Stat, StatsPanel } from '@/shared/ui/admin-stats'
 import { revokeAllForUserAction, revokeSessionAction } from '../actions'
+import type { AuthMethod, ZitadelUserState } from '../adapters/zitadel-enrichment'
+import type { SessionStats } from '../stats'
 
 export type SessionAdminRow = {
   id: string
   userId: string
   email: string
-  name: string
+  displayName: string
+  username: string | null
+  state: ZitadelUserState | null
+  emailVerified: boolean | null
   roles: string[]
   permissions: string[]
   permissionsVersion: number
@@ -17,26 +23,106 @@ export type SessionAdminRow = {
   expiresAt: string
   userAgent: string | null
   ipHashShort: string | null
+  authMethods: AuthMethod[]
   isOwnSession: boolean
 }
 
 /**
+ * Re-export only — the page does the projection in `to-row.ts`.
+ */
+export type { ZitadelUserState }
+
+/**
  * Cross-tenant sessions table — one row per active server-side session
- * across every org. Used by iedora-admin to triage abuse + nuke a user
- * everywhere on a grant change that needs immediate effect.
+ * across every org, with Zitadel enrichment (display name, state, MFA
+ * methods) layered on top so the operator can triage without a tab
+ * switch to Zitadel's console.
  *
  * UX rules:
- *   - The caller's OWN session is tagged "(this device)" so they don't
- *     accidentally revoke themselves into an OIDC bounce.
- *   - Per-row Revoke targets one sid. "Revoke all" targets every active
- *     session of that user_id.
- *   - We surface `permissions_version` — useful when checking that the
- *     webhook fan-out actually landed after a grant change.
+ *   - The caller's OWN session is tagged "(this device)" and a confirm
+ *     dialog warns before revoke (you'd boot yourself).
+ *   - User-state badges flag accounts that need attention (locked /
+ *     initial / inactive).
+ *   - The header row is a stats strip: total / unique users / new in
+ *     last 24h / stale / avg age / browser breakdown.
  *
- * Rows come from `listAllActiveSessions()` already sorted by
- * last_seen_at desc; no client-side sort.
+ * Rows arrive pre-sorted by `last_seen_at` desc.
  */
-export function SessionsAdmin({ rows }: { rows: SessionAdminRow[] }) {
+export function SessionsAdmin({
+  rows,
+  stats,
+  snapshotAt,
+}: {
+  rows: SessionAdminRow[]
+  stats: SessionStats
+  /** ISO timestamp of when the snapshot was taken (server side). */
+  snapshotAt: string
+}) {
+  return (
+    <div className="space-y-6">
+      <SessionsStatsPanel stats={stats} snapshotAt={snapshotAt} />
+      <SessionsTable rows={rows} />
+    </div>
+  )
+}
+
+// ── Stats panel ─────────────────────────────────────────────────────────────
+
+function SessionsStatsPanel({
+  stats,
+  snapshotAt,
+}: {
+  stats: SessionStats
+  snapshotAt: string
+}) {
+  const avg = Number.isNaN(stats.avgAgeHours)
+    ? '—'
+    : stats.avgAgeHours < 1
+      ? `${Math.round(stats.avgAgeHours * 60)}m`
+      : `${stats.avgAgeHours.toFixed(1)}h`
+
+  return (
+    <StatsPanel
+      title="Overview"
+      snapshotAt={snapshotAt}
+      stats={[
+        <Stat key="total" label="Sessions" value={String(stats.total)} />,
+        <Stat key="users" label="Users" value={String(stats.uniqueUsers)} />,
+        <Stat
+          key="new"
+          label="New 24h"
+          value={String(stats.last24h)}
+          hint={stats.last24h > 0 ? 'logins' : 'none'}
+        />,
+        <Stat
+          key="stale"
+          label="Stale > 24h"
+          value={String(stats.staleCount)}
+          tone="warn"
+        />,
+        <Stat key="age" label="Avg age" value={avg} hint="since last seen" />,
+        <Stat
+          key="perm"
+          label="Max perm. v"
+          value={String(stats.permissionVersionMax)}
+          hint="webhook bumps"
+        />,
+      ]}
+      histograms={[
+        <Histogram key="browsers" label="Browsers" entries={stats.browsers} />,
+        <Histogram
+          key="os"
+          label="Operating systems"
+          entries={stats.operatingSystems}
+        />,
+      ]}
+    />
+  )
+}
+
+// ── Sessions table ─────────────────────────────────────────────────────────
+
+function SessionsTable({ rows }: { rows: SessionAdminRow[] }) {
   const userIds = Array.from(new Set(rows.map((r) => r.userId)))
   return (
     <section className="space-y-4">
@@ -45,9 +131,6 @@ export function SessionsAdmin({ rows }: { rows: SessionAdminRow[] }) {
           Active sessions ({rows.length} across {userIds.length}{' '}
           {userIds.length === 1 ? 'user' : 'users'})
         </h2>
-        <p className="text-xs text-[var(--ink-55)]">
-          Snapshot — refresh to see new logins.
-        </p>
       </header>
 
       {rows.length === 0 ? (
@@ -57,10 +140,10 @@ export function SessionsAdmin({ rows }: { rows: SessionAdminRow[] }) {
           <thead>
             <tr>
               <Th>User</Th>
+              <Th>Account</Th>
               <Th>SID</Th>
               <Th>Permissions</Th>
               <Th>Last seen</Th>
-              <Th>Expires</Th>
               <Th>Client</Th>
               <Th>Actions</Th>
             </tr>
@@ -122,16 +205,30 @@ function SessionRow({ row }: { row: SessionAdminRow }) {
       <Td>
         <div className="flex flex-col">
           <span className="text-sm">
-            {row.email}
+            {row.displayName}
             {row.isOwnSession && (
               <span className="ml-2 text-xs text-[var(--cinnabar)]">
                 (this device)
               </span>
             )}
           </span>
-          <span className="font-mono text-[10px] text-[var(--ink-40)]">
-            {row.userId}
-          </span>
+          <span className="text-xs text-[var(--ink-55)]">{row.email}</span>
+          {row.username && row.username !== row.email && (
+            <span className="font-mono text-[10px] text-[var(--ink-40)]">
+              {row.username}
+            </span>
+          )}
+        </div>
+      </Td>
+      <Td>
+        <div className="flex flex-col gap-1">
+          <StateBadge state={row.state} />
+          {row.emailVerified === false && (
+            <span className="font-mono text-[10px] uppercase tracking-wider text-[var(--cinnabar)]">
+              email unverified
+            </span>
+          )}
+          <MfaBadges methods={row.authMethods} />
         </div>
       </Td>
       <Td>
@@ -155,10 +252,12 @@ function SessionRow({ row }: { row: SessionAdminRow }) {
         </div>
       </Td>
       <Td>
-        <span className="font-mono text-[10px]">{row.lastSeenAt}</span>
-      </Td>
-      <Td>
-        <span className="font-mono text-[10px]">{row.expiresAt}</span>
+        <div className="flex flex-col gap-0.5">
+          <span className="font-mono text-[10px]">{row.lastSeenAt}</span>
+          <span className="font-mono text-[10px] text-[var(--ink-40)]">
+            exp {row.expiresAt}
+          </span>
+        </div>
       </Td>
       <Td>
         <div className="flex flex-col gap-0.5">
@@ -203,27 +302,86 @@ function SessionRow({ row }: { row: SessionAdminRow }) {
   )
 }
 
+function StateBadge({ state }: { state: ZitadelUserState | null }) {
+  if (!state || state === 'unknown') {
+    return (
+      <span
+        className="inline-flex items-center font-[family-name:var(--mono)] text-[10px] uppercase tracking-wider text-[var(--ink-40)]"
+        title="Zitadel state unavailable"
+      >
+        — state
+      </span>
+    )
+  }
+  const tone =
+    state === 'active'
+      ? 'text-[var(--ink)]'
+      : state === 'inactive'
+        ? 'text-[var(--ink-55)]'
+        : 'text-[var(--cinnabar)]'
+  return (
+    <span
+      className={`inline-flex items-center font-[family-name:var(--mono)] text-[10px] uppercase tracking-wider ${tone}`}
+      title="Zitadel user state"
+    >
+      ● {state}
+    </span>
+  )
+}
+
+function MfaBadges({ methods }: { methods: AuthMethod[] }) {
+  const mfa = methods.filter((m) => m !== 'password' && m !== 'idp')
+  if (mfa.length === 0) {
+    return (
+      <span
+        className="font-[family-name:var(--mono)] text-[10px] uppercase tracking-wider text-[var(--cinnabar)]"
+        title="No MFA factor enrolled"
+      >
+        no MFA
+      </span>
+    )
+  }
+  return (
+    <div className="flex flex-wrap gap-1">
+      {mfa.map((m) => (
+        <span
+          key={m}
+          className="inline-flex items-center border border-[var(--ink-14)] px-1.5 py-0.5 font-[family-name:var(--mono)] text-[9px] uppercase tracking-wider text-[var(--ink)]"
+        >
+          {m.replace('_', ' ')}
+        </span>
+      ))}
+    </div>
+  )
+}
+
 /**
- * Surface just the browser + OS hint from a User-Agent string. Full UAs
- * are noisy in a table; the operator usually only needs "Chrome / macOS"
- * not the full version triple.
+ * Browser/OS hint — same logic as `stats.ts::parseBrowser/parseOs`,
+ * kept here for a single rendered string per row. Keep in sync.
  */
 function shortUa(raw: string | null): string {
   if (!raw) return '—'
-  const browser = /Chrome\/\d/.test(raw)
-    ? 'Chrome'
-    : /Safari\/\d/.test(raw) && !/Chrome/.test(raw)
-      ? 'Safari'
-      : /Firefox\/\d/.test(raw)
-        ? 'Firefox'
-        : 'Browser'
-  const os = /Mac OS X/.test(raw)
-    ? 'macOS'
-    : /Windows/.test(raw)
-      ? 'Windows'
-      : /Linux/.test(raw)
-        ? 'Linux'
-        : ''
+  const browser = /Edg\/\d/.test(raw)
+    ? 'Edge'
+    : /OPR\/\d/.test(raw)
+      ? 'Opera'
+      : /Chrome\/\d/.test(raw)
+        ? 'Chrome'
+        : /Firefox\/\d/.test(raw)
+          ? 'Firefox'
+          : /Safari\/\d/.test(raw) && !/Chrome/.test(raw)
+            ? 'Safari'
+            : 'Browser'
+  const os = /iPhone|iPad/.test(raw)
+    ? 'iOS'
+    : /Android/.test(raw)
+      ? 'Android'
+      : /Mac OS X/.test(raw)
+        ? 'macOS'
+        : /Windows/.test(raw)
+          ? 'Windows'
+          : /Linux/.test(raw)
+            ? 'Linux'
+            : ''
   return os ? `${browser} · ${os}` : browser
 }
-

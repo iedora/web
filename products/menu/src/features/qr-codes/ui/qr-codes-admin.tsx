@@ -17,6 +17,7 @@ import {
   Badge,
   Separator,
 } from '@iedora/design-system'
+import { Histogram, Stat, StatsPanel } from '@/shared/ui/admin-stats'
 import {
   bindCodeAction,
   bulkGenerateAction,
@@ -25,6 +26,7 @@ import {
   unbindCodeAction,
 } from '../actions'
 import type { QrCodeListRow } from '../ports'
+import type { QrStats } from '../stats'
 
 type RestaurantOption = { id: string; name: string; slug: string }
 
@@ -42,13 +44,22 @@ export function QrCodesAdmin({
   rows,
   restaurants,
   publicOrigin,
+  stats,
+  snapshotAt,
 }: {
   rows: QrCodeListRow[]
   restaurants: RestaurantOption[]
   publicOrigin: string
+  stats: QrStats
+  /** ISO timestamp captured server-side when the page rendered. */
+  snapshotAt: string
 }) {
   return (
     <div className="space-y-12">
+      <QrCodesStatsPanel stats={stats} snapshotAt={snapshotAt} />
+
+      <Separator />
+
       {/* Forms Grid */}
       <div className="grid gap-8 lg:grid-cols-2">
         <Card className="min-h-fit flex flex-col justify-between">
@@ -86,8 +97,65 @@ export function QrCodesAdmin({
 
       <Separator />
 
-      <CodesTable rows={rows} restaurants={restaurants} publicOrigin={publicOrigin} />
+      <CodesTable
+        rows={rows}
+        restaurants={restaurants}
+        publicOrigin={publicOrigin}
+        snapshotAt={snapshotAt}
+      />
     </div>
+  )
+}
+
+// ── Stats panel ─────────────────────────────────────────────────────────────
+
+function QrCodesStatsPanel({
+  stats,
+  snapshotAt,
+}: {
+  stats: QrStats
+  snapshotAt: string
+}) {
+  return (
+    <StatsPanel
+      title="Overview"
+      snapshotAt={snapshotAt}
+      stats={[
+        <Stat key="total" label="Codes" value={String(stats.total)} />,
+        <Stat key="bound" label="Bound" value={String(stats.bound)} />,
+        <Stat
+          key="unbound"
+          label="Unbound"
+          value={String(stats.unbound)}
+          hint="ready to claim"
+        />,
+        <Stat
+          key="labeled"
+          label="Labeled"
+          value={String(stats.withLabel)}
+          hint="physical tag"
+        />,
+        <Stat
+          key="new24"
+          label="New 24h"
+          value={String(stats.created24h)}
+          hint="minted"
+        />,
+        <Stat
+          key="bound24"
+          label="Bound 24h"
+          value={String(stats.boundLast24h)}
+          hint="claimed"
+        />,
+      ]}
+      histograms={[
+        <Histogram
+          key="restaurants"
+          label="Top restaurants"
+          entries={stats.topRestaurants}
+        />,
+      ]}
+    />
   )
 }
 
@@ -237,7 +305,7 @@ function BulkGenerateForm() {
       <div className="pt-4 space-y-4">
         <div className="flex justify-end">
           <Button variant="solid" type="submit" disabled={pending} arrow>
-            {pending ? 'Generating…' : `Generate ${count} Codes`}
+            {pending ? 'Generating…' : 'Generate Batch'}
           </Button>
         </div>
         {error && <p className="text-sm text-[var(--cinnabar)]">{error}</p>}
@@ -273,18 +341,23 @@ function CodesTable({
   rows,
   restaurants,
   publicOrigin,
+  snapshotAt,
 }: {
   rows: QrCodeListRow[]
   restaurants: RestaurantOption[]
   publicOrigin: string
+  snapshotAt: string
 }) {
   return (
-    <section className="space-y-6">
-      <div className="flex items-baseline justify-between">
+    <section className="space-y-4">
+      <header className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--ink-55)]">
           Registry ({rows.length})
         </h2>
-      </div>
+        <p className="text-[10.5px] font-[family-name:var(--mono)] uppercase tracking-[0.18em] text-[var(--ink-40)]">
+          snapshot @ {snapshotAt.slice(11, 19)}Z
+        </p>
+      </header>
       {rows.length === 0 ? (
         <p className="text-sm text-[var(--ink-55)]">No codes yet.</p>
       ) : (
@@ -350,11 +423,9 @@ function CodeRow({
   }
 
   return (
-    <tr className="hover:bg-[rgba(26,24,21,0.01)] transition-colors duration-150">
+    <tr>
       <Td>
-        <span className="inline-block font-mono text-[11px] font-semibold text-[var(--ink)] bg-[var(--paper-2)] px-2 py-0.5 border border-[var(--ink-14)]">
-          {row.code}
-        </span>
+        <span className="font-mono text-xs text-[var(--ink)]">{row.code}</span>
       </Td>
       <Td>
         <a
@@ -391,16 +462,14 @@ function CodeRow({
         {error && <p className="mt-1 text-xs text-[var(--cinnabar)]">{error}</p>}
       </Td>
       <Td>
-        <span className="text-sm text-[var(--ink-70)] italic">{row.label ?? '—'}</span>
+        {row.label ? (
+          <span className="text-sm text-[var(--ink-70)]">{row.label}</span>
+        ) : (
+          <span className="text-sm text-[var(--ink-40)]">—</span>
+        )}
       </Td>
       <Td className="text-right">
-        <Button
-          variant="ghost"
-          type="button"
-          onClick={onDelete}
-          disabled={pending}
-          className="text-[11px] py-1 px-2.5 h-7 inline-flex items-center"
-        >
+        <Button variant="ghost" type="button" onClick={onDelete} disabled={pending}>
           Delete
         </Button>
       </Td>
