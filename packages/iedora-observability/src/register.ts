@@ -1,4 +1,4 @@
-import { registerOTel } from "@vercel/otel";
+import { OTLPHttpProtoTraceExporter, registerOTel } from "@vercel/otel";
 import {
   AggregationTemporalityPreference,
   OTLPMetricExporter,
@@ -40,6 +40,37 @@ import {
 import { ATTR_HOST_NAME } from "@opentelemetry/semantic-conventions/incubating";
 
 import { TenantContextSpanProcessor } from "./processor";
+
+/**
+ * Parse the standard `OTEL_EXPORTER_OTLP_HEADERS` env-var format
+ * (`Key=Value,Key2=Value2`) into a plain object. URL-decodes values so a
+ * pre-encoded `Authorization=Basic%20Zm9v` lands as the literal
+ * `Authorization: Basic foo` on the wire. Returns undefined for empty
+ * input so the exporter falls through to its no-headers default.
+ *
+ * Why we re-implement this instead of importing from
+ * @opentelemetry/otlp-exporter-base: that package's
+ * `parseHeaders` lives behind several layers of internal exports and
+ * has shifted across minor versions. A 10-line local parser is more
+ * stable.
+ */
+function parseOtlpHeaders(
+  raw: string | undefined,
+): Record<string, string> | undefined {
+  if (!raw) return undefined;
+  const out: Record<string, string> = {};
+  for (const pair of raw.split(",")) {
+    const eq = pair.indexOf("=");
+    if (eq <= 0) continue;
+    const key = pair.slice(0, eq).trim();
+    if (!key) continue;
+    // Values may be URL-encoded so colon-heavy bearer tokens / basic
+    // creds survive the `,`-delimited shape unscathed. decodeURIComponent
+    // is a no-op on already-decoded strings.
+    out[key] = decodeURIComponent(pair.slice(eq + 1).trim());
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
 
 /**
  * Default OTLP metric export interval (ms). 60s matches what most
@@ -301,10 +332,30 @@ export function registerIedoraOtel(opts: RegisterOptions): void {
     ...(opts.extraSpanProcessors ?? []),
   ];
 
+  // Trace exporter: explicit OTLP-proto over fetch, pointing at the
+  // standard OTEL_EXPORTER_OTLP_ENDPOINT/v1/traces. @vercel/otel's "auto"
+  // default is supposed to construct this when the env var is set, but
+  // in practice (non-Vercel runtime, plain Node + Next 16 dev) it skips
+  // wiring traces silently — only /v1/metrics POSTs landed in OO until
+  // we set the exporter explicitly. Pinned to remove the ambiguity.
+  //
+  // Headers: the metrics exporter picks up OTEL_EXPORTER_OTLP_HEADERS
+  // automatically via its env-driven config; the @vercel/otel trace
+  // exporter does NOT — it needs an explicit `headers` map. Parse the
+  // standard `Key=Value,Key2=Value2` shape ourselves so OO Basic-Auth
+  // headers reach the trace ingest endpoint and we don't get 401s.
+  const traceExporter = process.env.OTEL_EXPORTER_OTLP_ENDPOINT
+    ? new OTLPHttpProtoTraceExporter({
+        url: `${process.env.OTEL_EXPORTER_OTLP_ENDPOINT.replace(/\/$/, "")}/v1/traces`,
+        headers: parseOtlpHeaders(process.env.OTEL_EXPORTER_OTLP_HEADERS),
+      })
+    : undefined;
+
   registerOTel({
     serviceName: opts.serviceName,
     attributes: resource,
     traceSampler: opts.sampler ?? defaultSampler(environment),
+    ...(traceExporter ? { traceExporter } : {}),
     metricReaders,
     logRecordProcessors,
     spanProcessors,

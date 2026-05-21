@@ -115,6 +115,9 @@ describe("registerIedoraOtel", () => {
     const registerOtelSpy = vi.fn();
     vi.doMock("@vercel/otel", () => ({
       registerOTel: registerOtelSpy,
+      OTLPHttpProtoTraceExporter: class {
+        constructor(_opts?: unknown) {}
+      },
     }));
 
     try {
@@ -181,6 +184,9 @@ describe("registerIedoraOtel", () => {
     const registerOtelSpy = vi.fn();
     vi.doMock("@vercel/otel", () => ({
       registerOTel: registerOtelSpy,
+      OTLPHttpProtoTraceExporter: class {
+        constructor(_opts?: unknown) {}
+      },
     }));
 
     try {
@@ -224,6 +230,9 @@ describe("registerIedoraOtel", () => {
     const registerOtelSpy = vi.fn();
     vi.doMock("@vercel/otel", () => ({
       registerOTel: registerOtelSpy,
+      OTLPHttpProtoTraceExporter: class {
+        constructor(_opts?: unknown) {}
+      },
     }));
 
     try {
@@ -268,7 +277,14 @@ describe("registerIedoraOtel", () => {
 
     vi.resetModules();
     const registerOtelSpy = vi.fn();
-    vi.doMock("@vercel/otel", () => ({ registerOTel: registerOtelSpy }));
+    vi.doMock("@vercel/otel", () => ({
+      registerOTel: registerOtelSpy,
+      // Stub class so register.ts can `new OTLPHttpProtoTraceExporter(...)`
+      // without dragging the real fetch-based exporter into the test.
+      OTLPHttpProtoTraceExporter: class {
+        constructor(_opts?: unknown) {}
+      },
+    }));
 
     try {
       const { registerIedoraOtel } = await import("../register");
@@ -304,7 +320,14 @@ describe("registerIedoraOtel", () => {
 
     vi.resetModules();
     const registerOtelSpy = vi.fn();
-    vi.doMock("@vercel/otel", () => ({ registerOTel: registerOtelSpy }));
+    vi.doMock("@vercel/otel", () => ({
+      registerOTel: registerOtelSpy,
+      // Stub class so register.ts can `new OTLPHttpProtoTraceExporter(...)`
+      // without dragging the real fetch-based exporter into the test.
+      OTLPHttpProtoTraceExporter: class {
+        constructor(_opts?: unknown) {}
+      },
+    }));
 
     try {
       const { registerIedoraOtel } = await import("../register");
@@ -350,7 +373,14 @@ describe("registerIedoraOtel", () => {
 
     vi.resetModules();
     const registerOtelSpy = vi.fn();
-    vi.doMock("@vercel/otel", () => ({ registerOTel: registerOtelSpy }));
+    vi.doMock("@vercel/otel", () => ({
+      registerOTel: registerOtelSpy,
+      // Stub class so register.ts can `new OTLPHttpProtoTraceExporter(...)`
+      // without dragging the real fetch-based exporter into the test.
+      OTLPHttpProtoTraceExporter: class {
+        constructor(_opts?: unknown) {}
+      },
+    }));
 
     try {
       const { registerIedoraOtel } = await import("../register");
@@ -390,7 +420,14 @@ describe("registerIedoraOtel", () => {
 
     vi.resetModules();
     const registerOtelSpy = vi.fn();
-    vi.doMock("@vercel/otel", () => ({ registerOTel: registerOtelSpy }));
+    vi.doMock("@vercel/otel", () => ({
+      registerOTel: registerOtelSpy,
+      // Stub class so register.ts can `new OTLPHttpProtoTraceExporter(...)`
+      // without dragging the real fetch-based exporter into the test.
+      OTLPHttpProtoTraceExporter: class {
+        constructor(_opts?: unknown) {}
+      },
+    }));
     // Suppress the unset-endpoint warning during this test.
     vi.spyOn(console, "warn").mockImplementation(() => {});
 
@@ -424,7 +461,14 @@ describe("registerIedoraOtel", () => {
 
     vi.resetModules();
     const registerOtelSpy = vi.fn();
-    vi.doMock("@vercel/otel", () => ({ registerOTel: registerOtelSpy }));
+    vi.doMock("@vercel/otel", () => ({
+      registerOTel: registerOtelSpy,
+      // Stub class so register.ts can `new OTLPHttpProtoTraceExporter(...)`
+      // without dragging the real fetch-based exporter into the test.
+      OTLPHttpProtoTraceExporter: class {
+        constructor(_opts?: unknown) {}
+      },
+    }));
 
     try {
       const { registerIedoraOtel } = await import("../register");
