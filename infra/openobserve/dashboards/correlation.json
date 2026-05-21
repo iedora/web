@@ -19,8 +19,8 @@
           "layout": {
             "x": 0,
             "y": 0,
-            "w": 6,
-            "h": 8,
+            "w": 24,
+            "h": 16,
             "i": 1
           },
           "config": {
@@ -84,10 +84,10 @@
           "description": "Count of span errors per restaurant in the last 24h. Combine with the latency table \u2014 same restaurant in both = real degradation.",
           "queryType": "sql",
           "layout": {
-            "x": 6,
+            "x": 24,
             "y": 0,
-            "w": 6,
-            "h": 8,
+            "w": 24,
+            "h": 16,
             "i": 2
           },
           "config": {
@@ -145,9 +145,9 @@
           "queryType": "sql",
           "layout": {
             "x": 0,
-            "y": 8,
-            "w": 12,
-            "h": 8,
+            "y": 16,
+            "w": 48,
+            "h": 16,
             "i": 3
           },
           "config": {
@@ -213,8 +213,8 @@
           "layout": {
             "x": 0,
             "y": 0,
-            "w": 12,
-            "h": 6,
+            "w": 48,
+            "h": 12,
             "i": 1
           },
           "config": {
@@ -280,9 +280,9 @@
           "queryType": "sql",
           "layout": {
             "x": 0,
-            "y": 6,
-            "w": 12,
-            "h": 8,
+            "y": 12,
+            "w": 48,
+            "h": 16,
             "i": 2
           },
           "config": {

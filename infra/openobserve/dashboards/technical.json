@@ -19,8 +19,8 @@
           "layout": {
             "x": 0,
             "y": 0,
-            "w": 12,
-            "h": 6,
+            "w": 48,
+            "h": 12,
             "i": 1
           },
           "config": {
@@ -87,9 +87,9 @@
           "queryType": "sql",
           "layout": {
             "x": 0,
-            "y": 6,
-            "w": 6,
-            "h": 6,
+            "y": 12,
+            "w": 24,
+            "h": 12,
             "i": 2
           },
           "config": {
@@ -154,10 +154,10 @@
           "description": "http.server.active_requests \u2014 concurrency in flight. Useful for spotting saturation before latency blows up.",
           "queryType": "sql",
           "layout": {
-            "x": 6,
-            "y": 6,
-            "w": 6,
-            "h": 6,
+            "x": 24,
+            "y": 12,
+            "w": 24,
+            "h": 12,
             "i": 3
           },
           "config": {
@@ -222,8 +222,8 @@
           "layout": {
             "x": 0,
             "y": 0,
-            "w": 6,
-            "h": 6,
+            "w": 24,
+            "h": 12,
             "i": 1
           },
           "config": {
@@ -289,10 +289,10 @@
           "description": "Recent Zitadel calls with outcome=failed. Each row is a distinct (endpoint, time-bucket) \u2014 drill in for the underlying span.",
           "queryType": "sql",
           "layout": {
-            "x": 6,
+            "x": 24,
             "y": 0,
-            "w": 6,
-            "h": 6,
+            "w": 24,
+            "h": 12,
             "i": 2
           },
           "config": {
@@ -350,9 +350,9 @@
           "queryType": "sql",
           "layout": {
             "x": 0,
-            "y": 6,
-            "w": 6,
-            "h": 6,
+            "y": 12,
+            "w": 24,
+            "h": 12,
             "i": 3
           },
           "config": {
@@ -418,10 +418,10 @@
           "description": "iedora.storage.operation_duration_ms by op (presign-put | head | delete). Tail here = user-facing upload jank.",
           "queryType": "sql",
           "layout": {
-            "x": 6,
-            "y": 6,
-            "w": 6,
-            "h": 6,
+            "x": 24,
+            "y": 12,
+            "w": 24,
+            "h": 12,
             "i": 4
           },
           "config": {
@@ -488,9 +488,9 @@
           "queryType": "sql",
           "layout": {
             "x": 0,
-            "y": 12,
-            "w": 12,
-            "h": 5,
+            "y": 24,
+            "w": 48,
+            "h": 10,
             "i": 5
           },
           "config": {

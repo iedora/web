@@ -19,8 +19,8 @@
           "layout": {
             "x": 0,
             "y": 0,
-            "w": 4,
-            "h": 4,
+            "w": 16,
+            "h": 9,
             "i": 1
           },
           "config": {
@@ -72,10 +72,10 @@
           "description": "Distinct tenant.restaurant_id with at least one beacon-tracked view in the last 7 days.",
           "queryType": "sql",
           "layout": {
-            "x": 4,
+            "x": 16,
             "y": 0,
-            "w": 4,
-            "h": 4,
+            "w": 16,
+            "h": 9,
             "i": 2
           },
           "config": {
@@ -127,10 +127,10 @@
           "description": "Successful Zitadel create-org calls in the last 7 days. The funnel top \u2014 every new tenant.",
           "queryType": "sql",
           "layout": {
-            "x": 8,
+            "x": 32,
             "y": 0,
-            "w": 4,
-            "h": 4,
+            "w": 16,
+            "h": 9,
             "i": 3
           },
           "config": {
@@ -183,9 +183,9 @@
           "queryType": "sql",
           "layout": {
             "x": 0,
-            "y": 4,
-            "w": 12,
-            "h": 6,
+            "y": 9,
+            "w": 48,
+            "h": 12,
             "i": 4
           },
           "config": {
@@ -244,9 +244,9 @@
           "queryType": "sql",
           "layout": {
             "x": 0,
-            "y": 10,
-            "w": 6,
-            "h": 6,
+            "y": 21,
+            "w": 24,
+            "h": 12,
             "i": 5
           },
           "config": {
@@ -304,10 +304,10 @@
           "description": "Which i18n languages real users hit. Drives the language-registry priority list.",
           "queryType": "sql",
           "layout": {
-            "x": 6,
-            "y": 10,
-            "w": 6,
-            "h": 6,
+            "x": 24,
+            "y": 21,
+            "w": 24,
+            "h": 12,
             "i": 6
           },
           "config": {
