@@ -1,0 +1,58 @@
+# Doc drift gate. Runs the grep-based `bun run docs:audit` check on PRs
+# that touch source or doc paths where staleness is plausible (slice
+# refactors, migration changes, file moves, CLAUDE.md / AGENTS.md edits).
+#
+# This is intentionally NOT an AI-powered workflow: it consumes zero
+# Anthropic tokens and finishes in <10s. The audit catches the three
+# drift modes a human Doc Maintainer would flag:
+#   1. Dead references (paths that no longer exist).
+#   2. Stale claims (phrases the codebase has invalidated).
+#   3. Convention drift (mismatched rule counts, missing subpaths).
+#
+# Adding a new check: append a `Check` to `CHECKS` in scripts/docs-audit.ts.
+#
+# Want richer "rewrite the doc for me" behaviour? Layer the Claude Code
+# Action on top, gated on `if: contains(github.event.pull_request.labels.*.name, 'doc-rewrite')`
+# so it only fires when explicitly requested. Out of scope for this gate.
+
+name: Docs Audit
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'AGENTS.md'
+      - '**/CLAUDE.md'
+      - 'docs/**'
+      - 'README.md'
+      - 'products/menu/src/features/**'
+      - 'products/menu/src/app/**'
+      - 'products/menu/src/shared/**'
+      - 'products/menu/drizzle/**'
+      - 'products/menu/tests/e2e/**'
+      - 'scripts/docs-audit.ts'
+      - '.github/workflows/docs-audit.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: docs-audit-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Grep docs for drift
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      # Bun binary only — the audit script uses node:fs / node:path
+      # built-ins, so we deliberately skip the `bun install` step the
+      # composite setup action does (saves ~5-25s on cache miss).
+      - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2
+        with:
+          bun-version: '1.3.14'
+      - name: Run docs:audit
+        run: bun run docs:audit

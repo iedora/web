@@ -1,6 +1,6 @@
 # upload slice
 
-Presigned PUT to S3-compatible storage. LocalStack in dev/CI, R2/S3 in prod.
+Presigned PUT to S3-compatible storage. LocalStack in dev, adobe/s3mock in CI (LocalStack `:latest` requires a paid licence as of 2026), R2/S3 in prod.
 
 ## Public API
 
@@ -13,7 +13,7 @@ Presigned PUT to S3-compatible storage. LocalStack in dev/CI, R2/S3 in prod.
 `Storage` (in `./types.ts`) is the port. Implementations:
 - `./adapters/s3.ts` — AWS SDK v3 against any S3-compatible endpoint
 - `./adapters/factory.ts` — env-driven singleton (`getStorage()`)
-- `./adapters/bootstrap.ts` — idempotent bucket creation + public-read policy + CORS (LocalStack)
+- `./adapters/bootstrap.ts` — idempotent bucket creation + public-read policy + CORS (LocalStack dev only)
 
 ## Why this exists
 

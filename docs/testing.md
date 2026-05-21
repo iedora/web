@@ -15,7 +15,7 @@ No "mock all the things and assert call shapes" tier in between. PGLite tests al
 | Location | Runner | Tier | Notes |
 |---|---|---|---|
 | `products/menu/src/**/*.test.ts` | Vitest | unit | PGLite via `src/shared/testing/pglite.ts`; some tests boot real Redis via testcontainers (rate-limit) |
-| `products/menu/src/features/*/e2e/` | Playwright | slice e2e | Postgres 18 + LocalStack as service containers; one slice per folder |
+| `products/menu/src/features/*/e2e/` | Playwright | slice e2e | Postgres 18 + adobe/s3mock as service containers in CI (LocalStack locally); one slice per folder |
 | `products/menu/tests/e2e/journeys/` | Playwright | cross-slice journeys | Same runtime — only files that span ≥2 slices live here |
 | `packages/iedora-identity/src/__tests__/*.test.ts` | Vitest | unit | No DB. Pure crypto + parsing |
 | `packages/iedora-observability/src/__tests__/*.test.ts` | Vitest | unit | No-op-in-tests contract, tenant attribute pins |
@@ -221,7 +221,7 @@ One workflow per workspace. Each `paths:`-filtered.
 - **Typecheck** — `bun run typecheck`. ~2 min.
 - **Lint** — `bun run lint`. ~2 min.
 - **Unit (Vitest)** — `bun run test`. Docker available so testcontainers can boot Redis. ~3 min.
-- **E2E (Playwright)** — `needs: [typecheck, lint, unit]`. Postgres 18 + LocalStack as service containers. Shard matrix is parked at `1/1` today — bump to `[1/2, 2/2]` (or 4) when the suite grows past ~10 min. The infra (per-worker DB fork) is already in place.
+- **E2E (Playwright)** — `needs: [typecheck, lint, unit]`. Postgres 18 + adobe/s3mock as service containers (LocalStack `:latest` started requiring a paid licence in 2026 — adobe/s3mock is the open-source replacement). Shard matrix is parked at `1/1` today — bump to `[1/2, 2/2]` (or 4) when the suite grows past ~10 min. The infra (per-worker DB fork) is already in place.
 
 The composite action `.github/actions/setup` installs Bun + runs `bun install --frozen-lockfile`. Every job that needs deps is one line: `uses: ./.github/actions/setup`.
 

@@ -81,7 +81,7 @@ products/menu/
       rate-limit/                    Postgres-backed sliding-window limiter
       restaurant-identity/           restaurant CRUD + theme/identity
       sessions/                      menu.session store (authoritative roles/permissions)
-      upload/                        S3-compatible uploads + presign/commit/clear (LocalStack in CI)
+      upload/                        S3-compatible uploads + presign/commit/clear (LocalStack in dev, adobe/s3mock in CI)
     shared/
       db/{client.ts,schema.ts}       drizzle client + canonical schema
       env.ts                         Zod-validated env (build-time stub when SKIP_ENV_VALIDATION=1)
@@ -104,8 +104,8 @@ products/menu/
     fixtures.ts                      auto-fixture: fails fast on RSC errors / 5xx responses
     global-setup.ts                  builds menu_test_template DB (migrations applied)
     global-teardown.ts               drops per-worker DBs
-    helpers/                         zero-domain: db.ts (connection + worker fork + truncate),
-                                     storage.ts (LocalStack PUT/HEAD), beacon.ts (/api/track)
+    helpers/                         (server-only stub today; future zero-domain helpers live
+                                     under src/shared/testing/e2e-{db,storage,beacon}.ts)
     journeys/                        cross-slice user journeys (tenant-isolation, onboarding,
                                      menu-build-and-publish, qr-to-public-view, plan-upgrade, …)
 ```

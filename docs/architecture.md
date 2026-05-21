@@ -36,7 +36,9 @@ src/features/<slice>/
 ├── use-cases/<verb>.ts           pure-ish (port, input) -> result
 ├── actions.ts                    'use server' shells: auth guard → use-case → revalidate
 ├── ui/                           slice-owned React components (optional)
-└── <slice>.test.ts               co-located Vitest suite — fakes the port, hits PGLite
+├── <slice>.test.ts               co-located Vitest suite — fakes the port, hits PGLite
+├── testing/                      server-only test surface (profile + seeds + routes + barrel)
+└── e2e/<capability>.spec.ts      Playwright specs scoped to this slice
 ```
 
 Reference: `products/menu/src/features/auth/` — ports, two adapters, several use-cases, one co-located test. Larger slices (e.g. `menu-builder`, `menu-publishing`, `upload`) add `types.ts` / `format.ts` for domain helpers; smaller slices collapse the boilerplate (e.g. `i18n` has no adapter — the language registry is pure data).
@@ -56,7 +58,7 @@ Path: `products/menu/src/features/`.
 - **`plans/`** — plan registry (free, casa). Same shape as i18n + templates.
 - **`rate-limit/`** — token-bucket rate limiter backed by Redis (testcontainers in dev/CI). Guards `/api/auth/*` and other unauth'd endpoints.
 - **`restaurant-identity/`** — restaurant CRUD + theme/identity settings.
-- **`upload/`** — S3-compatible uploads. Presign + commit + clear, with the `r/{restaurantId}/...` key-prefix invariant verified twice. LocalStack in dev/CI; real R2 in production.
+- **`upload/`** — S3-compatible uploads. Presign + commit + clear, with the `r/{restaurantId}/...` key-prefix invariant verified twice. LocalStack in dev, `adobe/s3mock` in CI (LocalStack `:latest` requires a paid licence as of 2026); real R2 in production.
 
 ## Shared packages
 
@@ -129,8 +131,9 @@ One-line OTel wiring per product. Wraps `@vercel/otel` — resource attrs + samp
 5. Wire **`index.ts`**: bind production adapter, wrap loaders in `React.cache()`, re-export types.
 6. If mutations, add **`actions.ts`** with `'use server'`. Each action: auth guard → use-case → revalidate.
 7. Co-located **`<slice>.test.ts`** — use `makeTestDb()` from `@/shared/testing/pglite`, hand-roll a port adapter against the test DB.
-8. Short **`README.md`** at the slice root.
-9. Compose the slice from `src/app/`. The route file should be a thin shell.
+8. **`testing/`** + **`e2e/`** — slice's E2E surface (`profile.ts` / `seeds.ts` / `routes.ts` / barrel) + Playwright specs. See [products/menu/CLAUDE.md](../products/menu/CLAUDE.md) rule 15.
+9. Short **`README.md`** at the slice root.
+10. Compose the slice from `src/app/`. The route file should be a thin shell.
 
 Registry-shaped features (asset targets, languages, plans, templates) have dedicated skills under `.claude/skills/` — use them.
 

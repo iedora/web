@@ -6,5 +6,8 @@
     "packages/*",
     "products/house",
     "products/menu"
-  ]
+  ],
+  "scripts": {
+    "docs:audit": "bun scripts/docs-audit.ts"
+  }
 }
