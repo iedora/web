@@ -12,8 +12,8 @@
 #   1. tofu init -upgrade -input=false
 #   2. Pass 1: target hcloud_* resources only IF the Hetzner box doesn't
 #      exist yet (`hetzner_ipv4` output unset).
-#   3. ssh-keyscan into ~/.ssh/known_hosts — SKIPPED in CI ([ -t 0 ] gate),
-#      the runner manages its own known_hosts.
+#   3. ssh-keyscan into ~/.ssh/known_hosts (idempotent — CI's own
+#      pre-step also does this; running again is a no-op).
 #   4. Pass 2: full `tofu apply -auto-approve`.
 #   5. Pass 3: if INFRA_ZITADEL_SA_KEY_JSON isn't in BWS yet, fetch from
 #      the bootstrap volume → BWS → re-apply.
@@ -160,9 +160,9 @@ jobs:
           printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           # Pre-populate known_hosts so the docker provider's system SSH
-          # doesn't fail with "host key verification failed". The justfile's
-          # interactive ssh-keyscan branch is gated on `[ -t 0 ]` and skips
-          # in CI — that's why we do it here.
+          # doesn't fail with "host key verification failed". The justfile
+          # also does this (idempotent) — this one runs first so the early
+          # `tofu output` calls don't hit a stale-key SSH.
           ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
           chmod 600 ~/.ssh/known_hosts
           eval "$(ssh-agent -s)"
