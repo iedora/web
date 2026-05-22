@@ -70,7 +70,7 @@ const COPY: Record<LangCode, Copy> = {
         feats: ["One restaurant", "1,000 guest views per month", "Multiple translations", "Allergens & dietary tags"],
       },
       pro: {
-        tier: "Casa", priceMain: "€2", priceSub: "per month",
+        tier: "Casa", priceMain: "€12", priceSub: "per year",
         desc: "For everyone past a thousand views, and anyone running more than one room.",
         cta: "Choose Casa",
         feats: ["Multiple restaurants", "Unlimited guest views", "Hour-by-hour scan analytics", "PDF export"],
@@ -105,7 +105,7 @@ const COPY: Record<LangCode, Copy> = {
         feats: ["Um restaurante", "1.000 visualizações por mês", "Várias traduções", "Alergénios e dietas"],
       },
       pro: {
-        tier: "Casa", priceMain: "€2", priceSub: "por mês",
+        tier: "Casa", priceMain: "€12", priceSub: "por ano",
         desc: "Para quem passa as mil visualizações, e para quem tem mais que uma sala.",
         cta: "Escolher Casa",
         feats: ["Vários restaurantes", "Visualizações ilimitadas", "Análise de scans por hora", "Exportação para PDF"],
@@ -140,7 +140,7 @@ const COPY: Record<LangCode, Copy> = {
         feats: ["Un restaurante", "1.000 visitas al mes", "Varias traducciones", "Alérgenos y dietas"],
       },
       pro: {
-        tier: "Casa", priceMain: "€2", priceSub: "al mes",
+        tier: "Casa", priceMain: "€12", priceSub: "al año",
         desc: "Para los que pasan de las mil visitas, y para quien tiene más de una sala.",
         cta: "Elegir Casa",
         feats: ["Varios restaurantes", "Visitas ilimitadas", "Análisis de escaneos por hora", "Exportar a PDF"],
@@ -175,7 +175,7 @@ const COPY: Record<LangCode, Copy> = {
         feats: ["Un restaurant", "1 000 vues par mois", "Plusieurs traductions", "Allergènes et régimes"],
       },
       pro: {
-        tier: "Casa", priceMain: "2 €", priceSub: "par mois",
+        tier: "Casa", priceMain: "12 €", priceSub: "par an",
         desc: "Pour ceux qui dépassent les mille vues, et pour ceux qui ont plus d'une salle.",
         cta: "Choisir Casa",
         feats: ["Plusieurs restaurants", "Vues illimitées", "Analyses des scans par heure", "Export PDF"],
