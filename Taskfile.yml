@@ -1,0 +1,138 @@
+# Iedora pipeline — local dev orchestration over the 4 stages of the
+# deploy pipeline. CI does NOT use this file (GitHub Actions workflows
+# compose the same stages via their own scheduling); this file is for
+# the operator running things from their machine.
+#
+# Stage model:
+#
+#   Stage 1: Build & Test     per-product (bun test, bun run build, docker build)
+#   Stage 2: IaC              `task infra:up`    — `tofu apply` on infra/tofu/
+#   Stage 3: AppState         `task app:apply`   — every configurator (Zitadel, …)
+#   Stage 4: Deploy           `task deploy:menu` / `:house` / …  — per-product
+#
+# Convenience:
+#
+#   task up           full pipeline: infra:up → app:apply → deploy:all
+#   task down         full teardown: products → infra:down
+#   task doctor       preflight (BWS auth + bootstrap secrets present)
+#
+# Adding a product → one new `deploy:<name>` task. Adding a configurator →
+# entry in `infra/cmd/iedora/configurators.go` (no Taskfile change).
+#
+# Why `task` over `just`: declarative `deps:` express stage dependencies
+# (deploy:all blocks on deploy:menu + deploy:house running in parallel) —
+# justfile would need shell `&&` chains.
+
+version: '3'
+
+vars:
+  INFRA: ./infra
+
+tasks:
+  default:
+    desc: "List every task"
+    cmds: [task --list-all]
+    silent: true
+
+  doctor:
+    desc: "Preflight: PATH, BWS auth, bootstrap secrets present"
+    cmds: ["{{.INFRA}}/bin/iedora doctor"]
+
+  # ── Stage 2: IaC ──────────────────────────────────────────────────────
+  # Owns: Hetzner VPS, Cloudflare (R2, DNS), GitHub Actions config, Docker
+  # network + volumes, every shared service container (postgres, zitadel,
+  # zitadel-login, caddy, openobserve, backups). Does NOT own Zitadel app
+  # config or any product container.
+
+  infra:up:
+    desc: "Sobe a infraestrutura (Hetzner + Cloudflare + shared containers)"
+    cmds:
+      - "{{.INFRA}}/bin/with-secrets --stage iac -- {{.INFRA}}/bin/iedora iac apply"
+
+  infra:down:
+    desc: "Tear down the central infra (state-rm docker_*, empty R2, tofu destroy)"
+    cmds:
+      - "{{.INFRA}}/bin/with-secrets --stage iac -- {{.INFRA}}/bin/iedora iac destroy"
+
+  # ── Stage 3: AppState ─────────────────────────────────────────────────
+  # Reconciles the configuration of running shared services. Today: the
+  # Zitadel IdP (org, project, roles, OIDC app, machine user + PAT, action
+  # targets, admin email grants). Future configurators (OpenObserve
+  # dashboards, per-app DB migrators) drop into the registry at
+  # `infra/cmd/iedora/configurators.go`.
+
+  app:apply:
+    desc: "Run every app-state configurator (Zitadel today; future: dashboards, migrations)"
+    cmds:
+      - "{{.INFRA}}/bin/with-secrets --stage app -- {{.INFRA}}/bin/iedora app apply"
+
+  # ── Stage 4: Deploy (per product) ─────────────────────────────────────
+  # Each product has its own deploy task — `task deploy:<name>`. The
+  # underlying `iedora deploy <name>` dispatches to the product's
+  # `productRuntime` (dockerOnHetzner for menu, cloudflareWorker for
+  # house, …). Adding a new product = new struct in products.go + new
+  # task here. Build steps live alongside the deploy task (bun, docker
+  # build) since they're per-product too.
+
+  deploy:menu:
+    desc: "Deploy menu: pull image + migrate + (re)start container on Hetzner"
+    cmds:
+      - "{{.INFRA}}/bin/with-secrets --stage deploy --product menu -- {{.INFRA}}/bin/iedora deploy menu"
+
+  deploy:house:
+    desc: "Deploy house: bun run build + per-product `tofu apply` (CF Workers)"
+    cmds:
+      - "{{.INFRA}}/bin/with-secrets --stage deploy --product house -- {{.INFRA}}/bin/iedora deploy house"
+
+  deploy:all:
+    desc: "Deploy every product in parallel"
+    deps: [deploy:menu, deploy:house]
+
+  # ── Full-pipeline convenience ─────────────────────────────────────────
+
+  up:
+    desc: "Full apply: infra:up → app:apply → deploy:all"
+    cmds:
+      - task: infra:up
+      - task: app:apply
+      - task: deploy:all
+
+  down:
+    desc: "Full teardown: destroy every product → infra:down"
+    cmds:
+      - "{{.INFRA}}/bin/with-secrets --stage deploy -- {{.INFRA}}/bin/iedora destroy"
+      - task: infra:down
+
+  # ── Local dev stack ───────────────────────────────────────────────────
+  # Boots the docker-compose-equivalent local stack (infra/cmd/dev). The
+  # dev orchestrator is separate from the production iedora binary —
+  # different target (local Docker daemon, host-published ports,
+  # LocalStack for R2) but conceptually the same 4 stages.
+
+  dev:
+    desc: "Boot the local dev stack (Postgres, Zitadel, OpenObserve, …)"
+    cmds: ["cd {{.INFRA}} && go run ./cmd/dev"]
+
+  dev:down:
+    desc: "Tear down the local dev stack"
+    cmds: ["cd {{.INFRA}} && go run ./cmd/dev --destroy"]
+
+  dev:reset-db:
+    desc: "Drop + recreate one database without touching the rest (e.g. `task dev:reset-db -- menu`)"
+    cmds: ["cd {{.INFRA}} && go run ./cmd/dev --reset-db {{.CLI_ARGS}}"]
+
+  # ── Ad-hoc helpers ────────────────────────────────────────────────────
+
+  bws:
+    desc: "Exec a command with BWS secrets hydrated (e.g. `task bws -- tofu state list`)"
+    cmds: ["{{.INFRA}}/bin/with-secrets {{.CLI_ARGS}}"]
+
+  zitadel:grants:
+    desc: "Re-run iedora-admin grants only (idempotent escape hatch)"
+    cmds:
+      - "{{.INFRA}}/bin/with-secrets --stage app -- {{.INFRA}}/bin/zitadel-apply --grants-only"
+
+  migrate:state:
+    desc: "ONE-SHOT: extract zitadel_* from tofu state → BWS, then state-rm. Run once per repo at refactor cutover."
+    cmds:
+      - "{{.INFRA}}/bin/with-secrets --stage iac -- go run -C {{.INFRA}} ./cmd/zitadel-apply-migrate"
