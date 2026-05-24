@@ -360,12 +360,6 @@ The prefix tells you who writes the value — which means it also tells
 you where to look when it goes wrong and which `--stage` will surface
 it. Rotation playbooks for each prefix are in § Secret rotation below.
 
-> **Migration**: legacy `INFRA_*`/`AUTOGEN_INFRA_*` names were renamed
-> in May 2026. `task bws:rename` runs the one-shot migrator
-> ([`infra/cmd/bws-rename-2026-05/`](../infra/cmd/bws-rename-2026-05/));
-> idempotent, safe to re-run, delete the command after the first run on
-> prod.
-
 | Stage  | Visible BWS keys                                                                                                                |
 |--------|---------------------------------------------------------------------------------------------------------------------------------|
 | iac    | Provider creds (Hetzner, CF, GH), state passphrase, all IAC_*, OO email/password                                      |
