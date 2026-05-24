@@ -66,7 +66,7 @@ shape as every other GitHub Actions secret in this repo (`docs/deploy.md`
 (`claude setup-token`); *storing* it is a static string, so it fits the
 write-through pattern with no exception.
 
-The chain: `INFRA_CLAUDE_CODE_OAUTH_TOKEN` in BWS (`iedora-deploy`
+The chain: `IAC_BOOTSTRAP_CLAUDE_CODE_OAUTH_TOKEN` in BWS (`iedora-deploy`
 project) → `infra/bin/with-secrets` exports `TF_VAR_claude_code_oauth_token`
 → `variable "claude_code_oauth_token"` (`infra/tofu/variables.tf`) →
 `local.github_secrets["CLAUDE_CODE_OAUTH_TOKEN"]` (`infra/tofu/github.tf`)
@@ -85,7 +85,7 @@ One-time setup:
    ```
 
    It prints a token starting with `sk-ant-oat…`.
-3. **Put it in BWS** as `INFRA_CLAUDE_CODE_OAUTH_TOKEN` in the
+3. **Put it in BWS** as `IAC_BOOTSTRAP_CLAUDE_CODE_OAUTH_TOKEN` in the
    `iedora-deploy` project (`bws secret create`, or the Bitwarden UI).
    The value never goes near the GitHub UI or shell history.
 4. **Write it through:** `task up`. Tofu reconciles the
@@ -101,7 +101,7 @@ it's Tofu-managed — the next `task up` silently clobbers it
 ### Rotation / revocation
 
 - **Rotate:** re-run `claude setup-token`, update
-  `INFRA_CLAUDE_CODE_OAUTH_TOKEN` in BWS, `task up`. Same
+  `IAC_BOOTSTRAP_CLAUDE_CODE_OAUTH_TOKEN` in BWS, `task up`. Same
   recipe as every other write-through (or `bws secret edit <id>` directly).
 - **Revoke:** revoke the OAuth grant in your Anthropic account and
   remove the BWS key + the `github.tf` map entry, then

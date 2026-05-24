@@ -4,7 +4,7 @@
 #
 # Why AUTOGEN_ prefix in BWS: the operator's keychain shows two groups
 # at a glance — `INFRA_*` (must populate before first deploy) and
-# `AUTOGEN_INFRA_*` (Tofu writes these; don't touch). Less cognitive
+# `IAC_*` (Tofu writes these; don't touch). Less cognitive
 # load when bootstrapping a fresh environment.
 #
 # Rotation policy per secret — read the justfile `rotate-secret`
@@ -45,7 +45,7 @@ resource "random_password" "zitadel_first_admin" {
   special = true
   # Only used on FirstInstance. Real admin password is changed via
   # the Zitadel UI on first login. Operator looks this up in BWS
-  # under AUTOGEN_INFRA_ZITADEL_FIRST_ADMIN_PASSWORD.
+  # under IAC_ZITADEL_FIRST_ADMIN_PASSWORD.
 }
 
 resource "random_password" "openobserve_password" {
@@ -53,7 +53,7 @@ resource "random_password" "openobserve_password" {
   special = false # carries through to HTTP Basic-auth, keep ASCII safe
 }
 
-# NOTE: menu's session JWE key (AUTOGEN_INFRA_MENU_SESSION_SECRET) is NOT
+# NOTE: menu's session JWE key (DEPLOY_MENU_SESSION_SECRET) is NOT
 # minted here. It's an app secret — consumed only by the menu container,
 # never by an IaC-managed resource — so Stage 4 (`iedora deploy menu`)
 # mints + upserts it to BWS via the productRuntime's appSecrets mechanism
@@ -61,7 +61,7 @@ resource "random_password" "openobserve_password" {
 # for secrets that govern how IaC containers boot (postgres password,
 # backup passphrase, Zitadel masterkey, etc.).
 
-# Sync each generated value to BWS under its AUTOGEN_INFRA_* key.
+# Sync each generated value to BWS under its IAC_* key.
 # Idempotent: if the secret exists, edit; else create. The bws CLI
 # inherits BWS_ACCESS_TOKEN from the wrapping `bin/with-secrets` call.
 #
@@ -80,11 +80,11 @@ resource "random_password" "openobserve_password" {
 
 locals {
   autogen_lookup = {
-    AUTOGEN_INFRA_POSTGRES_PASSWORD              = random_password.postgres.result
-    AUTOGEN_INFRA_BACKUP_PASSPHRASE              = random_password.backup_passphrase.result
-    AUTOGEN_INFRA_ZITADEL_MASTERKEY              = random_password.zitadel_masterkey.result
-    AUTOGEN_INFRA_ZITADEL_FIRST_ADMIN_PASSWORD   = random_password.zitadel_first_admin.result
-    AUTOGEN_INFRA_OPENOBSERVE_ROOT_USER_PASSWORD = random_password.openobserve_password.result
+    IAC_POSTGRES_PASSWORD              = random_password.postgres.result
+    IAC_BACKUP_PASSPHRASE              = random_password.backup_passphrase.result
+    IAC_ZITADEL_MASTERKEY              = random_password.zitadel_masterkey.result
+    IAC_ZITADEL_FIRST_ADMIN_PASSWORD   = random_password.zitadel_first_admin.result
+    IAC_OPENOBSERVE_ROOT_USER_PASSWORD = random_password.openobserve_password.result
   }
 }
 

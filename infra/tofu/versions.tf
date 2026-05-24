@@ -49,7 +49,7 @@ terraform {
   }
 
   # State + plan encryption. Passphrase from TF_VAR_state_passphrase
-  # (BWS key: INFRA_STATE_PASSPHRASE).
+  # (BWS key: IAC_BOOTSTRAP_STATE_PASSPHRASE).
   encryption {
     key_provider "pbkdf2" "default" {
       passphrase = var.state_passphrase
@@ -73,7 +73,7 @@ provider "cloudflare" {
 }
 
 # GitHub — reconciles the repo's Actions secrets + variables. Provider auth
-# is a fine-grained PAT (BWS key INFRA_GITHUB_API_TOKEN) scoped to one repo
+# is a fine-grained PAT (BWS key IAC_BOOTSTRAP_GITHUB_API_TOKEN) scoped to one repo
 # with permissions: Actions read+write, Secrets read+write, Variables
 # read+write, Contents read. The PAT itself can't be created by Tofu
 # (chicken/egg) — generate once at https://github.com/settings/tokens?type=beta
@@ -84,7 +84,7 @@ provider "github" {
 }
 
 # Hetzner Cloud — provisions the CAX11 VPS that runs every infra container.
-# Auth is a project-scoped API token (INFRA_HCLOUD_TOKEN, set once in BWS).
+# Auth is a project-scoped API token (IAC_BOOTSTRAP_HCLOUD_TOKEN, set once in BWS).
 provider "hcloud" {
   token = var.infra_hcloud_token
 }
@@ -92,7 +92,7 @@ provider "hcloud" {
 # Docker — talks to the Hetzner box's Docker daemon over SSH. The IP comes
 # from `hcloud_server.iedora.ipv4_address` (output of the hcloud provider),
 # so the docker provider is implicitly downstream of the Hetzner one.
-# `INFRA_SSH_PRIVATE_KEY` is registered as `hcloud_ssh_key.operator` so
+# `IAC_BOOTSTRAP_SSH_PRIVATE_KEY` is registered as `hcloud_ssh_key.operator` so
 # cloud-init drops it into root's authorized_keys.
 #
 # `registry_auth` covers ghcr.io because the self-built backup image

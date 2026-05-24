@@ -29,7 +29,7 @@ on:
     secrets:
       BWS_ACCESS_TOKEN:
         required: true
-      INFRA_SSH_PRIVATE_KEY:
+      IAC_BOOTSTRAP_SSH_PRIVATE_KEY:
         required: true
 
 # Per-product concurrency: house + menu can deploy in parallel, but two
@@ -126,7 +126,7 @@ jobs:
         # for products whose runtime doesn't shell SSH (CF Workers,
         # future Vercel, etc.) — `task deploy:house` never touches this.
         env:
-          SSH_KEY: ${{ secrets.INFRA_SSH_PRIVATE_KEY }}
+          SSH_KEY: ${{ secrets.IAC_BOOTSTRAP_SSH_PRIVATE_KEY }}
         run: |
           set -euo pipefail
           mkdir -p ~/.ssh

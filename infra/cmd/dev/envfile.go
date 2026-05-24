@@ -33,7 +33,7 @@ func writeEnvFile(path, body string) {
 //
 //   - Static literals (NODE_ENV, S3_ACCESS_KEY=test for LocalStack, etc.)
 //   - `tofu output -raw <name>` from infra/dev/tofu/ (DB url, OTEL endpoint, …)
-//   - The bin/zitadel-apply outputs.json file (INFRA_ZITADEL_*)
+//   - The bin/zitadel-apply outputs.json file (APP_ZITADEL_*)
 //   - A randomly-minted MENU_SESSION_SECRET, persisted alongside the
 //     zitadel-apply outputs so it survives `task dev` re-runs.
 //
@@ -73,7 +73,7 @@ func composeMenuEnv(devTofuDir, outputsJSONPath string, menuOnHost bool) map[str
 		out["OTEL_EXPORTER_OTLP_ENDPOINT"] = tofuOut("menu_otel_endpoint_container")
 	}
 
-	// Zitadel-apply outputs (INFRA_ZITADEL_* + session secret if already
+	// Zitadel-apply outputs (APP_ZITADEL_* + session secret if already
 	// persisted from a prior run).
 	outputs, err := readOutputsJSON(outputsJSONPath)
 	if err != nil {
@@ -86,16 +86,16 @@ func composeMenuEnv(devTofuDir, outputsJSONPath string, menuOnHost bool) map[str
 			out[envKey] = v
 		}
 	}
-	pull("INFRA_ZITADEL_MENU_OIDC_CLIENT_ID", "ZITADEL_OAUTH_CLIENT_ID")
-	pull("INFRA_ZITADEL_MENU_OIDC_CLIENT_SECRET", "ZITADEL_OAUTH_CLIENT_SECRET")
-	pull("INFRA_ZITADEL_MENU_SA_TOKEN", "ZITADEL_MANAGEMENT_TOKEN")
-	pull("INFRA_ZITADEL_PERMISSIONS_SIGNING_KEY", "ZITADEL_ACTION_SIGNING_KEY")
-	pull("INFRA_ZITADEL_GRANTS_SIGNING_KEY", "ZITADEL_GRANTS_SIGNING_KEY")
-	pull("INFRA_ZITADEL_IEDORA_PROJECT_ID", "IEDORA_PROJECT_ID")
+	pull("APP_ZITADEL_MENU_OIDC_CLIENT_ID", "ZITADEL_OAUTH_CLIENT_ID")
+	pull("APP_ZITADEL_MENU_OIDC_CLIENT_SECRET", "ZITADEL_OAUTH_CLIENT_SECRET")
+	pull("APP_ZITADEL_MENU_SA_TOKEN", "ZITADEL_MANAGEMENT_TOKEN")
+	pull("APP_ZITADEL_PERMISSIONS_SIGNING_KEY", "ZITADEL_ACTION_SIGNING_KEY")
+	pull("APP_ZITADEL_GRANTS_SIGNING_KEY", "ZITADEL_GRANTS_SIGNING_KEY")
+	pull("APP_ZITADEL_IEDORA_PROJECT_ID", "IEDORA_PROJECT_ID")
 
 	// Session secret. Persist in outputs.json so it survives across
 	// `task dev` runs (avoids invalidating local sessions every cycle).
-	const sessionKey = "AUTOGEN_INFRA_MENU_SESSION_SECRET"
+	const sessionKey = "DEPLOY_MENU_SESSION_SECRET"
 	if v, ok := outputs[sessionKey]; ok {
 		out["MENU_SESSION_SECRET"] = v
 	} else {

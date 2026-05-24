@@ -65,10 +65,10 @@ Stage 4 (per-product deploys).
       ▼                          ▼
             ┌──────────────────────────────────┐
             │             BWS                  │
-            │  AUTOGEN_INFRA_*  (Tofu mints)  │◄─── reads ── Stage 4
-            │  INFRA_ZITADEL_*  (Stage 3 mints)│◄─── reads ── Stage 4
-            │  AUTOGEN_INFRA_MENU_SESSION_*    │◄─── mint+read Stage 4
-            │  INFRA_*          (bootstrap)    │
+            │  IAC_BOOTSTRAP_*  (operator)     │
+            │  IAC_*            (Tofu mints)   │◄─── reads ── Stage 4
+            │  APP_*            (Stage 3 mints)│◄─── reads ── Stage 4
+            │  DEPLOY_<prod>_*  (Stage 4 mints)│◄─── mint+read Stage 4
             └──────────────────────────────────┘
 ```
 
@@ -120,7 +120,7 @@ already has its own conventions.
   - `infra-openobserve` (observability backend, bound to 127.0.0.1:5080)
   - `infra-backups` (daily pg_dumpall → R2 GPG-encrypted)
 - **Random passwords minted by Tofu, written through to BWS** as
-  `AUTOGEN_INFRA_*` ([secrets.tf](../infra/tofu/secrets.tf)) — postgres
+  `IAC_*` ([secrets.tf](../infra/tofu/secrets.tf)) — postgres
   pwd, backup passphrase, zitadel masterkey, zitadel first-admin pwd,
   openobserve pwd.
 
@@ -150,7 +150,7 @@ warm runs both passes are no-diff refreshes (~3s each).
 ### Encrypted state
 
 `infra/tofu/terraform.tfstate` is encrypted at rest (PBKDF2 +
-AES-GCM). Passphrase from BWS key `INFRA_STATE_PASSPHRASE`. CI commits
+AES-GCM). Passphrase from BWS key `IAC_BOOTSTRAP_STATE_PASSPHRASE`. CI commits
 the encrypted state back to `main` after every successful apply so the
 next run starts from canonical state.
 
@@ -201,12 +201,12 @@ volume, writes it to BWS. Subsequent runs find it in env (via
 
 | BWS key                                  | Source                              |
 |------------------------------------------|-------------------------------------|
-| `INFRA_ZITADEL_MENU_OIDC_CLIENT_ID`      | OIDC app create / search            |
-| `INFRA_ZITADEL_MENU_OIDC_CLIENT_SECRET`  | Create or regenerate endpoint       |
-| `INFRA_ZITADEL_MENU_SA_TOKEN`            | PAT create (one-shot reveal)        |
-| `INFRA_ZITADEL_PERMISSIONS_SIGNING_KEY`  | action_target create (one-shot)     |
-| `INFRA_ZITADEL_GRANTS_SIGNING_KEY`       | action_target create (one-shot)     |
-| `INFRA_ZITADEL_IEDORA_PROJECT_ID`        | project create / search             |
+| `APP_ZITADEL_MENU_OIDC_CLIENT_ID`      | OIDC app create / search            |
+| `APP_ZITADEL_MENU_OIDC_CLIENT_SECRET`  | Create or regenerate endpoint       |
+| `APP_ZITADEL_MENU_SA_TOKEN`            | PAT create (one-shot reveal)        |
+| `APP_ZITADEL_PERMISSIONS_SIGNING_KEY`  | action_target create (one-shot)     |
+| `APP_ZITADEL_GRANTS_SIGNING_KEY`       | action_target create (one-shot)     |
+| `APP_ZITADEL_IEDORA_PROJECT_ID`        | project create / search             |
 
 **Recovery matrix** for one-shot-reveal values (PAT, signing keys).
 Branch on `(BWS has, Zitadel has)`:
@@ -238,7 +238,7 @@ concurrent-deploy safety. Inputs: `MENU_IMAGE_SHA` env (default
 (nested `bin/with-secrets --stage iac` call — Stage 3's env scope
 doesn't include the postgres password directly).
 
-**docker login** before pull: Stage 3 runs with `INFRA_GHCR_TOKEN`
+**docker login** before pull: Stage 3 runs with `IAC_BOOTSTRAP_GHCR_TOKEN`
 in scope (universal), the binary `docker login ghcr.io
 --password-stdin` before each pull.
 
@@ -256,7 +256,7 @@ running OpenObserve. JSONs are embedded in the binary via
 **Network path**: OO in prod is internal-only (`expose_host_ip =
 127.0.0.1` + Hetzner edge firewall blocks 5080 publicly). Binary opens
 an SSH local-forward tunnel `ssh -L 15080:localhost:5080 -N
-root@$INFRA_HOST_IP`, then HTTP from operator's `http://127.0.0.1:15080`.
+root@$IAC_BOOTSTRAP_HOST_IP`, then HTTP from operator's `http://127.0.0.1:15080`.
 Tunnel torn down on `defer Close()`.
 
 **Idempotent reconcile**: list dashboards in folder → match by title
@@ -289,7 +289,7 @@ For Docker-runtime products that run on the shared Hetzner VPS.
 **Deploy flow**:
 
 1. Mint any per-product `appSecrets` not yet in BWS (menu mints
-   `AUTOGEN_INFRA_MENU_SESSION_SECRET` on first deploy).
+   `DEPLOY_MENU_SESSION_SECRET` on first deploy).
 2. Resolve box IPv4 from `tofu output -raw hetzner_ipv4`.
 3. Compose env from `envStatic` + `envFromBWS` (Stage 3 outputs +
    AUTOGEN secrets) + `envFromTofu` (DATABASE_URL, OTEL endpoint, S3
@@ -301,7 +301,7 @@ For Docker-runtime products that run on the shared Hetzner VPS.
 **Inputs**:
 - `MENU_IMAGE_SHA` env — set by CI (`github.sha`) or operator (export).
   Default "latest".
-- `INFRA_HOST_IP` — universal-scope BWS key, written by Stage 2.
+- `IAC_BOOTSTRAP_HOST_IP` — universal-scope BWS key, written by Stage 2.
 - All `envFromBWS` keys — visible in `--stage deploy --product menu`
   scope.
 
@@ -321,7 +321,7 @@ For static-site products on Cloudflare Workers.
    `cloudflare/cloudflare 5.11+`'s native dist/ upload directly inside
    `cloudflare_workers_script`, no wrangler needed.
 
-**Inputs**: `INFRA_CLOUDFLARE_API_TOKEN` + `INFRA_STATE_PASSPHRASE` —
+**Inputs**: `IAC_BOOTSTRAP_CLOUDFLARE_API_TOKEN` + `IAC_BOOTSTRAP_STATE_PASSPHRASE` —
 both visible in `--stage deploy --product house` (per-product Tofu
 state is separately encrypted).
 
@@ -347,14 +347,33 @@ Zero orchestrator code changes needed.
 Defense-in-depth — each stage sees only its classified BWS keys.
 Unclassified keys never enter the spawned process's env.
 
+### Naming taxonomy
+
+| Prefix              | Owns lifecycle      | Examples                                                                                          |
+|---------------------|---------------------|---------------------------------------------------------------------------------------------------|
+| `IAC_BOOTSTRAP_*`   | Operator (manual)   | `IAC_BOOTSTRAP_HCLOUD_TOKEN`, `IAC_BOOTSTRAP_CLOUDFLARE_API_TOKEN`, `IAC_BOOTSTRAP_GHCR_TOKEN`     |
+| `IAC_*`             | Tofu (Stage 2)      | `IAC_POSTGRES_PASSWORD`, `IAC_BACKUP_PASSPHRASE`, `IAC_ZITADEL_MASTERKEY`                          |
+| `APP_<service>_*`   | Stage 3 configurator| `APP_ZITADEL_MENU_OIDC_CLIENT_ID`, `APP_ZITADEL_MENU_SA_TOKEN`, `APP_ZITADEL_PERMISSIONS_SIGNING_KEY` |
+| `DEPLOY_<product>_*`| Stage 4 productRuntime | `DEPLOY_MENU_SESSION_SECRET`                                                                  |
+
+The prefix tells you who writes the value — which means it also tells
+you where to look when it goes wrong and which `--stage` will surface
+it. Rotation playbooks for each prefix are in § Secret rotation below.
+
+> **Migration**: legacy `INFRA_*`/`AUTOGEN_INFRA_*` names were renamed
+> in May 2026. `task bws:rename` runs the one-shot migrator
+> ([`infra/cmd/bws-rename-2026-05/`](../infra/cmd/bws-rename-2026-05/));
+> idempotent, safe to re-run, delete the command after the first run on
+> prod.
+
 | Stage  | Visible BWS keys                                                                                                                |
 |--------|---------------------------------------------------------------------------------------------------------------------------------|
-| iac    | Provider creds (Hetzner, CF, GH), state passphrase, all AUTOGEN_INFRA_*, OO email/password                                      |
-| app    | INFRA_ZITADEL_SA_KEY_JSON, INFRA_GHCR_TOKEN (for menu-db-migrations pulls), OO email/password (dashboards Basic auth), universal keys |
-| deploy | Universal + CF/state (for per-product Tofu) + INFRA_GHCR_TOKEN (docker pull) + per-product extras gated by `--product`          |
+| iac    | Provider creds (Hetzner, CF, GH), state passphrase, all IAC_*, OO email/password                                      |
+| app    | IAC_BOOTSTRAP_ZITADEL_SA_KEY_JSON, IAC_BOOTSTRAP_GHCR_TOKEN (for menu-db-migrations pulls), OO email/password (dashboards Basic auth), universal keys |
+| deploy | Universal + CF/state (for per-product Tofu) + IAC_BOOTSTRAP_GHCR_TOKEN (docker pull) + per-product extras gated by `--product`          |
 
-Per-product extras for `--product menu`: the 6 `INFRA_ZITADEL_MENU_*`
-keys + `AUTOGEN_INFRA_MENU_SESSION_SECRET`.
+Per-product extras for `--product menu`: the 6 `APP_ZITADEL_MENU_*`
+keys + `DEPLOY_MENU_SESSION_SECRET`.
 
 TF_VAR_* aliases auto-emitted only for stages that use Tofu (iac,
 deploy). App stage doesn't get TF_VARs.
@@ -457,10 +476,10 @@ ssh -L 5080:localhost:5080 root@$HOST   # then open http://localhost:5080
 | Secret kind | How to rotate |
 |-------------|---------------|
 | `INFRA_*` bootstrap (HCLOUD, CF, GH, etc.) | Regenerate at the source provider, then `bws secret edit <id>` with the new value. |
-| `AUTOGEN_INFRA_*` (Tofu-minted) | `infra/bin/with-secrets --stage iac -- tofu -chdir=infra/tofu apply -replace=random_password.<name>`. The `terraform_data.bws_sync_autogen` write-through pushes the new value to BWS automatically. |
-| `INFRA_ZITADEL_MENU_SA_TOKEN` | `bws secret delete <id>`, then `task app:apply` — zitadel-apply detects `(no BWS, yes Zitadel)`, deletes the live PAT, mints a new one, writes BWS. Menu container restarts on next `task deploy:menu`. |
-| `AUTOGEN_INFRA_MENU_SESSION_SECRET` | `bws secret delete <id>`, then `task deploy:menu`. `dockerOnHetzner.appSecrets` re-mints. All active sessions invalidate (users re-auth). |
-| `AUTOGEN_INFRA_ZITADEL_MASTERKEY` | **Don't rotate casually.** It encrypts Zitadel's projection table — re-keying mid-flight is unsupported. To actually rotate: `TF_VAR_allow_masterkey_rotation=true task infra:up` (one-time override on the prevent_destroy lifecycle guard), then a Zitadel rebootstrap (see below). |
+| `IAC_*` (Tofu-minted) | `infra/bin/with-secrets --stage iac -- tofu -chdir=infra/tofu apply -replace=random_password.<name>`. The `terraform_data.bws_sync_autogen` write-through pushes the new value to BWS automatically. |
+| `APP_ZITADEL_MENU_SA_TOKEN` | `bws secret delete <id>`, then `task app:apply` — zitadel-apply detects `(no BWS, yes Zitadel)`, deletes the live PAT, mints a new one, writes BWS. Menu container restarts on next `task deploy:menu`. |
+| `DEPLOY_MENU_SESSION_SECRET` | `bws secret delete <id>`, then `task deploy:menu`. `dockerOnHetzner.appSecrets` re-mints. All active sessions invalidate (users re-auth). |
+| `IAC_ZITADEL_MASTERKEY` | **Don't rotate casually.** It encrypts Zitadel's projection table — re-keying mid-flight is unsupported. To actually rotate: `TF_VAR_allow_masterkey_rotation=true task infra:up` (one-time override on the prevent_destroy lifecycle guard), then a Zitadel rebootstrap (see below). |
 
 ### Zitadel rebootstrap (cold-start Zitadel without losing the rest)
 
@@ -468,10 +487,10 @@ If Zitadel's state is corrupt or the masterkey rotated:
 
 ```bash
 # Drop the live PAT + signing keys from BWS so the reconciler treats this as cold
-for K in INFRA_ZITADEL_SA_KEY_JSON \
-         INFRA_ZITADEL_MENU_OIDC_CLIENT_ID INFRA_ZITADEL_MENU_OIDC_CLIENT_SECRET \
-         INFRA_ZITADEL_MENU_SA_TOKEN INFRA_ZITADEL_PERMISSIONS_SIGNING_KEY \
-         INFRA_ZITADEL_GRANTS_SIGNING_KEY INFRA_ZITADEL_IEDORA_PROJECT_ID; do
+for K in IAC_BOOTSTRAP_ZITADEL_SA_KEY_JSON \
+         APP_ZITADEL_MENU_OIDC_CLIENT_ID APP_ZITADEL_MENU_OIDC_CLIENT_SECRET \
+         APP_ZITADEL_MENU_SA_TOKEN APP_ZITADEL_PERMISSIONS_SIGNING_KEY \
+         APP_ZITADEL_GRANTS_SIGNING_KEY APP_ZITADEL_IEDORA_PROJECT_ID; do
   bws secret delete "$(bws secret list -o json | jq -r ".[]|select(.key==\"$K\")|.id")"
 done
 
@@ -492,13 +511,13 @@ task deploy:menu      # restart menu with the new OIDC client_secret + PAT
 [`infra/backup/backup.sh`](../infra/backup/backup.sh) `@daily`:
 `pg_dumpall` every database on `infra-postgres` → R2 (`iedora-data`
 bucket, `pg/` prefix), GPG-encrypted with
-`AUTOGEN_INFRA_BACKUP_PASSPHRASE`.
+`IAC_BACKUP_PASSPHRASE`.
 
 Restore: `ssh -t root@$HOST docker exec -it infra-backups sh /restore.sh`.
 
 Retention: 14 days (`BACKUP_KEEP_DAYS=14`).
 
-**Don't rotate `AUTOGEN_INFRA_BACKUP_PASSPHRASE` casually** —
+**Don't rotate `IAC_BACKUP_PASSPHRASE` casually** —
 previously-encrypted dumps become unreadable. Pre-launch this is
 acceptable; post-launch use a dual-passphrase window.
 
@@ -521,27 +540,27 @@ First-time setup on a fresh laptop + empty cloud:
 
    ```bash
    PROJECT_ID=$(bws project list -o json | jq -r '.[]|select(.name=="iedora-deploy")|.id')
-   for KEY in INFRA_CLOUDFLARE_API_TOKEN INFRA_STATE_PASSPHRASE \
-              INFRA_HCLOUD_TOKEN INFRA_GITHUB_API_TOKEN INFRA_GHCR_TOKEN \
-              INFRA_SSH_PRIVATE_KEY INFRA_CLAUDE_CODE_OAUTH_TOKEN \
-              INFRA_OPENOBSERVE_ROOT_USER_EMAIL; do
+   for KEY in IAC_BOOTSTRAP_CLOUDFLARE_API_TOKEN IAC_BOOTSTRAP_STATE_PASSPHRASE \
+              IAC_BOOTSTRAP_HCLOUD_TOKEN IAC_BOOTSTRAP_GITHUB_API_TOKEN IAC_BOOTSTRAP_GHCR_TOKEN \
+              IAC_BOOTSTRAP_SSH_PRIVATE_KEY IAC_BOOTSTRAP_CLAUDE_CODE_OAUTH_TOKEN \
+              IAC_BOOTSTRAP_OPENOBSERVE_ROOT_USER_EMAIL; do
      read -s -p "$KEY: " V && echo
      bws secret create "$KEY" "$V" "$PROJECT_ID" -o none
    done
    ```
 
    Source-of-truth notes:
-   - `INFRA_STATE_PASSPHRASE`: `openssl rand -hex 32` — encrypts Tofu state.
-   - `INFRA_HCLOUD_TOKEN`: Hetzner console → Security → API tokens (R/W).
-   - `INFRA_GITHUB_API_TOKEN`: fine-grained PAT scoped to the repo
+   - `IAC_BOOTSTRAP_STATE_PASSPHRASE`: `openssl rand -hex 32` — encrypts Tofu state.
+   - `IAC_BOOTSTRAP_HCLOUD_TOKEN`: Hetzner console → Security → API tokens (R/W).
+   - `IAC_BOOTSTRAP_GITHUB_API_TOKEN`: fine-grained PAT scoped to the repo
      (Actions r/w, Secrets r/w, Variables r/w, Contents r).
-   - `INFRA_GHCR_TOKEN`: classic PAT with `write:packages` (fine-
+   - `IAC_BOOTSTRAP_GHCR_TOKEN`: classic PAT with `write:packages` (fine-
      grained + personal account + GHCR is GitHub's worst-supported
      combo — keep classic until iedora moves to an org).
-   - `INFRA_SSH_PRIVATE_KEY`: `cat ~/.ssh/id_ed25519`.
-   - `INFRA_CLAUDE_CODE_OAUTH_TOKEN`: `claude setup-token`.
+   - `IAC_BOOTSTRAP_SSH_PRIVATE_KEY`: `cat ~/.ssh/id_ed25519`.
+   - `IAC_BOOTSTRAP_CLAUDE_CODE_OAUTH_TOKEN`: `claude setup-token`.
 
-   The 5 `AUTOGEN_INFRA_*` keys are minted by Tofu on first apply — DO
+   The 5 `IAC_*` keys are minted by Tofu on first apply — DO
    NOT populate them.
 
 5. **Run the pipeline**: `task doctor && task up`. First time: 5–10
@@ -559,9 +578,9 @@ the affected stage.
 | `x509: certificate signed by unknown authority` after Zitadel ready | 3 | Caddy served `/debug/ready` via internal CA while ACME was mid-challenge | `tlsprobe.probeCertIssuer` rejects "Caddy Local Authority"; budget is 6m. If exhausted: `ssh root@$HOST docker logs infra-caddy` for LE rate-limit / firewall issues. |
 | `Errors.Target.DeniedURL` on action_target create | 3 | Zitadel's URL validator can't resolve `menu.iedora.com` from inside the iedora docker network | `zitadel-apply` runs `waitForMenuDNS` before creating action targets — 90s budget. Increase if it fires. |
 | `found N PATs on machine user "menu-sa" (expected 0 or 1)` | 3 | Prior run crashed mid-create OR two operators raced. Concurrent guard refuses to silently delete the wrong one. | Reconcile via Zitadel UI; re-run `task app:apply`. |
-| `BWS missing INFRA_ZITADEL_*` | 4 | Stage 3 didn't complete | Run `task app:apply` first; or `task up` chains them. |
+| `BWS missing APP_ZITADEL_*` | 4 | Stage 3 didn't complete | Run `task app:apply` first; or `task up` chains them. |
 | `tofu output X empty` | 4 | Stage 2 wasn't run, OR an `outputs.tf` entry was added but not applied | Run `task infra:up`. |
-| `unauthorized` from `docker pull ghcr.io/...` | 3/4 | `INFRA_GHCR_TOKEN` expired OR not in scope | Regenerate the PAT, `bws secret edit`. The configurator's `docker login` step uses `--password-stdin` so the token never appears in `docker history`. |
+| `unauthorized` from `docker pull ghcr.io/...` | 3/4 | `IAC_BOOTSTRAP_GHCR_TOKEN` expired OR not in scope | Regenerate the PAT, `bws secret edit`. The configurator's `docker login` step uses `--password-stdin` so the token never appears in `docker history`. |
 | `menu-db-migrations: connection refused` | 3 | `infra-postgres` isn't up | `ssh root@$HOST docker ps`. If missing, `task infra:up`. |
 | `iedora.com` 530 / connection refused | n/a | A record resolves but TLS fails | Either `infra-caddy` is down (`docker logs infra-caddy`) or the worker isn't published. CF Workers' apex custom-domain takes a few seconds after `cloudflare_workers_custom_domain` create. |
 | `menu.iedora.com` 502 between deploys | 4 | Stage 4 stopped `infra-menu-web` and the new container hasn't come up yet | Wait ~5s. If persistent: `task deploy:menu` to restart. |
@@ -610,7 +629,7 @@ target.
 
 - **Tofu state** (`infra/tofu/`): ~40 resources (hcloud VPS/firewall/key, docker_network + volumes, the shared `module.*` blocks for postgres/zitadel/zitadel-login/openobserve/backups, cloudflare R2/DNS/api_tokens, github_actions_secret/variable, random_password.*, terraform_data.bws_sync_autogen).
 - **House Tofu state** (`products/house/infra/tofu/`): 3 resources (cloudflare_workers_script.house, cloudflare_workers_custom_domain.apex, data.cloudflare_zone.iedora).
-- **BWS**: 6 `INFRA_ZITADEL_*` outputs from Stage 3 + `AUTOGEN_INFRA_MENU_SESSION_SECRET` minted by Stage 4.
+- **BWS**: 6 `APP_ZITADEL_*` outputs from Stage 3 + `DEPLOY_MENU_SESSION_SECRET` minted by Stage 4.
 - **Zitadel**: org `iedora`, project `iedora`, 6 roles, machine user `menu-sa` with 1 PAT + IAM_OWNER, OIDC app `menu`, 2 action targets with executions.
 - **Box** (`ssh root@$HOST docker ps`): `infra-postgres`, `infra-zitadel`, `infra-zitadel-login`, `infra-caddy`, `infra-openobserve`, `infra-backups`, `infra-menu-web`.
 - **Public endpoints**:

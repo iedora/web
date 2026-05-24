@@ -5,7 +5,7 @@
 # CF Tunnel for auth.iedora.com (the only hostname that needs gRPC).
 #
 # Bootstrap is the same shape as every other cloud here: one BWS secret
-# (INFRA_HCLOUD_TOKEN, Read/Write project-scoped), then `tofu apply` owns
+# (IAC_BOOTSTRAP_HCLOUD_TOKEN, Read/Write project-scoped), then `tofu apply` owns
 # everything else. See infra/CLAUDE.md hard rule #3 (BWS → Tofu → write-through).
 
 # ── SSH key (derived from the BWS-stored private key) ────────────────────────

@@ -131,3 +131,8 @@ tasks:
     desc: "Re-run iedora-admin grants only (idempotent escape hatch)"
     cmds:
       - "{{.INFRA}}/bin/with-secrets --stage app -- {{.INFRA}}/bin/zitadel-apply --grants-only"
+
+  bws:rename:
+    desc: "One-shot: rename legacy BWS keys to IAC_BOOTSTRAP_/IAC_/APP_/DEPLOY_ taxonomy (idempotent; delete after run)"
+    cmds:
+      - "{{.INFRA}}/bin/with-secrets --stage iac -- go run -C {{.INFRA}} ./cmd/bws-rename-2026-05"

@@ -90,7 +90,7 @@ func run(ctx context.Context) error {
 	// ad-hoc `ssh + docker pull` doesn't inherit those creds. Cheap to
 	// re-login every run (Docker dedupes on the saved token in
 	// /root/.docker/config.json).
-	if ghcrToken := os.Getenv("INFRA_GHCR_TOKEN"); ghcrToken != "" {
+	if ghcrToken := os.Getenv("IAC_BOOTSTRAP_GHCR_TOKEN"); ghcrToken != "" {
 		fmt.Fprintln(os.Stderr, "→ menu-db-migrations: docker login ghcr.io")
 		// Stream the token via stdin (`--password-stdin`) so it never
 		// shows up in `docker history` / process listings on the box.

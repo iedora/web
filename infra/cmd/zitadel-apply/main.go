@@ -6,7 +6,7 @@
 // localhost:8080 (dev). Idempotent.
 //
 // Auth: FirstInstance-minted SA key (JSON Web Profile, RS256). Reads from
-// INFRA_ZITADEL_SA_KEY_JSON in env.
+// IAC_BOOTSTRAP_ZITADEL_SA_KEY_JSON in env.
 //
 // Output channels (pick one via flags):
 //
@@ -15,7 +15,7 @@
 //
 // Inputs (env, set by `bin/with-secrets` for prod or the dev orchestrator):
 //
-//	INFRA_ZITADEL_SA_KEY_JSON  full SA key JSON (the file FirstInstance writes)
+//	IAC_BOOTSTRAP_ZITADEL_SA_KEY_JSON  full SA key JSON (the file FirstInstance writes)
 //	ZA_BASE_URL                Zitadel base URL; defaults to https://auth.iedora.com
 //	ZA_MENU_HOSTNAME           menu's public hostname; defaults to menu.iedora.com
 //	ZA_ADMIN_EMAILS            JSON array OR comma-separated list of admin emails
@@ -120,7 +120,7 @@ func loadConfig(grantsOnly, noBWS bool, outputFile string) (Config, error) {
 	// Don't require the SA key here — `ensureSAKey` handles the cold
 	// path (missing in env + BWS → fetch from box via SSH). loadConfig
 	// just records whatever happens to be in env.
-	cfg.SAKeyJSON = os.Getenv("INFRA_ZITADEL_SA_KEY_JSON")
+	cfg.SAKeyJSON = os.Getenv("IAC_BOOTSTRAP_ZITADEL_SA_KEY_JSON")
 
 	emails, err := parseEmails(os.Getenv("ZA_ADMIN_EMAILS"))
 	if err != nil {

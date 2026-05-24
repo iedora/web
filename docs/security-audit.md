@@ -19,8 +19,8 @@ Ranked by severity for the iedora stack.
 | 22 | CSRF on state-changing endpoints | mitigated | done | Origin/Referer check in menu's auth adapter + SameSite=Lax on the JWE session cookie + Next 16 server actions |
 | 25 | Sensitive-data logging | mitigated | done | `logger.level = 'error'` in production |
 | 27 | Webhook secret encryption at rest | low | deferred | plaintext in DB. Acceptable while DB + app share a trust boundary; revisit on first external customer or once Zitadel-driven webhooks land |
-| 31 | Zitadel masterkey leak | high | mitigated | `AUTOGEN_INFRA_ZITADEL_MASTERKEY` Tofu-minted (32 chars), `lifecycle.prevent_destroy = true` blocks casual rotation. Re-key flow only |
-| 32 | Zitadel admin user takeover via bootstrap password | medium | mitigated | `AUTOGEN_INFRA_ZITADEL_FIRST_ADMIN_PASSWORD` honored only on first boot; rotate the live password via Zitadel UI |
+| 31 | Zitadel masterkey leak | high | mitigated | `IAC_ZITADEL_MASTERKEY` Tofu-minted (32 chars), `lifecycle.prevent_destroy = true` blocks casual rotation. Re-key flow only |
+| 32 | Zitadel admin user takeover via bootstrap password | medium | mitigated | `IAC_ZITADEL_FIRST_ADMIN_PASSWORD` honored only on first boot; rotate the live password via Zitadel UI |
 | 33 | `auth.iedora.com` cert / TLS misconfig | mitigated | done | Caddy on the VPS terminates TLS via Let's Encrypt; `obs.iedora.com`, `menu.iedora.com` follow the same path |
 
 ## Supply-chain perimeter

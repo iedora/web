@@ -19,7 +19,7 @@ import (
 //  1. Verify Zitadel is healthy (TLS probe — `/debug/ready` returning 200
 //     with a real LE cert, not Caddy's internal CA).
 //  2. Locate the SA key. Order of preference:
-//       a. INFRA_ZITADEL_SA_KEY_JSON in env (warm path: with-secrets
+//       a. IAC_BOOTSTRAP_ZITADEL_SA_KEY_JSON in env (warm path: with-secrets
 //          injected it from BWS).
 //       b. BWS (in case we're running outside with-secrets — e.g. dev
 //          orchestrator).
@@ -35,11 +35,11 @@ import (
 // makes `bin/zitadel-apply` self-sufficient. `cmd/iedora/app.go` knows
 // nothing about Zitadel — it just iterates configurators.
 func ensureSAKey(ctx context.Context, cfg Config, noBWS bool) (string, error) {
-	if k := os.Getenv("INFRA_ZITADEL_SA_KEY_JSON"); k != "" {
+	if k := os.Getenv("IAC_BOOTSTRAP_ZITADEL_SA_KEY_JSON"); k != "" {
 		return k, nil
 	}
 	if noBWS {
-		return "", fmt.Errorf("--no-bws mode requires INFRA_ZITADEL_SA_KEY_JSON in env (dev orchestrator should set it)")
+		return "", fmt.Errorf("--no-bws mode requires IAC_BOOTSTRAP_ZITADEL_SA_KEY_JSON in env (dev orchestrator should set it)")
 	}
 
 	// Warm-path BWS read. with-secrets normally injects this into env
@@ -53,14 +53,14 @@ func ensureSAKey(ctx context.Context, cfg Config, noBWS bool) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("bws list: %w", err)
 	}
-	if _, val, ok := bws.Find(secrets, "INFRA_ZITADEL_SA_KEY_JSON"); ok {
+	if _, val, ok := bws.Find(secrets, "IAC_BOOTSTRAP_ZITADEL_SA_KEY_JSON"); ok {
 		return val, nil
 	}
 
 	// Cold path. Need the box IP to SSH for the SA key.
-	host := os.Getenv("INFRA_HOST_IP")
+	host := os.Getenv("IAC_BOOTSTRAP_HOST_IP")
 	if host == "" {
-		return "", fmt.Errorf("INFRA_HOST_IP missing — `task infra:up` writes it to BWS; check Stage 2 completed")
+		return "", fmt.Errorf("IAC_BOOTSTRAP_HOST_IP missing — `task infra:up` writes it to BWS; check Stage 2 completed")
 	}
 
 	// Health gate: Zitadel must be up + serving the real LE cert before
@@ -83,8 +83,8 @@ func ensureSAKey(ctx context.Context, cfg Config, noBWS bool) (string, error) {
 	}
 
 	// Persist so warm runs hit the env / BWS path.
-	if err := bws.Upsert(ctx, pid, "INFRA_ZITADEL_SA_KEY_JSON", key); err != nil {
-		return "", fmt.Errorf("bws upsert INFRA_ZITADEL_SA_KEY_JSON: %w", err)
+	if err := bws.Upsert(ctx, pid, "IAC_BOOTSTRAP_ZITADEL_SA_KEY_JSON", key); err != nil {
+		return "", fmt.Errorf("bws upsert IAC_BOOTSTRAP_ZITADEL_SA_KEY_JSON: %w", err)
 	}
 	return key, nil
 }

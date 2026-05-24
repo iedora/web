@@ -1,5 +1,5 @@
 variable "cloudflare_api_token" {
-  description = "Cloudflare bootstrap token. TF_VAR_cloudflare_api_token (set by bin/with-secrets from INFRA_CLOUDFLARE_API_TOKEN)."
+  description = "Cloudflare bootstrap token. TF_VAR_cloudflare_api_token (set by bin/with-secrets from IAC_BOOTSTRAP_CLOUDFLARE_API_TOKEN)."
   type        = string
   sensitive   = true
 }
@@ -98,7 +98,7 @@ variable "github_repo" {
 variable "github_token" {
   description = <<-EOT
     GitHub fine-grained PAT for the provider. TF_VAR_github_token (set by
-    bin/with-secrets from INFRA_GITHUB_API_TOKEN). Repo-scoped with:
+    bin/with-secrets from IAC_BOOTSTRAP_GITHUB_API_TOKEN). Repo-scoped with:
     Actions r/w, Secrets r/w, Variables r/w, Contents r.
   EOT
   type        = string
@@ -121,13 +121,13 @@ variable "bws_project_id" {
 }
 
 variable "infra_ssh_private_key" {
-  description = "Private key (multi-line PEM) for root@<ONPREM_HOST>. TF_VAR_infra_ssh_private_key (set by bin/with-secrets from INFRA_SSH_PRIVATE_KEY)."
+  description = "Private key (multi-line PEM) for root@<ONPREM_HOST>. TF_VAR_infra_ssh_private_key (set by bin/with-secrets from IAC_BOOTSTRAP_SSH_PRIVATE_KEY)."
   type        = string
   sensitive   = true
 }
 
 variable "claude_code_oauth_token" {
-  description = "Claude Code Action OAuth token (Pro/Max, minted by `claude setup-token`). TF_VAR_claude_code_oauth_token (set by bin/with-secrets from INFRA_CLAUDE_CODE_OAUTH_TOKEN)."
+  description = "Claude Code Action OAuth token (Pro/Max, minted by `claude setup-token`). TF_VAR_claude_code_oauth_token (set by bin/with-secrets from IAC_BOOTSTRAP_CLAUDE_CODE_OAUTH_TOKEN)."
   type        = string
   sensitive   = true
 }
@@ -147,7 +147,7 @@ variable "menu_public_hostname" {
 variable "infra_hcloud_token" {
   description = <<-EOT
     Hetzner Cloud project API token. TF_VAR_infra_hcloud_token (from BWS
-    INFRA_HCLOUD_TOKEN). Generated once at
+    IAC_BOOTSTRAP_HCLOUD_TOKEN). Generated once at
     https://console.hetzner.cloud/projects/<id>/security/tokens — pick
     Read & Write scope. Project-scoped, so a leaked token can only touch
     the iedora project (no account-wide impact).
@@ -204,7 +204,7 @@ variable "hetzner_location" {
 variable "infra_ghcr_token" {
   description = <<-EOT
     Classic GitHub PAT (write:packages) used to pull `ghcr.io/eduvhc/iedora-backup`
-    from the homelab. TF_VAR_infra_ghcr_token (from BWS INFRA_GHCR_TOKEN).
+    from the homelab. TF_VAR_infra_ghcr_token (from BWS IAC_BOOTSTRAP_GHCR_TOKEN).
     Only needed because the self-built backup image is private; everything
     else (postgres, openobserve, zitadel, cloudflared) is on public registries.
   EOT
@@ -213,7 +213,7 @@ variable "infra_ghcr_token" {
 }
 
 variable "infra_openobserve_root_user_email" {
-  description = "OpenObserve root login email. TF_VAR_infra_openobserve_root_user_email (from BWS INFRA_OPENOBSERVE_ROOT_USER_EMAIL)."
+  description = "OpenObserve root login email. TF_VAR_infra_openobserve_root_user_email (from BWS IAC_BOOTSTRAP_OPENOBSERVE_ROOT_USER_EMAIL)."
   type        = string
   sensitive   = true
 }
@@ -262,6 +262,6 @@ variable "iedora_admin_emails" {
 
 # NOTE: var.infra_zitadel_sa_key_json was removed. The Zitadel TF provider
 # is gone (Stage 3 talks to Zitadel directly via REST). The SA key still
-# lives in BWS under INFRA_ZITADEL_SA_KEY_JSON — `bin/zitadel-apply` reads
+# lives in BWS under IAC_BOOTSTRAP_ZITADEL_SA_KEY_JSON — `bin/zitadel-apply` reads
 # it from env, not from Tofu.
 

@@ -260,7 +260,7 @@ jobs:
 
       # The `ghcr.io/eduvhc/menu` package was originally created under
       # Eduardo's personal PAT, so GITHUB_TOKEN (scoped to the iedora repo)
-      # can't push to it. INFRA_GHCR_TOKEN is the same PAT, mirrored to
+      # can't push to it. IAC_BOOTSTRAP_GHCR_TOKEN is the same PAT, mirrored to
       # BWS + GHA secrets via Tofu. Fetch from BWS to keep it off the
       # repo's plaintext secrets list.
       - name: Install bws CLI
@@ -280,8 +280,8 @@ jobs:
         run: |
           set -euo pipefail
           TOKEN=$(bws secret list "$BWS_PROJECT_ID" -o json \
-            | jq -r '.[] | select(.key=="INFRA_GHCR_TOKEN") | .value')
-          [ -n "$TOKEN" ] || { echo "INFRA_GHCR_TOKEN missing in BWS" >&2; exit 1; }
+            | jq -r '.[] | select(.key=="IAC_BOOTSTRAP_GHCR_TOKEN") | .value')
+          [ -n "$TOKEN" ] || { echo "IAC_BOOTSTRAP_GHCR_TOKEN missing in BWS" >&2; exit 1; }
           echo "$TOKEN" | docker login ghcr.io -u eduvhc --password-stdin
 
       # Image refs:
@@ -341,4 +341,4 @@ jobs:
       image_sha: ${{ github.sha }}
     secrets:
       BWS_ACCESS_TOKEN: ${{ secrets.BWS_ACCESS_TOKEN }}
-      INFRA_SSH_PRIVATE_KEY: ${{ secrets.INFRA_SSH_PRIVATE_KEY }}
+      IAC_BOOTSTRAP_SSH_PRIVATE_KEY: ${{ secrets.IAC_BOOTSTRAP_SSH_PRIVATE_KEY }}

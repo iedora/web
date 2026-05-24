@@ -131,7 +131,7 @@ func applyDevStack(selected []string, devTofuDir, zitadelSAKeyPath, zitadelOutpu
 	// that file so PAT + signing keys stay stable across `task dev` cycles.
 	runInWithEnv(filepath.Dir(zitadelApplyBin),
 		[]string{
-			"INFRA_ZITADEL_SA_KEY_JSON=" + string(saKey),
+			"IAC_BOOTSTRAP_ZITADEL_SA_KEY_JSON=" + string(saKey),
 			"ZA_BASE_URL=http://localhost:8080",
 			"ZA_MENU_HOSTNAME=localhost:3000",
 			// Empty ZA_SSH_HOST disables the menu-DNS gate (irrelevant

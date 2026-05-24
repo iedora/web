@@ -14,34 +14,34 @@ import (
 func allBWSSecrets() []bws.Secret {
 	return []bws.Secret{
 		// iac
-		{Key: "INFRA_CLOUDFLARE_API_TOKEN", Value: "cf-token-123"},
-		{Key: "INFRA_STATE_PASSPHRASE", Value: "passphrase-abc"},
-		{Key: "INFRA_GITHUB_API_TOKEN", Value: "github-token-456"},
-		{Key: "INFRA_SSH_PRIVATE_KEY", Value: "ssh-key-789"},
-		{Key: "INFRA_CLAUDE_CODE_OAUTH_TOKEN", Value: "claude-token-xyz"},
-		{Key: "INFRA_HCLOUD_TOKEN", Value: "hcloud-token-uvw"},
-		{Key: "INFRA_GHCR_TOKEN", Value: "ghcr-token-qrs"},
-		{Key: "INFRA_OPENOBSERVE_ROOT_USER_EMAIL", Value: "test@example.com"},
-		{Key: "AUTOGEN_INFRA_POSTGRES_PASSWORD", Value: "pg-pwd"},
-		{Key: "AUTOGEN_INFRA_BACKUP_PASSPHRASE", Value: "backup-pwd"},
-		{Key: "AUTOGEN_INFRA_ZITADEL_MASTERKEY", Value: "zit-mk"},
-		{Key: "AUTOGEN_INFRA_ZITADEL_FIRST_ADMIN_PASSWORD", Value: "zit-admin-pwd"},
-		{Key: "AUTOGEN_INFRA_OPENOBSERVE_ROOT_USER_PASSWORD", Value: "oo-pwd"},
+		{Key: "IAC_BOOTSTRAP_CLOUDFLARE_API_TOKEN", Value: "cf-token-123"},
+		{Key: "IAC_BOOTSTRAP_STATE_PASSPHRASE", Value: "passphrase-abc"},
+		{Key: "IAC_BOOTSTRAP_GITHUB_API_TOKEN", Value: "github-token-456"},
+		{Key: "IAC_BOOTSTRAP_SSH_PRIVATE_KEY", Value: "ssh-key-789"},
+		{Key: "IAC_BOOTSTRAP_CLAUDE_CODE_OAUTH_TOKEN", Value: "claude-token-xyz"},
+		{Key: "IAC_BOOTSTRAP_HCLOUD_TOKEN", Value: "hcloud-token-uvw"},
+		{Key: "IAC_BOOTSTRAP_GHCR_TOKEN", Value: "ghcr-token-qrs"},
+		{Key: "IAC_BOOTSTRAP_OPENOBSERVE_ROOT_USER_EMAIL", Value: "test@example.com"},
+		{Key: "IAC_POSTGRES_PASSWORD", Value: "pg-pwd"},
+		{Key: "IAC_BACKUP_PASSPHRASE", Value: "backup-pwd"},
+		{Key: "IAC_ZITADEL_MASTERKEY", Value: "zit-mk"},
+		{Key: "IAC_ZITADEL_FIRST_ADMIN_PASSWORD", Value: "zit-admin-pwd"},
+		{Key: "IAC_OPENOBSERVE_ROOT_USER_PASSWORD", Value: "oo-pwd"},
 
 		// app
-		{Key: "INFRA_ZITADEL_SA_KEY_JSON", Value: "sa-key-json"},
+		{Key: "IAC_BOOTSTRAP_ZITADEL_SA_KEY_JSON", Value: "sa-key-json"},
 
 		// deploy (per-product, menu)
-		{Key: "INFRA_ZITADEL_MENU_OIDC_CLIENT_ID", Value: "client-id-123"},
-		{Key: "INFRA_ZITADEL_MENU_OIDC_CLIENT_SECRET", Value: "client-secret-xyz"},
-		{Key: "INFRA_ZITADEL_MENU_SA_TOKEN", Value: "sa-pat-token"},
-		{Key: "INFRA_ZITADEL_PERMISSIONS_SIGNING_KEY", Value: "perm-sk"},
-		{Key: "INFRA_ZITADEL_GRANTS_SIGNING_KEY", Value: "grants-sk"},
-		{Key: "INFRA_ZITADEL_IEDORA_PROJECT_ID", Value: "project-456"},
-		{Key: "AUTOGEN_INFRA_MENU_SESSION_SECRET", Value: "menu-session-key"},
+		{Key: "APP_ZITADEL_MENU_OIDC_CLIENT_ID", Value: "client-id-123"},
+		{Key: "APP_ZITADEL_MENU_OIDC_CLIENT_SECRET", Value: "client-secret-xyz"},
+		{Key: "APP_ZITADEL_MENU_SA_TOKEN", Value: "sa-pat-token"},
+		{Key: "APP_ZITADEL_PERMISSIONS_SIGNING_KEY", Value: "perm-sk"},
+		{Key: "APP_ZITADEL_GRANTS_SIGNING_KEY", Value: "grants-sk"},
+		{Key: "APP_ZITADEL_IEDORA_PROJECT_ID", Value: "project-456"},
+		{Key: "DEPLOY_MENU_SESSION_SECRET", Value: "menu-session-key"},
 
 		// universal
-		{Key: "INFRA_HOST_IP", Value: "1.2.3.4"},
+		{Key: "IAC_BOOTSTRAP_HOST_IP", Value: "1.2.3.4"},
 
 		// NOT classified — should be dropped from every stage.
 		{Key: "UNCLASSIFIED_LEFTOVER", Value: "must-not-leak"},
@@ -81,8 +81,8 @@ func TestBuildEnvironment_IaCStage(t *testing.T) {
 
 	// IaC sees iac-allowed BWS keys.
 	for _, k := range []string{
-		"INFRA_HCLOUD_TOKEN", "INFRA_STATE_PASSPHRASE", "INFRA_GITHUB_API_TOKEN",
-		"AUTOGEN_INFRA_POSTGRES_PASSWORD", "AUTOGEN_INFRA_ZITADEL_MASTERKEY",
+		"IAC_BOOTSTRAP_HCLOUD_TOKEN", "IAC_BOOTSTRAP_STATE_PASSPHRASE", "IAC_BOOTSTRAP_GITHUB_API_TOKEN",
+		"IAC_POSTGRES_PASSWORD", "IAC_ZITADEL_MASTERKEY",
 	} {
 		if got[k] == "" {
 			t.Errorf("iac: expected %s to be present", k)
@@ -90,9 +90,9 @@ func TestBuildEnvironment_IaCStage(t *testing.T) {
 	}
 	// IaC does NOT see app or deploy keys.
 	for _, k := range []string{
-		"INFRA_ZITADEL_SA_KEY_JSON",
-		"INFRA_ZITADEL_MENU_OIDC_CLIENT_SECRET",
-		"AUTOGEN_INFRA_MENU_SESSION_SECRET",
+		"IAC_BOOTSTRAP_ZITADEL_SA_KEY_JSON",
+		"APP_ZITADEL_MENU_OIDC_CLIENT_SECRET",
+		"DEPLOY_MENU_SESSION_SECRET",
 		"UNCLASSIFIED_LEFTOVER",
 	} {
 		if got[k] != "" {
@@ -123,18 +123,18 @@ func TestBuildEnvironment_AppStage(t *testing.T) {
 	got := envMap(envSlice)
 
 	// App sees only the SA key + universal keys.
-	if got["INFRA_ZITADEL_SA_KEY_JSON"] != "sa-key-json" {
+	if got["IAC_BOOTSTRAP_ZITADEL_SA_KEY_JSON"] != "sa-key-json" {
 		t.Errorf("app: SA key missing")
 	}
-	if got["INFRA_HOST_IP"] != "1.2.3.4" {
-		t.Errorf("app: INFRA_HOST_IP universal key missing")
+	if got["IAC_BOOTSTRAP_HOST_IP"] != "1.2.3.4" {
+		t.Errorf("app: IAC_BOOTSTRAP_HOST_IP universal key missing")
 	}
 	// App must NOT see iac provider creds or deploy-stage values.
 	for _, k := range []string{
-		"INFRA_HCLOUD_TOKEN", "INFRA_STATE_PASSPHRASE",
-		"AUTOGEN_INFRA_POSTGRES_PASSWORD",
-		"INFRA_ZITADEL_MENU_OIDC_CLIENT_SECRET",
-		"AUTOGEN_INFRA_MENU_SESSION_SECRET",
+		"IAC_BOOTSTRAP_HCLOUD_TOKEN", "IAC_BOOTSTRAP_STATE_PASSPHRASE",
+		"IAC_POSTGRES_PASSWORD",
+		"APP_ZITADEL_MENU_OIDC_CLIENT_SECRET",
+		"DEPLOY_MENU_SESSION_SECRET",
 		"UNCLASSIFIED_LEFTOVER",
 	} {
 		if got[k] != "" {
@@ -162,14 +162,14 @@ func TestBuildEnvironment_DeployStage_Menu(t *testing.T) {
 
 	// Deploy/menu sees menu's per-product extras + universal + deploy creds.
 	for _, k := range []string{
-		"INFRA_ZITADEL_MENU_OIDC_CLIENT_ID",
-		"INFRA_ZITADEL_MENU_OIDC_CLIENT_SECRET",
-		"INFRA_ZITADEL_MENU_SA_TOKEN",
-		"AUTOGEN_INFRA_MENU_SESSION_SECRET",
-		"INFRA_HOST_IP",
-		"INFRA_SSH_PRIVATE_KEY",
-		"INFRA_CLOUDFLARE_API_TOKEN",
-		"INFRA_STATE_PASSPHRASE",
+		"APP_ZITADEL_MENU_OIDC_CLIENT_ID",
+		"APP_ZITADEL_MENU_OIDC_CLIENT_SECRET",
+		"APP_ZITADEL_MENU_SA_TOKEN",
+		"DEPLOY_MENU_SESSION_SECRET",
+		"IAC_BOOTSTRAP_HOST_IP",
+		"IAC_BOOTSTRAP_SSH_PRIVATE_KEY",
+		"IAC_BOOTSTRAP_CLOUDFLARE_API_TOKEN",
+		"IAC_BOOTSTRAP_STATE_PASSPHRASE",
 	} {
 		if got[k] == "" {
 			t.Errorf("deploy menu: expected %s, missing", k)
@@ -177,11 +177,11 @@ func TestBuildEnvironment_DeployStage_Menu(t *testing.T) {
 	}
 	// Deploy menu does NOT see IaC-only creds.
 	for _, k := range []string{
-		"INFRA_HCLOUD_TOKEN",
-		"INFRA_GITHUB_API_TOKEN",
-		"INFRA_ZITADEL_SA_KEY_JSON",
-		"AUTOGEN_INFRA_POSTGRES_PASSWORD",
-		"AUTOGEN_INFRA_ZITADEL_MASTERKEY",
+		"IAC_BOOTSTRAP_HCLOUD_TOKEN",
+		"IAC_BOOTSTRAP_GITHUB_API_TOKEN",
+		"IAC_BOOTSTRAP_ZITADEL_SA_KEY_JSON",
+		"IAC_POSTGRES_PASSWORD",
+		"IAC_ZITADEL_MASTERKEY",
 		"UNCLASSIFIED_LEFTOVER",
 	} {
 		if got[k] != "" {
@@ -202,17 +202,17 @@ func TestBuildEnvironment_DeployStage_House(t *testing.T) {
 	got := envMap(envSlice)
 
 	// House deploy uses its per-product Tofu — needs CF token + state.
-	if got["INFRA_CLOUDFLARE_API_TOKEN"] == "" {
+	if got["IAC_BOOTSTRAP_CLOUDFLARE_API_TOKEN"] == "" {
 		t.Error("deploy house: needs CF token for its Tofu root")
 	}
-	if got["INFRA_STATE_PASSPHRASE"] == "" {
+	if got["IAC_BOOTSTRAP_STATE_PASSPHRASE"] == "" {
 		t.Error("deploy house: needs state passphrase for its Tofu root")
 	}
 	// House does NOT get menu's per-product keys.
-	if got["INFRA_ZITADEL_MENU_OIDC_CLIENT_ID"] != "" {
+	if got["APP_ZITADEL_MENU_OIDC_CLIENT_ID"] != "" {
 		t.Error("deploy house: must NOT see menu's Zitadel keys")
 	}
-	if got["AUTOGEN_INFRA_MENU_SESSION_SECRET"] != "" {
+	if got["DEPLOY_MENU_SESSION_SECRET"] != "" {
 		t.Error("deploy house: must NOT see menu's session secret")
 	}
 }
@@ -228,7 +228,7 @@ func TestBuildEnvironment_UnknownProduct(t *testing.T) {
 		t.Fatalf("deploy unknown buildEnvironment: %v", err)
 	}
 	got := envMap(envSlice)
-	if got["INFRA_ZITADEL_MENU_OIDC_CLIENT_ID"] != "" {
+	if got["APP_ZITADEL_MENU_OIDC_CLIENT_ID"] != "" {
 		t.Error("unknown product: must NOT inherit any product extras")
 	}
 }

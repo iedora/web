@@ -89,7 +89,7 @@ jobs:
 
       - name: Configure SSH (SA-key fetch needs SSH on cold runs)
         env:
-          SSH_KEY: ${{ secrets.INFRA_SSH_PRIVATE_KEY }}
+          SSH_KEY: ${{ secrets.IAC_BOOTSTRAP_SSH_PRIVATE_KEY }}
         run: |
           set -euo pipefail
           mkdir -p ~/.ssh

@@ -126,7 +126,7 @@ jobs:
         # box over SSH to manage containers. Same key the operator uses
         # from their laptop.
         env:
-          SSH_KEY: ${{ secrets.INFRA_SSH_PRIVATE_KEY }}
+          SSH_KEY: ${{ secrets.IAC_BOOTSTRAP_SSH_PRIVATE_KEY }}
           HOST: ${{ steps.host.outputs.host }}
         run: |
           set -euo pipefail

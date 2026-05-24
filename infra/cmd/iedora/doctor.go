@@ -43,13 +43,13 @@ func runDoctor(ctx context.Context, _ []string) error {
 
 	fmt.Fprintln(stderr, "→ Checking required bootstrap secrets")
 	bootstrap := []string{
-		"INFRA_HCLOUD_TOKEN",
-		"INFRA_CLOUDFLARE_API_TOKEN",
-		"INFRA_STATE_PASSPHRASE",
-		"INFRA_GITHUB_API_TOKEN",
-		"INFRA_SSH_PRIVATE_KEY",
-		"INFRA_GHCR_TOKEN",
-		"INFRA_OPENOBSERVE_ROOT_USER_EMAIL",
+		"IAC_BOOTSTRAP_HCLOUD_TOKEN",
+		"IAC_BOOTSTRAP_CLOUDFLARE_API_TOKEN",
+		"IAC_BOOTSTRAP_STATE_PASSPHRASE",
+		"IAC_BOOTSTRAP_GITHUB_API_TOKEN",
+		"IAC_BOOTSTRAP_SSH_PRIVATE_KEY",
+		"IAC_BOOTSTRAP_GHCR_TOKEN",
+		"IAC_BOOTSTRAP_OPENOBSERVE_ROOT_USER_EMAIL",
 	}
 	for _, key := range bootstrap {
 		if _, _, ok := bws.Find(secrets, key); !ok {

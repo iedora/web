@@ -6,7 +6,7 @@ variable "cloudflare_api_token" {
       - Zone · DNS · Edit                       (custom_domain auto-DNS)
       - Zone · Workers Routes · Edit            (custom_domain binding)
     Provide via TF_VAR_cloudflare_api_token (set by bin/with-secrets from
-    BWS key INFRA_CLOUDFLARE_API_TOKEN). The same BWS token serves every
+    BWS key IAC_BOOTSTRAP_CLOUDFLARE_API_TOKEN). The same BWS token serves every
     iedora product's Tofu root.
   EOT
   type        = string

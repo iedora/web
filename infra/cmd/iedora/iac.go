@@ -64,7 +64,7 @@ func runIacApply(ctx context.Context, argv []string) error {
 
 	// SSH host-key rotation. Two sources to scrub: the fresh IP (so the
 	// next SSH from the docker provider doesn't trip on a stale key from
-	// a prior instance) and the PRIOR IP from BWS INFRA_HOST_IP.
+	// a prior instance) and the PRIOR IP from BWS IAC_BOOTSTRAP_HOST_IP.
 	projectID, err := bws.ProjectID(ctx)
 	if err != nil {
 		return fmt.Errorf("bws project id: %w", err)
@@ -73,7 +73,7 @@ func runIacApply(ctx context.Context, argv []string) error {
 	if err != nil {
 		return fmt.Errorf("bws secrets: %w", err)
 	}
-	_, priorIP, _ := bws.Find(allSecrets, "INFRA_HOST_IP")
+	_, priorIP, _ := bws.Find(allSecrets, "IAC_BOOTSTRAP_HOST_IP")
 	rotateKnownHosts(ctx, priorIP, hetznerIPv4)
 
 	// ── Pass 2: full apply ──────────────────────────────────────────────
@@ -85,9 +85,9 @@ func runIacApply(ctx context.Context, argv []string) error {
 		return fmt.Errorf("apply: %w", err)
 	}
 
-	fmt.Fprintln(stderr, "→ Write-through INFRA_HOST_IP to BWS")
-	if err := bws.Upsert(ctx, projectID, "INFRA_HOST_IP", hetznerIPv4); err != nil {
-		return fmt.Errorf("bws upsert INFRA_HOST_IP: %w", err)
+	fmt.Fprintln(stderr, "→ Write-through IAC_BOOTSTRAP_HOST_IP to BWS")
+	if err := bws.Upsert(ctx, projectID, "IAC_BOOTSTRAP_HOST_IP", hetznerIPv4); err != nil {
+		return fmt.Errorf("bws upsert IAC_BOOTSTRAP_HOST_IP: %w", err)
 	}
 
 	fmt.Fprintln(stderr, "✓ iac apply complete")
@@ -172,14 +172,14 @@ func runIacDestroy(ctx context.Context, argv []string) error {
 	// Drop the instance-bound infra keys + every Zitadel-side output the
 	// reconciler wrote in Stage 3 (they're tied to the now-dead Zitadel).
 	scrub := []string{
-		"INFRA_ZITADEL_SA_KEY_JSON",
-		"INFRA_HOST_IP",
-		"INFRA_ZITADEL_MENU_OIDC_CLIENT_ID",
-		"INFRA_ZITADEL_MENU_OIDC_CLIENT_SECRET",
-		"INFRA_ZITADEL_MENU_SA_TOKEN",
-		"INFRA_ZITADEL_PERMISSIONS_SIGNING_KEY",
-		"INFRA_ZITADEL_GRANTS_SIGNING_KEY",
-		"INFRA_ZITADEL_IEDORA_PROJECT_ID",
+		"IAC_BOOTSTRAP_ZITADEL_SA_KEY_JSON",
+		"IAC_BOOTSTRAP_HOST_IP",
+		"APP_ZITADEL_MENU_OIDC_CLIENT_ID",
+		"APP_ZITADEL_MENU_OIDC_CLIENT_SECRET",
+		"APP_ZITADEL_MENU_SA_TOKEN",
+		"APP_ZITADEL_PERMISSIONS_SIGNING_KEY",
+		"APP_ZITADEL_GRANTS_SIGNING_KEY",
+		"APP_ZITADEL_IEDORA_PROJECT_ID",
 	}
 	for _, key := range scrub {
 		if err := bws.Delete(ctx, projectID, key); err != nil {
@@ -210,9 +210,9 @@ func emptyR2BucketsInState(ctx context.Context) error {
 		return nil
 	}
 
-	cfToken := os.Getenv("INFRA_CLOUDFLARE_API_TOKEN")
+	cfToken := os.Getenv("IAC_BOOTSTRAP_CLOUDFLARE_API_TOKEN")
 	if cfToken == "" {
-		return fmt.Errorf("INFRA_CLOUDFLARE_API_TOKEN missing (bin/with-secrets should inject it)")
+		return fmt.Errorf("IAC_BOOTSTRAP_CLOUDFLARE_API_TOKEN missing (bin/with-secrets should inject it)")
 	}
 	accountID := os.Getenv("CLOUDFLARE_ACCOUNT_ID")
 	if accountID == "" {

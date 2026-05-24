@@ -48,38 +48,38 @@ func parseStage(s string) (stage, error) {
 // explicit classification choice here).
 //
 // Universal entries appear in all three stages. Per-product deploy keys
-// (the INFRA_ZITADEL_MENU_* set) are filtered further by the `--product`
+// (the APP_ZITADEL_MENU_* set) are filtered further by the `--product`
 // flag when stage=deploy — see `productExtras`.
 var secretAllow = map[string]map[stage]bool{
 	// Universal — every stage needs to write to BWS at minimum.
 	"BWS_ACCESS_TOKEN":      {stageIaC: true, stageApp: true, stageDeploy: true},
-	"INFRA_HOST_IP":         {stageIaC: true, stageApp: true, stageDeploy: true},
-	"INFRA_SSH_PRIVATE_KEY": {stageIaC: true, stageApp: true, stageDeploy: true},
+	"IAC_BOOTSTRAP_HOST_IP":         {stageIaC: true, stageApp: true, stageDeploy: true},
+	"IAC_BOOTSTRAP_SSH_PRIVATE_KEY": {stageIaC: true, stageApp: true, stageDeploy: true},
 
 	// IaC — provider credentials for the central Tofu root.
-	"INFRA_CLOUDFLARE_API_TOKEN":        {stageIaC: true, stageDeploy: true},
-	"INFRA_STATE_PASSPHRASE":            {stageIaC: true, stageDeploy: true},
-	"INFRA_GITHUB_API_TOKEN":            {stageIaC: true},
-	"INFRA_CLAUDE_CODE_OAUTH_TOKEN":     {stageIaC: true},
-	"INFRA_HCLOUD_TOKEN":                {stageIaC: true},
+	"IAC_BOOTSTRAP_CLOUDFLARE_API_TOKEN":        {stageIaC: true, stageDeploy: true},
+	"IAC_BOOTSTRAP_STATE_PASSPHRASE":            {stageIaC: true, stageDeploy: true},
+	"IAC_BOOTSTRAP_GITHUB_API_TOKEN":            {stageIaC: true},
+	"IAC_BOOTSTRAP_CLAUDE_CODE_OAUTH_TOKEN":     {stageIaC: true},
+	"IAC_BOOTSTRAP_HCLOUD_TOKEN":                {stageIaC: true},
 	// Needed by Stage 3 (menu-db-migrations runs `docker login + pull`)
 	// and Stage 4 (dockerOnHetzner pulls the product image).
-	"INFRA_GHCR_TOKEN":                  {stageIaC: true, stageApp: true, stageDeploy: true},
+	"IAC_BOOTSTRAP_GHCR_TOKEN":                  {stageIaC: true, stageApp: true, stageDeploy: true},
 	// OpenObserve email is needed by the `openobserve-dashboards`
 	// configurator in Stage 3 for HTTP Basic auth against the API.
-	"INFRA_OPENOBSERVE_ROOT_USER_EMAIL": {stageIaC: true, stageApp: true},
+	"IAC_BOOTSTRAP_OPENOBSERVE_ROOT_USER_EMAIL": {stageIaC: true, stageApp: true},
 
 	// App — Stage 3 configurator credentials.
-	"INFRA_ZITADEL_SA_KEY_JSON": {stageApp: true},
+	"IAC_BOOTSTRAP_ZITADEL_SA_KEY_JSON": {stageApp: true},
 
 	// AUTOGEN_* — Tofu-minted infra secrets. Most are IaC-only because they
 	// configure how infra containers boot. The OO password is also
 	// app-scoped because `openobserve-dashboards` authenticates with it.
-	"AUTOGEN_INFRA_POSTGRES_PASSWORD":              {stageIaC: true},
-	"AUTOGEN_INFRA_BACKUP_PASSPHRASE":              {stageIaC: true},
-	"AUTOGEN_INFRA_ZITADEL_MASTERKEY":              {stageIaC: true},
-	"AUTOGEN_INFRA_ZITADEL_FIRST_ADMIN_PASSWORD":   {stageIaC: true},
-	"AUTOGEN_INFRA_OPENOBSERVE_ROOT_USER_PASSWORD": {stageIaC: true, stageApp: true},
+	"IAC_POSTGRES_PASSWORD":              {stageIaC: true},
+	"IAC_BACKUP_PASSPHRASE":              {stageIaC: true},
+	"IAC_ZITADEL_MASTERKEY":              {stageIaC: true},
+	"IAC_ZITADEL_FIRST_ADMIN_PASSWORD":   {stageIaC: true},
+	"IAC_OPENOBSERVE_ROOT_USER_PASSWORD": {stageIaC: true, stageApp: true},
 }
 
 // productExtras adds per-product secrets to stage=deploy when --product is
@@ -89,13 +89,13 @@ var secretAllow = map[string]map[stage]bool{
 // already-allowed CF + state creds.
 var productExtras = map[string][]string{
 	"menu": {
-		"INFRA_ZITADEL_MENU_OIDC_CLIENT_ID",
-		"INFRA_ZITADEL_MENU_OIDC_CLIENT_SECRET",
-		"INFRA_ZITADEL_MENU_SA_TOKEN",
-		"INFRA_ZITADEL_PERMISSIONS_SIGNING_KEY",
-		"INFRA_ZITADEL_GRANTS_SIGNING_KEY",
-		"INFRA_ZITADEL_IEDORA_PROJECT_ID",
-		"AUTOGEN_INFRA_MENU_SESSION_SECRET",
+		"APP_ZITADEL_MENU_OIDC_CLIENT_ID",
+		"APP_ZITADEL_MENU_OIDC_CLIENT_SECRET",
+		"APP_ZITADEL_MENU_SA_TOKEN",
+		"APP_ZITADEL_PERMISSIONS_SIGNING_KEY",
+		"APP_ZITADEL_GRANTS_SIGNING_KEY",
+		"APP_ZITADEL_IEDORA_PROJECT_ID",
+		"DEPLOY_MENU_SESSION_SECRET",
 	},
 }
 
@@ -107,14 +107,14 @@ var tfVarAliases = []struct {
 	tfVar  string
 	source string
 }{
-	{"TF_VAR_cloudflare_api_token", "INFRA_CLOUDFLARE_API_TOKEN"},
-	{"TF_VAR_state_passphrase", "INFRA_STATE_PASSPHRASE"},
-	{"TF_VAR_github_token", "INFRA_GITHUB_API_TOKEN"},
-	{"TF_VAR_infra_ssh_private_key", "INFRA_SSH_PRIVATE_KEY"},
-	{"TF_VAR_claude_code_oauth_token", "INFRA_CLAUDE_CODE_OAUTH_TOKEN"},
-	{"TF_VAR_infra_hcloud_token", "INFRA_HCLOUD_TOKEN"},
-	{"TF_VAR_infra_ghcr_token", "INFRA_GHCR_TOKEN"},
-	{"TF_VAR_infra_openobserve_root_user_email", "INFRA_OPENOBSERVE_ROOT_USER_EMAIL"},
+	{"TF_VAR_cloudflare_api_token", "IAC_BOOTSTRAP_CLOUDFLARE_API_TOKEN"},
+	{"TF_VAR_state_passphrase", "IAC_BOOTSTRAP_STATE_PASSPHRASE"},
+	{"TF_VAR_github_token", "IAC_BOOTSTRAP_GITHUB_API_TOKEN"},
+	{"TF_VAR_infra_ssh_private_key", "IAC_BOOTSTRAP_SSH_PRIVATE_KEY"},
+	{"TF_VAR_claude_code_oauth_token", "IAC_BOOTSTRAP_CLAUDE_CODE_OAUTH_TOKEN"},
+	{"TF_VAR_infra_hcloud_token", "IAC_BOOTSTRAP_HCLOUD_TOKEN"},
+	{"TF_VAR_infra_ghcr_token", "IAC_BOOTSTRAP_GHCR_TOKEN"},
+	{"TF_VAR_infra_openobserve_root_user_email", "IAC_BOOTSTRAP_OPENOBSERVE_ROOT_USER_EMAIL"},
 }
 
 // buildEnvironment composes the env exposed to the exec'd target. Only
@@ -152,9 +152,9 @@ func buildEnvironment(ctx context.Context, secrets []bws.Secret, bwsAccessToken,
 	if stageUsesTofu {
 		cfAccountID := envMap["CLOUDFLARE_ACCOUNT_ID"]
 		if cfAccountID == "" {
-			cfToken := envMap["INFRA_CLOUDFLARE_API_TOKEN"]
+			cfToken := envMap["IAC_BOOTSTRAP_CLOUDFLARE_API_TOKEN"]
 			if cfToken == "" {
-				return nil, fmt.Errorf("stage=%s: INFRA_CLOUDFLARE_API_TOKEN missing in environment or BWS", stg)
+				return nil, fmt.Errorf("stage=%s: IAC_BOOTSTRAP_CLOUDFLARE_API_TOKEN missing in environment or BWS", stg)
 			}
 			discovered, err := cfAccountResolver(ctx, cfToken)
 			if err != nil {

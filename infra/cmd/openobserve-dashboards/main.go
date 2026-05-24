@@ -29,12 +29,12 @@
 //
 // Inputs (env, set by `bin/with-secrets --stage app` from BWS):
 //
-//	INFRA_HOST_IP                                  Hetzner box IPv4 (universal scope)
-//	INFRA_SSH_PRIVATE_KEY                          loaded into ssh-agent before exec OR
+//	IAC_BOOTSTRAP_HOST_IP                                  Hetzner box IPv4 (universal scope)
+//	IAC_BOOTSTRAP_SSH_PRIVATE_KEY                          loaded into ssh-agent before exec OR
 //	                                               written to ~/.ssh/id_ed25519 — same
 //	                                               as every other SSH-using binary
-//	INFRA_OPENOBSERVE_ROOT_USER_EMAIL              HTTP Basic user
-//	AUTOGEN_INFRA_OPENOBSERVE_ROOT_USER_PASSWORD   HTTP Basic password (Tofu-minted)
+//	IAC_BOOTSTRAP_OPENOBSERVE_ROOT_USER_EMAIL              HTTP Basic user
+//	IAC_OPENOBSERVE_ROOT_USER_PASSWORD   HTTP Basic password (Tofu-minted)
 //
 // Optional env:
 //
@@ -84,12 +84,12 @@ func main() {
 }
 
 func run(ctx context.Context) error {
-	host := os.Getenv("INFRA_HOST_IP")
+	host := os.Getenv("IAC_BOOTSTRAP_HOST_IP")
 	if host == "" {
-		return fmt.Errorf("INFRA_HOST_IP missing — `task infra:up` should have written it to BWS")
+		return fmt.Errorf("IAC_BOOTSTRAP_HOST_IP missing — `task infra:up` should have written it to BWS")
 	}
-	email := mustEnv("INFRA_OPENOBSERVE_ROOT_USER_EMAIL")
-	password := mustEnv("AUTOGEN_INFRA_OPENOBSERVE_ROOT_USER_PASSWORD")
+	email := mustEnv("IAC_BOOTSTRAP_OPENOBSERVE_ROOT_USER_EMAIL")
+	password := mustEnv("IAC_OPENOBSERVE_ROOT_USER_PASSWORD")
 
 	org := envOr("OO_ORG", "default")
 	folder := envOr("OO_FOLDER", "default")

@@ -40,7 +40,7 @@ const (
 // API error occurred") on our token's account that survive 30+s of
 // retry; `/zones` is served by a different CF backend and stays
 // healthy. Any token that touches DNS / Workers Routes / R2 custom
-// domains has zone scope — true for INFRA_CLOUDFLARE_API_TOKEN — so
+// domains has zone scope — true for IAC_BOOTSTRAP_CLOUDFLARE_API_TOKEN — so
 // this gives the same answer in one call without depending on
 // `/accounts`.
 //
@@ -78,7 +78,7 @@ func AccountID(ctx context.Context, cfToken string) (string, error) {
 // We use this for the pre-destroy bucket-empty step because the per-
 // bucket tokens are typically already gone from state by the time the
 // bucket-delete fails (Tofu destroys leaves first), and the global
-// INFRA_CLOUDFLARE_API_TOKEN is the only credential we can rely on
+// IAC_BOOTSTRAP_CLOUDFLARE_API_TOKEN is the only credential we can rely on
 // being present.
 func R2S3Credentials(ctx context.Context, cfToken string) (accessKey, secretKey string, err error) {
 	id, err := tokenID(ctx, cfToken)

@@ -14,7 +14,7 @@
 // Inputs (env, matches the local-exec environment block):
 //
 //	BWS_PROJECT_ID  iedora-deploy project UUID
-//	BWS_KEY         secret key (e.g. AUTOGEN_INFRA_POSTGRES_PASSWORD)
+//	BWS_KEY         secret key (e.g. IAC_POSTGRES_PASSWORD)
 //	BWS_VALUE       secret value (verbatim — may contain leading `-`,
 //	                newlines, etc; the Go wrapper handles quoting)
 //

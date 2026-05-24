@@ -36,4 +36,4 @@ jobs:
       product: house
     secrets:
       BWS_ACCESS_TOKEN: ${{ secrets.BWS_ACCESS_TOKEN }}
-      INFRA_SSH_PRIVATE_KEY: ${{ secrets.INFRA_SSH_PRIVATE_KEY }}
+      IAC_BOOTSTRAP_SSH_PRIVATE_KEY: ${{ secrets.IAC_BOOTSTRAP_SSH_PRIVATE_KEY }}

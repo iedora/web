@@ -413,7 +413,7 @@ func reconcilePAT(ctx context.Context, c *client, s *State, cfg Config) error {
 			return fmt.Errorf("delete stale PAT %s: %w", existingPATs[0], err)
 		}
 		s.recreatedMessages = append(s.recreatedMessages,
-			"PAT was recreated (store lacked INFRA_ZITADEL_MENU_SA_TOKEN — old PAT invalidated). Restart menu container to pick up the new token.")
+			"PAT was recreated (store lacked APP_ZITADEL_MENU_SA_TOKEN — old PAT invalidated). Restart menu container to pick up the new token.")
 		return createPATAndStore(ctx, c, s, cfg)
 	case hasBWS && !hasZitadel:
 		// Zitadel was wiped underneath us. Drop the stale store key and
@@ -703,7 +703,7 @@ func reconcileOIDCApp(ctx context.Context, c *client, s *State, cfg Config) erro
 		}
 		s.OIDCClientSecret = secret
 		s.recreatedMessages = append(s.recreatedMessages,
-			"OIDC client_secret was regenerated (store lacked INFRA_ZITADEL_MENU_OIDC_CLIENT_SECRET — restart menu container)")
+			"OIDC client_secret was regenerated (store lacked APP_ZITADEL_MENU_OIDC_CLIENT_SECRET — restart menu container)")
 		return cfg.Store.Write(ctx, bwsKeyOIDCClientSecret, secret)
 	}
 	return nil

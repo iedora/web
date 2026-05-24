@@ -115,12 +115,12 @@ const menuSAPATExpiry = "2099-01-01T00:00:00Z"
 // `infra/cmd/with-secrets/env.go` aliases.
 
 const (
-	bwsKeyOIDCClientID         = "INFRA_ZITADEL_MENU_OIDC_CLIENT_ID"
-	bwsKeyOIDCClientSecret     = "INFRA_ZITADEL_MENU_OIDC_CLIENT_SECRET"
-	bwsKeyMenuSAToken          = "INFRA_ZITADEL_MENU_SA_TOKEN"
-	bwsKeyPermissionsSigningKey = "INFRA_ZITADEL_PERMISSIONS_SIGNING_KEY"
-	bwsKeyGrantsSigningKey     = "INFRA_ZITADEL_GRANTS_SIGNING_KEY"
-	bwsKeyProjectID            = "INFRA_ZITADEL_IEDORA_PROJECT_ID"
+	bwsKeyOIDCClientID         = "APP_ZITADEL_MENU_OIDC_CLIENT_ID"
+	bwsKeyOIDCClientSecret     = "APP_ZITADEL_MENU_OIDC_CLIENT_SECRET"
+	bwsKeyMenuSAToken          = "APP_ZITADEL_MENU_SA_TOKEN"
+	bwsKeyPermissionsSigningKey = "APP_ZITADEL_PERMISSIONS_SIGNING_KEY"
+	bwsKeyGrantsSigningKey     = "APP_ZITADEL_GRANTS_SIGNING_KEY"
+	bwsKeyProjectID            = "APP_ZITADEL_IEDORA_PROJECT_ID"
 )
 
 // allBWSKeys is the destroy-time scrub list (also referenced by

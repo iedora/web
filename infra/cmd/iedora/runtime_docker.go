@@ -123,7 +123,7 @@ func (d *dockerOnHetzner) Deploy(ctx context.Context) error {
 	// `docker login` first — same rationale as menu-db-migrations:
 	// kreuzwerker/docker's registry_auth only applies to Tofu-driven
 	// `docker_image` resources, not ad-hoc SSH+docker pulls.
-	if ghcrToken := os.Getenv("INFRA_GHCR_TOKEN"); ghcrToken != "" {
+	if ghcrToken := os.Getenv("IAC_BOOTSTRAP_GHCR_TOKEN"); ghcrToken != "" {
 		// GHCR owner is the org/user part of the image repo (ghcr.io/<owner>/<repo>).
 		// Extract for the docker login `-u <owner>`.
 		owner := ghcrOwnerFromImageRepo(d.imageRepo)
