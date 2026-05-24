@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"time"
-
-	"github.com/eduvhc/iedora/infra/internal/bws"
 )
 
 // Reconcile runs the full app-state reconcile against the live Zitadel.
@@ -18,14 +16,20 @@ import (
 // Failure modes are explicit per resource — see the per-reconcile-fn
 // docs for the (bws-has, zitadel-has) recovery branches.
 type Config struct {
-	BaseURL          string   // "https://auth.iedora.com" or "http://localhost:8080"
-	SAKeyJSON        string   // FirstInstance-minted SA key
-	MenuHostname     string   // for action target endpoint URLs
-	AdminEmails      []string // emails to grant iedora-admin to
-	BWSProjectID     string
-	SSHHost          string // Hetzner IPv4 for the menu DNS probe; empty in dev (no SSH target)
-	GrantsOnly       bool   // if true, skip full reconcile and only run admin grant pass
-	MenuDNSBudget    time.Duration
+	BaseURL       string   // "https://auth.iedora.com" or "http://localhost:8080"
+	SAKeyJSON     string   // FirstInstance-minted SA key
+	MenuHostname  string   // for action target endpoint URLs
+	AdminEmails   []string // emails to grant iedora-admin to
+	SSHHost       string   // Hetzner IPv4 for the menu DNS probe; empty in dev (no SSH target)
+	GrantsOnly    bool     // if true, skip full reconcile and only run admin grant pass
+	MenuDNSBudget time.Duration
+
+	// Store is where reconciled values (PAT, signing keys, OIDC creds,
+	// project id) are persisted + looked up on subsequent runs. Two
+	// implementations live in store.go:
+	//   - bwsStore   prod default
+	//   - memoryStore dev / `--no-bws` mode (optionally serialises to JSON)
+	Store secretStore
 }
 
 // State accumulates the IDs + one-shot secret values produced across the
@@ -79,12 +83,12 @@ func Reconcile(ctx context.Context, c *client, cfg Config) (*State, error) {
 		{"project-roles", func() error { return reconcileProjectRoles(ctx, c, s) }},
 		{"machine-user", func() error { return reconcileMachineUser(ctx, c, s) }},
 		{"iam-owner-grant", func() error { return reconcileIAMOwner(ctx, c, s) }},
-		{"pat", func() error { return reconcilePAT(ctx, c, s, cfg.BWSProjectID) }},
+		{"pat", func() error { return reconcilePAT(ctx, c, s, cfg) }},
 		{"menu-dns-wait", func() error { return waitForMenuDNS(ctx, cfg.SSHHost, cfg.MenuDNSBudget) }},
 		{"action-targets", func() error { return reconcileActionTargets(ctx, c, s, cfg) }},
 		{"action-executions", func() error { return reconcileExecutions(ctx, c, s) }},
 		{"oidc-app", func() error { return reconcileOIDCApp(ctx, c, s, cfg) }},
-		{"bws-outputs", func() error { return writeBWSOutputs(ctx, cfg.BWSProjectID, s) }},
+		{"persist-outputs", func() error { return writeOutputs(ctx, cfg.Store, s) }},
 		{"admin-grants", func() error { return reconcileAdminGrants(ctx, c, s, cfg.AdminEmails) }},
 	}
 	for _, step := range steps {
@@ -369,9 +373,9 @@ func reconcileIAMOwner(ctx context.Context, c *client, s *State) error {
 
 // ── PAT ──────────────────────────────────────────────────────────────────────
 
-func reconcilePAT(ctx context.Context, c *client, s *State, bwsProjectID string) error {
-	// Discover BWS state + Zitadel state.
-	bwsTok, hasBWS, err := bwsRead(ctx, bwsProjectID, bwsKeyMenuSAToken)
+func reconcilePAT(ctx context.Context, c *client, s *State, cfg Config) error {
+	// Discover store state + Zitadel state.
+	bwsTok, hasBWS, err := cfg.Store.Read(ctx, bwsKeyMenuSAToken)
 	if err != nil {
 		return err
 	}
@@ -382,7 +386,7 @@ func reconcilePAT(ctx context.Context, c *client, s *State, bwsProjectID string)
 
 	// Concurrent-operator guard: a single PAT is normal; >1 means a prior
 	// run crashed mid-create or two operators raced. We can't tell which
-	// is the BWS-recorded one (PATs don't carry a tag), so bail loudly
+	// is the store-recorded one (PATs don't carry a tag), so bail loudly
 	// instead of silently deleting the wrong one.
 	if len(existingPATs) > 1 {
 		return fmt.Errorf("found %d PATs on machine user %q (expected 0 or 1) — operator must reconcile manually via Zitadel UI before re-running", len(existingPATs), menuSAUsername)
@@ -392,38 +396,37 @@ func reconcilePAT(ctx context.Context, c *client, s *State, bwsProjectID string)
 
 	switch {
 	case !hasBWS && !hasZitadel:
-		// Cold create.
-		return createPATAndStore(ctx, c, s, bwsProjectID)
+		return createPATAndStore(ctx, c, s, cfg)
 	case hasBWS && hasZitadel:
-		// Trust BWS. We can't verify "the BWS token matches this PAT id"
-		// without an introspection endpoint that doesn't echo the token,
-		// so we just record the existing PAT id + token.
+		// Trust the store. We can't verify "the stored token matches this
+		// PAT id" without an introspection endpoint that doesn't echo the
+		// token, so we just record the existing PAT id + token.
 		s.PATID = existingPATs[0]
 		s.PATToken = bwsTok
 		return nil
 	case !hasBWS && hasZitadel:
-		// One-shot reveal was lost. Delete + recreate. Surfaces a loud
-		// warning at the end of the run.
+		// One-shot reveal was lost. Delete + recreate. Loud warning at
+		// the end of the run.
 		if err := c.doJSON(ctx, http.MethodDelete,
 			"/management/v1/users/"+s.MachineUserID+"/pats/"+existingPATs[0],
 			nil, nil, requestOpts{orgID: s.OrgID}); err != nil {
 			return fmt.Errorf("delete stale PAT %s: %w", existingPATs[0], err)
 		}
 		s.recreatedMessages = append(s.recreatedMessages,
-			"PAT was recreated (BWS lacked INFRA_ZITADEL_MENU_SA_TOKEN — old PAT invalidated). Restart menu container to pick up the new token.")
-		return createPATAndStore(ctx, c, s, bwsProjectID)
+			"PAT was recreated (store lacked INFRA_ZITADEL_MENU_SA_TOKEN — old PAT invalidated). Restart menu container to pick up the new token.")
+		return createPATAndStore(ctx, c, s, cfg)
 	case hasBWS && !hasZitadel:
-		// Zitadel was wiped underneath us. Drop the stale BWS key and
+		// Zitadel was wiped underneath us. Drop the stale store key and
 		// mint a new one.
-		_ = bws.Delete(ctx, bwsProjectID, bwsKeyMenuSAToken)
+		_ = cfg.Store.Delete(ctx, bwsKeyMenuSAToken)
 		s.recreatedMessages = append(s.recreatedMessages,
-			"PAT was created from scratch (Zitadel had no PAT but BWS had a stale token).")
-		return createPATAndStore(ctx, c, s, bwsProjectID)
+			"PAT was created from scratch (Zitadel had no PAT but store had a stale token).")
+		return createPATAndStore(ctx, c, s, cfg)
 	}
 	return nil
 }
 
-func createPATAndStore(ctx context.Context, c *client, s *State, bwsProjectID string) error {
+func createPATAndStore(ctx context.Context, c *client, s *State, cfg Config) error {
 	var resp struct {
 		ID    string `json:"id"`
 		Token string `json:"token"`
@@ -440,9 +443,9 @@ func createPATAndStore(ctx context.Context, c *client, s *State, bwsProjectID st
 	s.PATID = resp.ID
 	s.PATToken = resp.Token
 	// Immediate write-through — a crash after this point leaves a
-	// recoverable token in BWS, not an orphan.
-	if err := bws.Upsert(ctx, bwsProjectID, bwsKeyMenuSAToken, resp.Token); err != nil {
-		return fmt.Errorf("bws upsert %s: %w", bwsKeyMenuSAToken, err)
+	// recoverable token in the store, not an orphan.
+	if err := cfg.Store.Write(ctx, bwsKeyMenuSAToken, resp.Token); err != nil {
+		return fmt.Errorf("store write %s: %w", bwsKeyMenuSAToken, err)
 	}
 	return nil
 }
@@ -489,7 +492,7 @@ func reconcileActionTargets(ctx context.Context, c *client, s *State, cfg Config
 func reconcileOneTarget(ctx context.Context, c *client, s *State, cfg Config,
 	name, path string, idOut, signingKeyOut *string, bwsKey string) error {
 
-	bwsVal, hasBWS, err := bwsRead(ctx, cfg.BWSProjectID, bwsKey)
+	bwsVal, hasBWS, err := cfg.Store.Read(ctx, bwsKey)
 	if err != nil {
 		return err
 	}
@@ -501,10 +504,8 @@ func reconcileOneTarget(ctx context.Context, c *client, s *State, cfg Config,
 
 	switch {
 	case existing == "" && !hasBWS:
-		// Cold create.
-		return createTargetAndStore(ctx, c, name, endpoint, idOut, signingKeyOut, bwsKey, cfg.BWSProjectID)
+		return createTargetAndStore(ctx, c, cfg, name, endpoint, idOut, signingKeyOut, bwsKey)
 	case existing != "" && hasBWS:
-		// Trust BWS. Update fields in case endpoint/timeout drifted.
 		_ = c.doJSON(ctx, http.MethodPatch, "/resources/v3alpha/targets/"+existing,
 			targetBody(name, endpoint), nil, requestOpts{})
 		*idOut = existing
@@ -518,14 +519,13 @@ func reconcileOneTarget(ctx context.Context, c *client, s *State, cfg Config,
 			return fmt.Errorf("delete stale target %s: %w", existing, err)
 		}
 		s.recreatedMessages = append(s.recreatedMessages,
-			fmt.Sprintf("target %s was recreated (BWS lacked %s — bindings rebuilt)", name, bwsKey))
-		return createTargetAndStore(ctx, c, name, endpoint, idOut, signingKeyOut, bwsKey, cfg.BWSProjectID)
+			fmt.Sprintf("target %s was recreated (store lacked %s — bindings rebuilt)", name, bwsKey))
+		return createTargetAndStore(ctx, c, cfg, name, endpoint, idOut, signingKeyOut, bwsKey)
 	case existing == "" && hasBWS:
-		// Zitadel-side wipe. Drop stale BWS, recreate.
-		_ = bws.Delete(ctx, cfg.BWSProjectID, bwsKey)
+		_ = cfg.Store.Delete(ctx, bwsKey)
 		s.recreatedMessages = append(s.recreatedMessages,
-			fmt.Sprintf("target %s was created from scratch (Zitadel had no target but BWS had a stale key)", name))
-		return createTargetAndStore(ctx, c, name, endpoint, idOut, signingKeyOut, bwsKey, cfg.BWSProjectID)
+			fmt.Sprintf("target %s was created from scratch (Zitadel had no target but store had a stale key)", name))
+		return createTargetAndStore(ctx, c, cfg, name, endpoint, idOut, signingKeyOut, bwsKey)
 	}
 	return nil
 }
@@ -541,8 +541,8 @@ func targetBody(name, endpoint string) map[string]any {
 	}
 }
 
-func createTargetAndStore(ctx context.Context, c *client, name, endpoint string,
-	idOut, signingKeyOut *string, bwsKey, bwsProjectID string) error {
+func createTargetAndStore(ctx context.Context, c *client, cfg Config,
+	name, endpoint string, idOut, signingKeyOut *string, bwsKey string) error {
 	var resp struct {
 		ID         string `json:"id"`
 		SigningKey string `json:"signingKey"`
@@ -556,8 +556,8 @@ func createTargetAndStore(ctx context.Context, c *client, name, endpoint string,
 	}
 	*idOut = resp.ID
 	*signingKeyOut = resp.SigningKey
-	if err := bws.Upsert(ctx, bwsProjectID, bwsKey, resp.SigningKey); err != nil {
-		return fmt.Errorf("bws upsert %s: %w", bwsKey, err)
+	if err := cfg.Store.Write(ctx, bwsKey, resp.SigningKey); err != nil {
+		return fmt.Errorf("store write %s: %w", bwsKey, err)
 	}
 	return nil
 }
@@ -634,11 +634,11 @@ func setEventExecution(ctx context.Context, c *client, event, targetID string) e
 // ── OIDC app ─────────────────────────────────────────────────────────────────
 
 func reconcileOIDCApp(ctx context.Context, c *client, s *State, cfg Config) error {
-	bwsID, hasBWSID, err := bwsRead(ctx, cfg.BWSProjectID, bwsKeyOIDCClientID)
+	storedID, hasStoredID, err := cfg.Store.Read(ctx, bwsKeyOIDCClientID)
 	if err != nil {
 		return err
 	}
-	_, hasBWSSecret, err := bwsRead(ctx, cfg.BWSProjectID, bwsKeyOIDCClientSecret)
+	_, hasStoredSecret, err := cfg.Store.Read(ctx, bwsKeyOIDCClientSecret)
 	if err != nil {
 		return err
 	}
@@ -656,10 +656,10 @@ func reconcileOIDCApp(ctx context.Context, c *client, s *State, cfg Config) erro
 		s.OIDCAppID = appID
 		s.OIDCClientID = clientID
 		s.OIDCClientSecret = clientSecret
-		if err := bws.Upsert(ctx, cfg.BWSProjectID, bwsKeyOIDCClientID, clientID); err != nil {
+		if err := cfg.Store.Write(ctx, bwsKeyOIDCClientID, clientID); err != nil {
 			return err
 		}
-		return bws.Upsert(ctx, cfg.BWSProjectID, bwsKeyOIDCClientSecret, clientSecret)
+		return cfg.Store.Write(ctx, bwsKeyOIDCClientSecret, clientSecret)
 	}
 
 	s.OIDCAppID = existingAppID
@@ -670,25 +670,25 @@ func reconcileOIDCApp(ctx context.Context, c *client, s *State, cfg Config) erro
 		return err
 	}
 
-	// client_id flowed through; ensure BWS matches.
-	if !hasBWSID || bwsID != existingClientID {
-		if err := bws.Upsert(ctx, cfg.BWSProjectID, bwsKeyOIDCClientID, existingClientID); err != nil {
+	// client_id flowed through; ensure store matches.
+	if !hasStoredID || storedID != existingClientID {
+		if err := cfg.Store.Write(ctx, bwsKeyOIDCClientID, existingClientID); err != nil {
 			return err
 		}
 	}
 
-	// client_secret: regenerate if BWS is missing it. Zitadel exposes
+	// client_secret: regenerate if store is missing it. Zitadel exposes
 	// `POST .../secret` which returns a fresh secret each call — that's
-	// our recovery path for "BWS was wiped but app still exists".
-	if !hasBWSSecret {
+	// our recovery path for "store was wiped but app still exists".
+	if !hasStoredSecret {
 		secret, err := regenerateOIDCSecret(ctx, c, s)
 		if err != nil {
 			return fmt.Errorf("regenerate OIDC secret: %w", err)
 		}
 		s.OIDCClientSecret = secret
 		s.recreatedMessages = append(s.recreatedMessages,
-			"OIDC client_secret was regenerated (BWS lacked INFRA_ZITADEL_MENU_OIDC_CLIENT_SECRET — restart menu container)")
-		return bws.Upsert(ctx, cfg.BWSProjectID, bwsKeyOIDCClientSecret, secret)
+			"OIDC client_secret was regenerated (store lacked INFRA_ZITADEL_MENU_OIDC_CLIENT_SECRET — restart menu container)")
+		return cfg.Store.Write(ctx, bwsKeyOIDCClientSecret, secret)
 	}
 	return nil
 }
@@ -792,16 +792,16 @@ func findAppByName(ctx context.Context, c *client, orgID, projectID, name string
 	return "", "", nil
 }
 
-// ── BWS write-back ───────────────────────────────────────────────────────────
+// ── Store write-back ─────────────────────────────────────────────────────────
 
-func writeBWSOutputs(ctx context.Context, projectID string, s *State) error {
+func writeOutputs(ctx context.Context, store secretStore, s *State) error {
 	// PAT + signing keys are already written immediately on create. This
 	// step writes the remaining outputs that are safe to defer (they're
 	// derivable on next run if lost):
-	//   - OIDC client_id (visible via search even after BWS wipe)
+	//   - OIDC client_id (visible via search even after a wipe)
 	//   - iedora project ID (visible via search)
-	// And re-asserts client_secret + signing keys in case they were
-	// rotated mid-run and the immediate write got interrupted.
+	// And re-asserts client_secret in case the cold-create path wrote
+	// stale state mid-run.
 	upserts := []struct {
 		key string
 		val string
@@ -816,8 +816,8 @@ func writeBWSOutputs(ctx context.Context, projectID string, s *State) error {
 		}{bwsKeyOIDCClientSecret, s.OIDCClientSecret})
 	}
 	for _, u := range upserts {
-		if err := bws.Upsert(ctx, projectID, u.key, u.val); err != nil {
-			return fmt.Errorf("bws upsert %s: %w", u.key, err)
+		if err := store.Write(ctx, u.key, u.val); err != nil {
+			return fmt.Errorf("store write %s: %w", u.key, err)
 		}
 	}
 	return nil
@@ -900,17 +900,6 @@ func grant(ctx context.Context, c *client, s *State, userID string) (string, err
 		return "already", nil
 	}
 	return "", err
-}
-
-// ── BWS helpers ──────────────────────────────────────────────────────────────
-
-func bwsRead(ctx context.Context, projectID, key string) (string, bool, error) {
-	secrets, err := bws.ListSecrets(ctx, projectID)
-	if err != nil {
-		return "", false, fmt.Errorf("bws list: %w", err)
-	}
-	_, val, found := bws.Find(secrets, key)
-	return val, found, nil
 }
 
 // ── Small utils ──────────────────────────────────────────────────────────────

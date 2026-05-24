@@ -47,45 +47,42 @@ func resetMenuDB() {
 }
 
 // resetZitadelDB tears Zitadel's state down to FirstInstance-fresh:
-// stop the containers, drop the DB, wipe the bootstrap key file, then
-// state-rm every zitadel_* resource and re-run applyDevStack. The next
-// FirstInstance regenerates a new admin SA key on the bootstrap volume,
-// and Pass 4 (seed) imports the org/project/PAT against it. Equivalent
-// to the old `just infra::zitadel-rebootstrap` recipe, scoped to dev.
+// stop the containers, drop the DB, wipe the bootstrap key file +
+// outputs.json (so zitadel-apply mints fresh PAT + signing keys against
+// the rebootstrapped instance), then re-apply.
 //
-// This is heavier than the menu reset — ~30s end-to-end — because we
-// can't avoid the FirstInstance migration on a fresh DB. There's no
-// faster path: Zitadel's projection tables are encrypted with the
-// masterkey and re-keying mid-flight is unsupported.
+// Heavier than the menu reset — ~30s end-to-end — because FirstInstance
+// re-runs on a fresh DB. There's no faster path: Zitadel's projection
+// tables are encrypted with the masterkey and re-keying mid-flight is
+// unsupported.
 func resetZitadelDB(repoRoot, devTofuDir string) {
 	requirePostgresRunning()
 
-	stepOf(1, 5, "stop infra-zitadel{,-login} containers")
+	stepOf(1, 4, "stop infra-zitadel{,-login} containers")
 	runQuiet("", "docker", "rm", "-f", "infra-zitadel", "infra-zitadel-login")
 
-	stepOf(2, 5, "DROP + CREATE zitadel database")
+	stepOf(2, 4, "DROP + CREATE zitadel database")
 	runIn("", "docker", "exec", "infra-postgres",
 		"psql", "-U", "postgres", "-c", "DROP DATABASE IF EXISTS zitadel WITH (FORCE); CREATE DATABASE zitadel;")
 
-	stepOf(3, 5, "wipe FirstInstance SA key on bootstrap dir")
-	bootstrapDir := filepath.Join(repoRoot, "infra/dev/.zitadel-bootstrap")
+	stepOf(3, 4, "wipe FirstInstance SA key + outputs.json")
 	saKeyPath := filepath.Join(repoRoot, zitadelSAKeyPathRel)
-	if err := os.Remove(saKeyPath); err != nil && !os.IsNotExist(err) {
-		warn("remove %s: %v (continuing)", saKeyPath, err)
+	outputsPath := filepath.Join(repoRoot, zitadelOutputsPathRel)
+	for _, p := range []string{saKeyPath, outputsPath} {
+		if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
+			warn("remove %s: %v (continuing)", p, err)
+		}
 	}
 	// Also drop the Docker named volume so its perms reset cleanly. The
 	// next apply re-creates it via the `zitadel_bootstrap_chmod` resource.
 	runQuiet("", "docker", "volume", "rm", "zitadel-bootstrap")
-	_ = bootstrapDir // path is the repo-side mirror, kept for future use
 
-	stepOf(4, 5, "state-rm every zitadel_* resource")
-	stateRmDevZitadel(devTofuDir)
-
-	stepOf(5, 5, "re-apply (FirstInstance regenerates SA key + seed lands resources)")
-	// Re-use the same selection logic as a normal `just dev` — everything
-	// the operator had up stays up; Zitadel comes back cold.
-	applyDevStack(defaultSelection(), repoRoot, devTofuDir)
-	fmt.Printf("%s zitadel rebootstrapped. iedora org/project/PAT re-imported declaratively.\n", logPrefix)
+	stepOf(4, 4, "re-apply (FirstInstance regenerates SA key + zitadel-apply reconciles fresh)")
+	saKeyPath2 := filepath.Join(repoRoot, zitadelSAKeyPathRel)
+	outputsPath2 := filepath.Join(repoRoot, zitadelOutputsPathRel)
+	zitadelApplyBin := filepath.Join(repoRoot, zitadelApplyBinRel)
+	applyDevStack(defaultSelection(), devTofuDir, saKeyPath2, outputsPath2, zitadelApplyBin)
+	fmt.Printf("%s zitadel rebootstrapped. iedora org/project/PAT re-applied via bin/zitadel-apply.\n", logPrefix)
 }
 
 // requirePostgresRunning bails early if infra-postgres isn't up. Both

@@ -354,525 +354,63 @@ module "house" {
   }
 }
 
-# ── Zitadel seed (project + OIDC app + menu env files) ──────────────────────
-# Two-phase: the first `tofu apply` runs with zitadel_jwt_profile="" —
-# just brings the containers up. FirstInstance writes the JSON RSA key
-# for `zitadel-admin-sa` to the bind-mount, dev.go reads it, and the
-# second `tofu apply` runs with the JSON set (via TF_VAR env to avoid
-# shell-escaping the multi-line JSON), which gates these resources via
-# `local.seed_active`. Same shape as prod's infra/tofu/zitadel.tf.
-
-variable "zitadel_jwt_profile" {
-  description = "JWT-profile JSON for `zitadel-admin-sa`. dev.go captures it from infra/dev/.zitadel-bootstrap/zitadel-admin-sa.json after the first apply. Pass empty on the first apply."
-  type        = string
-  default     = ""
-  sensitive   = true
-}
-
-locals {
-  # `nonsensitive` is safe here — we're only checking PRESENCE (length
-  # > 0), not the JSON's content. Without it, every for_each / count
-  # gating on `seed_active` would taint as sensitive.
-  seed_active = var.enable_zitadel && nonsensitive(length(var.zitadel_jwt_profile)) > 0
-}
-
-provider "zitadel" {
-  domain   = "localhost"
-  port     = "8080"
-  insecure = true
-  # Provider.Configure() runs at plan time regardless of resource count.
-  # Empty `jwt_profile_json` fails the "one auth method" check. During
-  # bootstrap we pass a placeholder access_token (any non-empty string)
-  # to satisfy that check; it's never used because every zitadel_*
-  # resource gates on `local.seed_active`. Same pattern as prod.
-  access_token     = local.seed_active ? null : "placeholder-never-used"
-  jwt_profile_json = local.seed_active ? var.zitadel_jwt_profile : null
-}
-
-data "zitadel_orgs" "iedora" {
-  name        = "iedora"
-  name_method = "TEXT_QUERY_METHOD_EQUALS"
-
-  lifecycle {
-    enabled = local.seed_active
-  }
-}
-
-import {
-  for_each = local.seed_active ? toset(["iedora"]) : toset([])
-  to       = zitadel_org.iedora
-  id       = tolist(data.zitadel_orgs.iedora.ids)[0]
-}
-
-resource "zitadel_org" "iedora" {
-  name       = "iedora"
-  is_default = true
-
-  lifecycle {
-    enabled = local.seed_active
-  }
-}
-
-resource "zitadel_project" "iedora" {
-  name                   = "iedora"
-  org_id                 = zitadel_org.iedora.id
-  project_role_assertion = true
-
-  lifecycle {
-    enabled = local.seed_active
-  }
-}
-
-resource "zitadel_application_oidc" "menu" {
-  org_id     = zitadel_org.iedora.id
-  project_id = zitadel_project.iedora.id
-  name       = "menu"
-
-  redirect_uris             = ["http://localhost:3000/api/auth/callback"]
-  post_logout_redirect_uris = ["http://localhost:3000/"]
-  response_types            = ["OIDC_RESPONSE_TYPE_CODE"]
-  grant_types               = ["OIDC_GRANT_TYPE_AUTHORIZATION_CODE", "OIDC_GRANT_TYPE_REFRESH_TOKEN"]
-  app_type                  = "OIDC_APP_TYPE_WEB"
-  auth_method_type          = "OIDC_AUTH_METHOD_TYPE_BASIC"
-  version                   = "OIDC_VERSION_1_0"
-  access_token_type         = "OIDC_TOKEN_TYPE_JWT"
-  dev_mode                  = true
-
-  access_token_role_assertion = true
-  id_token_role_assertion     = true
-  id_token_userinfo_assertion = true
-
-  login_version {
-    login_v2 {
-      base_uri = "http://localhost:3001/ui/v2/login"
-    }
-  }
-
-  lifecycle {
-    enabled = local.seed_active
-  }
-}
-
-# ── iedora-admin role + grants ──────────────────────────────────────────────
-# Mirrors prod's infra/tofu/zitadel.tf. Declarative cross-product staff role
-# defined on the iedora project; grants resolved at plan time by the Go
-# helper at infra/cmd/zitadel-lookup-users.
+# ── Outputs (consumed by infra/cmd/dev to compose menu env) ─────────────────
+# Stage 3 (bin/zitadel-apply against localhost:8080) writes Zitadel-side
+# values to infra/dev/.zitadel-bootstrap/outputs.json. The dev orchestrator
+# composes products/menu/.env + .env.local by merging this JSON with the
+# Tofu outputs below — static literals (URLs, S3 endpoint) plus the dev
+# postgres password.
 #
-# Unresolved emails (user hasn't signed in yet) are silently skipped — they
-# land on the next apply after Zitadel auto-provisions the user via OIDC.
+# Why outputs over inlined locals in the orchestrator: keeps Tofu as the
+# single source of truth for any value that lives in Tofu state. The dev
+# orchestrator stays a thin composition layer.
 
-variable "iedora_admin_emails" {
-  description = <<-EOT
-    Emails granted the iedora-admin Zitadel project role on every `just dev`.
-    User must have signed in via menu locally at least once before they
-    resolve — Zitadel auto-provisions on first OIDC login.
-  EOT
-  type        = list(string)
-  default     = ["dev@iedora.local"]
-}
-
-resource "zitadel_project_role" "iedora_admin" {
-  org_id       = zitadel_org.iedora.id
-  project_id   = zitadel_project.iedora.id
-  role_key     = "iedora-admin"
-  display_name = "Iedora Admin"
-  group        = "iedora"
-
-  lifecycle {
-    enabled = local.seed_active
-  }
-}
-
-resource "null_resource" "iedora_admin_grants" {
-  count = local.seed_active ? 1 : 0
-
-  triggers = {
-    emails  = join(",", var.iedora_admin_emails)
-    role_id = zitadel_project_role.iedora_admin.id
-  }
-
-  provisioner "local-exec" {
-    command = "${path.module}/../../bin/zitadel-grant"
-    environment = {
-      # Local Zitadel runs plaintext on :8080 — the helper routes via
-      # http:// instead of https://.
-      ZG_HOSTNAME   = "localhost:8080"
-      ZG_SCHEME     = "http"
-      ZG_TOKEN      = zitadel_personal_access_token.menu_sa.token
-      ZG_ORG_ID     = zitadel_org.iedora.id
-      ZG_PROJECT_ID = zitadel_project.iedora.id
-      ZG_ROLE_KEY   = zitadel_project_role.iedora_admin.role_key
-      ZG_EMAILS     = jsonencode(var.iedora_admin_emails)
-    }
-  }
-}
-
-# ── Atomic permission roles + Actions v2 webhook (mirrors prod) ──────────────
-# See prod's infra/tofu/zitadel.tf for the full rationale.
-
-resource "zitadel_project_role" "qr_codes_read" {
-  org_id       = zitadel_org.iedora.id
-  project_id   = zitadel_project.iedora.id
-  role_key     = "qr-codes:read"
-  display_name = "QR codes — read"
-  group        = "qr-codes"
-
-  lifecycle {
-    enabled = local.seed_active
-  }
-}
-
-resource "zitadel_project_role" "qr_codes_write" {
-  org_id       = zitadel_org.iedora.id
-  project_id   = zitadel_project.iedora.id
-  role_key     = "qr-codes:write"
-  display_name = "QR codes — create"
-  group        = "qr-codes"
-
-  lifecycle {
-    enabled = local.seed_active
-  }
-}
-
-resource "zitadel_project_role" "qr_codes_update" {
-  org_id       = zitadel_org.iedora.id
-  project_id   = zitadel_project.iedora.id
-  role_key     = "qr-codes:update"
-  display_name = "QR codes — bind / unbind"
-  group        = "qr-codes"
-
-  lifecycle {
-    enabled = local.seed_active
-  }
-}
-
-resource "zitadel_project_role" "qr_codes_delete" {
-  org_id       = zitadel_org.iedora.id
-  project_id   = zitadel_project.iedora.id
-  role_key     = "qr-codes:delete"
-  display_name = "QR codes — delete"
-  group        = "qr-codes"
-
-  lifecycle {
-    enabled = local.seed_active
-  }
-}
-
-# Webhook endpoint. Zitadel runs inside the docker network and reaches
-# the host's menu (whether containerised or `bun run dev`) via
-# `host.docker.internal:3000`. Matches the common dev workflow
-# (host bun dev); when menu runs in container, the host loopback still
-# resolves to the menu container's published port.
-resource "zitadel_action_target" "menu_permissions" {
-  name               = "menu-permissions"
-  endpoint           = "http://host.docker.internal:3000/api/zitadel/permissions"
-  target_type        = "REST_CALL"
-  timeout            = "5s"
-  interrupt_on_error = false
-
-  lifecycle {
-    enabled = local.seed_active
-  }
-}
-
-resource "zitadel_action_execution_function" "menu_permissions_userinfo" {
-  name       = "preuserinfo"
-  target_ids = [zitadel_action_target.menu_permissions.id]
-
-  lifecycle {
-    enabled = local.seed_active
-  }
-}
-
-resource "zitadel_action_execution_function" "menu_permissions_accesstoken" {
-  name       = "preaccesstoken"
-  target_ids = [zitadel_action_target.menu_permissions.id]
-
-  lifecycle {
-    enabled = local.seed_active
-  }
-}
-
-# ── Grants-changed event webhook (Phase 2.5) ─────────────────────────────────
-# Second action target — fires on `user.grant.*` events so menu can refresh
-# the resolved permission set on every active session for the affected user
-# WITHOUT waiting for them to re-auth. The existing menu_permissions target
-# still handles login-time expansion via preuserinfo/preaccesstoken; this
-# target closes the gap for grant changes happening mid-session.
-#
-# Separate target (not piggybacked on menu_permissions) because the payload
-# shape differs — function executions get the auth context, event executions
-# get the event envelope. The signing key is per-target; menu reads them as
-# two distinct env vars.
-resource "zitadel_action_target" "menu_grants" {
-  name        = "menu-grants"
-  endpoint    = "http://host.docker.internal:3000/api/zitadel/grants-changed"
-  target_type = "REST_CALL"
-  timeout     = "5s"
-  # `false` so a slow / down webhook doesn't block grant writes themselves —
-  # menu's session row stays stale at worst, picked up on next login.
-  interrupt_on_error = false
-
-  lifecycle {
-    enabled = local.seed_active
-  }
-}
-
-# Every `user.grant.*` event we care about. Listed individually instead of
-# `all = true` so the trigger surface is auditable from the TF source.
-locals {
-  menu_grant_event_types = toset([
-    "user.grant.added",
-    "user.grant.changed",
-    "user.grant.cascade.changed",
-    "user.grant.removed",
-    "user.grant.cascade.removed",
-    "user.grant.deactivated",
-    "user.grant.reactivated",
-  ])
-}
-
-resource "zitadel_action_execution_event" "menu_grants_events" {
-  for_each = local.seed_active ? local.menu_grant_event_types : toset([])
-
-  event      = each.value
-  target_ids = [zitadel_action_target.menu_grants.id]
-}
-
-# Menu service account — same shape as prod's infra/tofu/zitadel.tf.
-# The `zitadel-admin-sa` JSON key is for TF-provider auth only; the
-# menu app itself runs with a separate PAT under `menu-sa`, scoped
-# IAM_OWNER for org provisioning + membership lookups.
-resource "zitadel_machine_user" "menu_sa" {
-  org_id            = zitadel_org.iedora.id
-  user_name         = "menu-sa"
-  name              = "Menu"
-  description       = "Service account menu uses for org provisioning + membership lookups (#20)."
-  access_token_type = "ACCESS_TOKEN_TYPE_BEARER"
-
-  lifecycle {
-    enabled = local.seed_active
-  }
-}
-
-resource "zitadel_instance_member" "menu_sa_iam_owner" {
-  user_id = zitadel_machine_user.menu_sa.id
-  roles   = ["IAM_OWNER"]
-
-  lifecycle {
-    enabled = local.seed_active
-  }
-}
-
-resource "zitadel_personal_access_token" "menu_sa" {
-  org_id          = zitadel_org.iedora.id
-  user_id         = zitadel_machine_user.menu_sa.id
-  expiration_date = "2099-01-01T00:00:00Z"
-
-  lifecycle {
-    enabled = local.seed_active
-  }
-}
-
-resource "random_password" "menu_session_secret" {
-  length  = 48
-  special = false
-
-  lifecycle {
-    enabled = local.seed_active
-  }
-}
-
-# Shared inputs to both menu_env calls — secrets + identifiers that
-# don't depend on where menu runs (container vs host).
-locals {
-  menu_env_shared = local.seed_active ? {
-    menu_session_secret         = random_password.menu_session_secret.result
-    zitadel_oauth_client_id     = zitadel_application_oidc.menu.client_id
-    zitadel_oauth_client_secret = zitadel_application_oidc.menu.client_secret
-    zitadel_management_token    = zitadel_personal_access_token.menu_sa.token
-    zitadel_action_signing_key  = zitadel_action_target.menu_permissions.signing_key
-    zitadel_grants_signing_key  = zitadel_action_target.menu_grants.signing_key
-    iedora_project_id           = zitadel_project.iedora.id
-    iedora_admin_emails         = join(",", var.iedora_admin_emails)
-    s3_region                   = "us-east-1"
-    s3_access_key               = "test"
-    s3_secret_key               = "test"
-    s3_bucket                   = "iedora-assets"
-    otel_headers                = "Authorization=Basic%20${base64encode("dev@iedora.local:${local.dev_password}")}"
-    # Browser-facing URLs — same in both variants (browser only ever
-    # talks to host-published ports).
-    menu_public_url    = "http://localhost:3000"
-    zitadel_issuer_url = "http://localhost:8080"
-    s3_public_url      = "http://localhost:4566/iedora-assets"
-    } : {
-    menu_session_secret         = ""
-    zitadel_oauth_client_id     = ""
-    zitadel_oauth_client_secret = ""
-    zitadel_management_token    = ""
-    zitadel_action_signing_key  = ""
-    zitadel_grants_signing_key  = ""
-    iedora_project_id           = ""
-    iedora_admin_emails         = ""
-    s3_region                   = ""
-    s3_access_key               = ""
-    s3_secret_key               = ""
-    s3_bucket                   = ""
-    otel_headers                = ""
-    menu_public_url             = ""
-    zitadel_issuer_url          = ""
-    s3_public_url               = ""
-  }
-}
-
-# Variant 1 — runtime env for the menu container. Uses docker-network
-# DNS (`infra-postgres`, `infra-localstack`, `infra-openobserve`) for
-# internal calls. Mirrors prod's `module "menu_env"` call shape.
-module "menu_env_container" {
-  source = "../../modules/menu_env"
-
-  lifecycle {
-    enabled = local.seed_active
-  }
-
-  node_env                    = "production"
-  database_url                = "postgres://postgres:${local.dev_password}@infra-postgres:5432/menu"
-  menu_public_url             = local.menu_env_shared.menu_public_url
-  menu_session_secret         = local.menu_env_shared.menu_session_secret
-  zitadel_issuer_url          = local.menu_env_shared.zitadel_issuer_url
-  zitadel_oauth_client_id     = local.menu_env_shared.zitadel_oauth_client_id
-  zitadel_oauth_client_secret = local.menu_env_shared.zitadel_oauth_client_secret
-  zitadel_management_token    = local.menu_env_shared.zitadel_management_token
-  zitadel_action_signing_key  = local.menu_env_shared.zitadel_action_signing_key
-  zitadel_grants_signing_key  = local.menu_env_shared.zitadel_grants_signing_key
-  iedora_project_id           = local.menu_env_shared.iedora_project_id
-  iedora_admin_emails         = local.menu_env_shared.iedora_admin_emails
-  s3_endpoint                 = "http://infra-localstack:4566"
-  s3_region                   = local.menu_env_shared.s3_region
-  s3_access_key               = local.menu_env_shared.s3_access_key
-  s3_secret_key               = local.menu_env_shared.s3_secret_key
-  s3_bucket                   = local.menu_env_shared.s3_bucket
-  s3_public_url               = local.menu_env_shared.s3_public_url
-  otel_exporter_otlp_endpoint = "http://infra-openobserve:5080/api/default"
-  otel_exporter_otlp_headers  = local.menu_env_shared.otel_headers
-}
-
-# Variant 2 — drives products/menu/.env + .env.local for the opt-out
-# path: `just dev --except menu` + `cd products/menu && bun run dev`.
-# All internal URLs flip to `localhost:<published_port>` because the
-# Next dev server runs on the host (outside the docker network).
-module "menu_env_host" {
-  source = "../../modules/menu_env"
-
-  lifecycle {
-    enabled = local.seed_active
-  }
-
-  node_env                    = "development"
-  database_url                = "postgresql://postgres:${local.dev_password}@localhost:5432/menu"
-  menu_public_url             = local.menu_env_shared.menu_public_url
-  menu_session_secret         = local.menu_env_shared.menu_session_secret
-  zitadel_issuer_url          = local.menu_env_shared.zitadel_issuer_url
-  zitadel_oauth_client_id     = local.menu_env_shared.zitadel_oauth_client_id
-  zitadel_oauth_client_secret = local.menu_env_shared.zitadel_oauth_client_secret
-  zitadel_management_token    = local.menu_env_shared.zitadel_management_token
-  zitadel_action_signing_key  = local.menu_env_shared.zitadel_action_signing_key
-  zitadel_grants_signing_key  = local.menu_env_shared.zitadel_grants_signing_key
-  iedora_project_id           = local.menu_env_shared.iedora_project_id
-  iedora_admin_emails         = local.menu_env_shared.iedora_admin_emails
-  s3_endpoint                 = "http://localhost:4566"
-  s3_region                   = local.menu_env_shared.s3_region
-  s3_access_key               = local.menu_env_shared.s3_access_key
-  s3_secret_key               = local.menu_env_shared.s3_secret_key
-  s3_bucket                   = local.menu_env_shared.s3_bucket
-  s3_public_url               = local.menu_env_shared.s3_public_url
-  otel_exporter_otlp_endpoint = "http://localhost:5080/api/default"
-  otel_exporter_otlp_headers  = local.menu_env_shared.otel_headers
-}
-
-# ── Menu container (build local, mirror of prod's docker_container.menu_web) ──
-
-resource "docker_image" "menu" {
-  name = "iedora-menu:dev"
-  build {
-    context    = local.repo_root
-    dockerfile = "products/menu/Dockerfile"
-  }
-  triggers = {
-    source = local.menu_source_hash
-  }
-  # On REPLACE (source hash changed), TF removes the old image after
-  # building the new one. Without force_remove the operation collides
-  # with `infra-menu-web` still referencing the old image during the
-  # brief window before container recreation — docker daemon refuses
-  # the removal. Force flag bypasses that gate; the container is then
-  # recreated to point at the fresh image_id.
-  force_remove = true
-
-  lifecycle {
-    enabled = var.enable_menu
-  }
-}
-
-resource "docker_container" "menu" {
-  name    = "infra-menu-web"
-  image   = docker_image.menu.image_id
-  restart = "unless-stopped"
-
-  # Same command as prod (infra/tofu/containers.tf::docker_container.menu_web):
-  # migrate then serve. migrate.mjs is idempotent (pg_advisory_lock).
-  command = [
-    "sh",
-    "-c",
-    "node scripts/migrate.mjs && node server.js",
-  ]
-
-  env = module.menu_env_container.env_list
-
-  networks_advanced {
-    name    = docker_network.iedora.name
-    aliases = ["infra-menu-web"]
-  }
-
-  # Browser hits localhost:3000.
-  ports {
-    internal = 3000
-    external = 3000
-  }
-
-  # ZITADEL_ISSUER_URL is `http://localhost:8080` so that the `iss`
-  # claim Zitadel emits matches what browsers see. From inside this
-  # container, `localhost` would point at itself; mapping it to the
-  # host gateway lets the container reach Zitadel via its published
-  # :8080 port. Same trick the zitadel-login container uses.
-  host {
-    host = "localhost"
-    ip   = "host-gateway"
-  }
-
-  log_opts = {
-    max-size = "10m"
-  }
-
-  depends_on = [
-    module.postgres,
-    module.zitadel,
-  ]
-
-  lifecycle {
-    enabled = var.enable_menu && local.seed_active
-  }
-}
-
-# Outputs feed the .env files written by dev.go (host bun-run-dev path).
-output "env_committable_file" {
-  description = "Body of products/menu/.env. Empty before the seed runs (first apply)."
-  value       = local.seed_active ? module.menu_env_host.env_committable_file : ""
+output "menu_database_url_container" {
+  description = "menu DATABASE_URL when menu runs as a container on the iedora docker network."
+  value       = "postgres://postgres:${local.dev_password}@infra-postgres:5432/menu"
   sensitive   = true
 }
 
-output "env_dynamic_file" {
-  description = "Real values for the dynamic keys — printed by dev.go for copy-paste into products/menu/.env.local. Empty before the seed runs."
-  value       = local.seed_active ? module.menu_env_host.env_dynamic_file : ""
+output "menu_database_url_host" {
+  description = "menu DATABASE_URL when menu runs on the host via `bun run dev`."
+  value       = "postgresql://postgres:${local.dev_password}@localhost:5432/menu"
   sensitive   = true
+}
+
+output "menu_public_url" {
+  description = "Public URL the browser hits (host port published by either menu variant)."
+  value       = "http://localhost:3000"
+}
+
+output "zitadel_issuer_url" {
+  description = "OIDC issuer URL for the local Zitadel."
+  value       = "http://localhost:8080"
+}
+
+output "menu_otel_headers" {
+  description = "OTLP Basic-auth header for menu → OpenObserve in dev."
+  value       = "Authorization=Basic%20${base64encode("dev@iedora.local:${local.dev_password}")}"
+  sensitive   = true
+}
+
+output "menu_otel_endpoint_container" {
+  description = "OTLP endpoint when menu runs as a container."
+  value       = "http://infra-openobserve:5080/api/default"
+}
+
+output "menu_otel_endpoint_host" {
+  description = "OTLP endpoint when menu runs on the host."
+  value       = "http://localhost:5080/api/default"
+}
+
+output "menu_s3_endpoint_container" {
+  value = "http://infra-localstack:4566"
+}
+
+output "menu_s3_endpoint_host" {
+  value = "http://localhost:4566"
+}
+
+output "menu_s3_public_url" {
+  value = "http://localhost:4566/iedora-assets"
 }

@@ -1,26 +1,19 @@
-// zitadel-apply — Stage 3 (AppState) for the iedora deploy pipeline.
+// zitadel-apply — Stage 3 (AppState) reconciler.
 //
 // Reconciles the Zitadel application state (org, project, roles, machine
 // user + IAM grant + PAT, OIDC app, action targets + executions, admin
 // grants) against the live Zitadel running on auth.iedora.com (prod) or
-// localhost:8080 (dev). Idempotent — safe to run on every deploy.
+// localhost:8080 (dev). Idempotent.
 //
-// Replaces the `zitadel` Tofu provider previously used in
-// `infra/tofu/zitadel.tf`, removing the multi-pass apply dance (placeholder
-// auth mode, HTTPS_PROXY DNS override, waitForMenuDNS) the provider needed.
+// Auth: FirstInstance-minted SA key (JSON Web Profile, RS256). Reads from
+// INFRA_ZITADEL_SA_KEY_JSON in env.
 //
-// Authenticates with the FirstInstance-minted SA key (JSON Web Profile,
-// RS256). Writes 6 outputs to BWS so the deploy stage can compose the
-// menu container's env:
+// Output channels (pick one via flags):
 //
-//	INFRA_ZITADEL_MENU_OIDC_CLIENT_ID
-//	INFRA_ZITADEL_MENU_OIDC_CLIENT_SECRET
-//	INFRA_ZITADEL_MENU_SA_TOKEN
-//	INFRA_ZITADEL_PERMISSIONS_SIGNING_KEY
-//	INFRA_ZITADEL_GRANTS_SIGNING_KEY
-//	INFRA_ZITADEL_IEDORA_PROJECT_ID
+//   default (no flag)              writes outputs to BWS (prod)
+//   --no-bws --output-file PATH    writes outputs as JSON to PATH (dev)
 //
-// Inputs (env, set by `bin/zitadel-apply` via with-secrets):
+// Inputs (env, set by `bin/with-secrets` for prod or the dev orchestrator):
 //
 //	INFRA_ZITADEL_SA_KEY_JSON  full SA key JSON (the file FirstInstance writes)
 //	ZA_BASE_URL                Zitadel base URL; defaults to https://auth.iedora.com
@@ -31,11 +24,11 @@
 //
 // Flags:
 //
-//	--grants-only              skip full reconcile, only run admin email grants
-//	                           (subsumes the legacy `zitadel-grant` binary).
-//
-// Outcomes per email are printed to stderr (granted / already / skipped).
-// Exit status non-zero only on hard failure.
+//	--grants-only        skip full reconcile, only run admin email grants
+//	--no-bws             skip BWS lookups + writes; use in-memory store
+//	--output-file PATH   when --no-bws, serialise outputs as JSON to PATH
+//	                     (also seeds the store from this path if it exists,
+//	                     so warm dev runs keep stable PAT + signing keys)
 package main
 
 import (
@@ -68,11 +61,13 @@ func run(ctx context.Context, argv []string) error {
 	fs := flag.NewFlagSet("zitadel-apply", flag.ContinueOnError)
 	fs.SetOutput(io.Discard) // we own error formatting
 	grantsOnly := fs.Bool("grants-only", false, "skip full reconcile; only run admin email grants")
+	noBWS := fs.Bool("no-bws", false, "skip BWS lookups + writes; use in-memory store (dev mode)")
+	outputFile := fs.String("output-file", "", "when --no-bws, serialise outputs as JSON to PATH")
 	if err := fs.Parse(argv); err != nil {
 		return err
 	}
 
-	cfg, err := loadConfig(*grantsOnly)
+	cfg, err := loadConfig(*grantsOnly, *noBWS, *outputFile)
 	if err != nil {
 		return err
 	}
@@ -84,7 +79,14 @@ func run(ctx context.Context, argv []string) error {
 
 	state, err := Reconcile(ctx, c, cfg)
 	if err != nil {
+		// Best-effort flush so a partial run still leaves what it did
+		// produce on disk for the operator to inspect.
+		_ = cfg.Store.Flush()
 		return err
+	}
+
+	if err := cfg.Store.Flush(); err != nil {
+		return fmt.Errorf("flush store: %w", err)
 	}
 
 	if !cfg.GrantsOnly {
@@ -95,7 +97,7 @@ func run(ctx context.Context, argv []string) error {
 	return nil
 }
 
-func loadConfig(grantsOnly bool) (Config, error) {
+func loadConfig(grantsOnly, noBWS bool, outputFile string) (Config, error) {
 	cfg := Config{
 		BaseURL:       envOr("ZA_BASE_URL", "https://auth.iedora.com"),
 		MenuHostname:  envOr("ZA_MENU_HOSTNAME", "menu.iedora.com"),
@@ -105,7 +107,7 @@ func loadConfig(grantsOnly bool) (Config, error) {
 	}
 	saKey := os.Getenv("INFRA_ZITADEL_SA_KEY_JSON")
 	if saKey == "" {
-		return cfg, fmt.Errorf("INFRA_ZITADEL_SA_KEY_JSON missing — `bin/with-secrets` should inject it from BWS")
+		return cfg, fmt.Errorf("INFRA_ZITADEL_SA_KEY_JSON missing in env")
 	}
 	cfg.SAKeyJSON = saKey
 
@@ -115,13 +117,30 @@ func loadConfig(grantsOnly bool) (Config, error) {
 	}
 	cfg.AdminEmails = emails
 
-	pid, err := bws.ProjectID(context.Background())
+	store, err := buildStore(noBWS, outputFile)
 	if err != nil {
-		return cfg, fmt.Errorf("resolve BWS project id: %w", err)
+		return cfg, err
 	}
-	cfg.BWSProjectID = pid
+	cfg.Store = store
 
 	return cfg, nil
+}
+
+func buildStore(noBWS bool, outputFile string) (secretStore, error) {
+	if !noBWS {
+		pid, err := bws.ProjectID(context.Background())
+		if err != nil {
+			return nil, fmt.Errorf("resolve BWS project id: %w", err)
+		}
+		return newBWSStore(pid), nil
+	}
+	// Dev mode. Seed from the previous output file (if any) so re-runs
+	// stay stable — same PAT + signing keys across `task dev` cycles.
+	seed, err := loadSeedJSON(outputFile)
+	if err != nil {
+		return nil, fmt.Errorf("read seed %s: %w", outputFile, err)
+	}
+	return newMemoryStore(seed, outputFile), nil
 }
 
 func envOr(key, fallback string) string {

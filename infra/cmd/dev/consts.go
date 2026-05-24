@@ -4,8 +4,8 @@ const (
 	// ── Display ───────────────────────────────────────────────────────────
 
 	logPrefix       = "[dev]"
-	totalSteps      = 4 // apply path
-	destroySteps    = 5 // destroy path (extra state-rm pass for zitadel_*)
+	totalSteps      = 5 // apply path (init + pass1 + wait + zitadel-apply + env compose)
+	destroySteps    = 4 // destroy path (tofu destroy + remove containers + remove network/volumes + wipe)
 	redactThreshold = 32 // chars before redact() truncates with ellipsis
 
 	// ── File paths (relative to repo root) ───────────────────────────────
@@ -15,9 +15,18 @@ const (
 	envFileName      = ".env"
 	envLocalFileName = ".env.local"
 
-	// FirstInstance writes the Zitadel admin SA key here; the second
-	// `tofu apply` pass reads it to authenticate the zitadel provider.
+	// FirstInstance writes the Zitadel admin SA key here; the dev
+	// orchestrator reads it to authenticate bin/zitadel-apply (the
+	// Stage 3 reconciler).
 	zitadelSAKeyPathRel = "infra/dev/.zitadel-bootstrap/zitadel-admin-sa.json"
+
+	// bin/zitadel-apply writes its 6 outputs as a JSON file at this
+	// path (when invoked with --no-bws --output-file). The dev
+	// orchestrator reads it back when composing menu env.
+	zitadelOutputsPathRel = "infra/dev/.zitadel-bootstrap/outputs.json"
+
+	// Path to the zitadel-apply shim relative to repo root.
+	zitadelApplyBinRel = "infra/bin/zitadel-apply"
 
 	// ── Network endpoints (well-known dev hosts) ─────────────────────────
 
@@ -28,13 +37,6 @@ const (
 
 	menuContainerName  = "infra-menu-web"
 	houseContainerName = "infra-house"
-
-	// ── Tofu output names + TF_VAR names ─────────────────────────────────
-
-	outputEnvCommittable = "env_committable_file"
-	outputEnvDynamic     = "env_dynamic_file"
-
-	tfVarZitadelJWT = "TF_VAR_zitadel_jwt_profile"
 
 	// ── .env.local annotation contract ───────────────────────────────────
 
