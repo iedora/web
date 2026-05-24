@@ -1,43 +1,66 @@
 # Deploy failure modes — what they look like, why they happen, how to recover
 
 > Companion to `infra/cmd/iedora/`. Each row is a real failure the
-> deploy or destroy recipe was tripped up by during the brief work
-> (2026-05-21). Knowing the detection signature short-circuits the
-> debug arc next time.
+> deploy / destroy pipeline tripped over. Knowing the detection
+> signature short-circuits the debug arc next time.
 >
 > See also: [`deploy-validation.md`](deploy-validation.md) — the
-> before-you-merge 6-step runbook that proactively catches this class
-> of failure. Most rows below were found by running that sequence.
+> before-you-merge runbook that proactively catches this class of
+> failure.
 
-| Symptom in logs | Root cause | Where it's fixed | If you hit it again |
-|-----------------|------------|------------------|---------------------|
-| `Error: failed to start zitadel client: OpenID Provider Configuration Discovery has failed` during Pass 3 apply | Operator's mDNSResponder has cached NXDOMAIN for `auth.iedora.com` from before the record existed. Pass 2's `curl --resolve` works around it for the readiness probe but the zitadel TF provider uses Go's HTTP/gRPC stack which goes through the system resolver. | Pass 3 now runs with `HTTPS_PROXY=http://127.0.0.1:<port>` pointed at an in-process CONNECT proxy that overrides `auth.iedora.com:443` → the FRESH Hetzner IPv4. See `infra/cmd/iedora/proxy.go`. | Re-run `iedora deploy`. If it still fails: `dig @1.1.1.1 auth.iedora.com` should answer with the current Hetzner IP. If it doesn't, CF DNS hasn't propagated yet — wait 60s and retry. |
-| `Error: ... x509: certificate signed by unknown authority` immediately after Pass 2's "ready after Xs" | Caddy served `/debug/ready` via its internal CA (`CN=Caddy Local Authority`) while ACME was still completing the TLS-ALPN-01 challenge. The old probe accepted the 200 and exited; the TF provider then rejected the cert. | Probe now does a second check via `probeCertIssuer` — the cert's leaf issuer must NOT contain "Caddy Local Authority". See `infra/cmd/iedora/probe.go`. | The probe budget is 6 minutes — if you really hit a 6-minute timeout, `just infra::logs caddy` will show whether ACME is throttled (LE rate limits) or the firewall isn't open on :80 (HTTP-01 fallback). |
-| `Host key verification failed.` from the docker provider on Pass 2 | Hetzner recycled an IPv4 that's still in operator's `~/.ssh/known_hosts` from a prior instance. | Deploy now `ssh-keygen -R`s both the prior IP (read from BWS `INFRA_HOST_IP`) and the current one before Pass 2. Destroy `ssh-keygen -R`s the IP it just killed. | `ssh-keygen -R <ip>` manually if you ever bypass the orchestrator. |
-| "Resource ... is in tainted state" on the second deploy after a failed first | Tofu marked something tainted because a local-exec provisioner errored mid-apply. | The destroy orchestrator now state-rms every `zitadel_*` (and the local-exec `null_resource`s) BEFORE the actual `tofu destroy`, so we never refresh against a half-dead Zitadel. See `infra/cmd/iedora/destroy.go`. | `bin/iedora destroy` is idempotent — re-run it. |
-| `bws secret create` failure complaining the key already exists | BWS doesn't have a true upsert; the old recipe was doing create-then-fail-silently-on-409. | `bwsUpsert` lists first, edits if present, creates if absent. See `infra/cmd/iedora/bws.go`. | `bws secret list` to confirm state; `bws secret delete <id>` to clear; re-deploy. |
-| Pass 1 endlessly re-runs even though the box exists | `tofu output -raw hetzner_ipv4` was used in `if !` form. A missing output exits 0 with a Warning, so the gate never tripped. (Brief pitfall #1.) | The Go orchestrator captures stdout and tests for emptiness — never the exit code. | Don't refactor the deploy flow without re-reading `tofu` doc behaviour. |
-| Pass 2 fails with `Host key verification failed` on the docker provider after a fresh destroy+deploy when Hetzner recycles the same IPv4 to the new VPS | The deploy's old "skip Pass 1 if hetzner_ipv4 output is set" gate was leaky. After a destroy, `tofu output -raw hetzner_ipv4` sometimes still resolved to the prior IP from a plan-time refresh — Pass 1 skipped, known_hosts never rotated for the FRESH box, docker SSH rejected the new host keys. Found 2026-05-21 in round 3 of the bulk test. | Pass 1 is now UNCONDITIONAL (always-run targeted apply). It's idempotent if the box already exists (~3s no-op refresh) and required when it doesn't. Pass 1 then captures the IP and `rotateKnownHosts` BEFORE Pass 2 starts. | Re-run `iedora deploy` — the always-on Pass 1 will heal the state. If it persists, manually `ssh-keygen -R <ip>` and retry. |
-| Pass 2 fails with `Errors.Token.Invalid (AUTH-7fs1e)` on a warm deploy (zitadel_* already in state, SA key in BWS) | Pass 2's placeholder mode (`-var infra_zitadel_sa_key_json=`) caused the zitadel provider to REFRESH every zitadel_* in state with the placeholder access_token. Zitadel rejected the placeholder. `lifecycle.enabled=false` does NOT skip refresh in OpenTofu 1.12 — only plan + apply. Found 2026-05-21 in round 4 of the bulk test (adding a new role). | On warm deploys (`INFRA_ZITADEL_SA_KEY_JSON` already in BWS), the orchestrator now SKIPS the placeholder split entirely and runs a single apply with the real SA key. The placeholder dance is reserved for the cold-deploy case where zitadel_* aren't in state yet. See the cold-vs-warm branch in `infra/cmd/iedora/deploy.go`. | Should never recur — if it does, check that `INFRA_ZITADEL_SA_KEY_JSON` is actually present (`bws secret list | grep INFRA_ZITADEL_SA_KEY_JSON`). |
-| `/debug/ready: ... remote error: tls: internal error` during the readiness probe loop | Caddy was mid-ACME-challenge and rejected the inbound TLS handshake (cert hadn't been issued yet). | Probe treats this as "retry" — it's the same signal class as the cert-issuer check. Confirmed working 2026-05-21 round 3b: probe retried 3 times then succeeded after 7s. | If the retry budget exhausts (~6 min), check `infra-caddy` logs for ACME rate-limit or TLS-ALPN failures. |
-| Destroy aborts mid-flight with `network is unreachable` or `dial tcp: i/o timeout` against api.hetzner.cloud / api.cloudflare.com | Operator's local network blipped, OR Hetzner/CF had a partial outage. State is now half-destroyed (some Tofu records gone, some live). | Just re-run `iedora destroy` (idempotent: it state-rm's whatever remains and continues). Witnessed 2026-05-21 round 7 — first attempt failed at 04:43-04:45 on a network glitch, second attempt completed cleanly. | If repeated retries fail, sanity-check `ping 1.1.1.1` and `dig api.cloudflare.com @1.1.1.1`. The orchestrator deliberately does NOT swallow these errors — surfacing them is how the operator notices their network is wedged. |
-| Deploy hangs at "Pass 2: apply (placeholder Zitadel mode)" with no progress | Almost always cloud-init still installing Docker. The targeted Pass 1 includes `null_resource.docker_ready` (`until docker info`), which waits up to 5 min — but if your Hetzner project is hitting a noisy-neighbour CPX22, cloud-init can run slow. | Nothing to fix — increase the wait if you must. | `ssh root@<ip> 'cloud-init status'` to confirm. If stuck > 10 min, the box is sick — `tofu apply -replace=hcloud_server.iedora` to get a fresh one. |
+## Active failure modes (post-refactor pipeline)
+
+| Symptom | Stage | Root cause | Recovery |
+|---------|-------|------------|----------|
+| `Host key verification failed` from kreuzwerker/docker | Stage 2 | Hetzner recycled an IPv4 that's still in operator's `~/.ssh/known_hosts` from a prior instance. | The orchestrator `ssh-keygen -R`s both the prior IP (from BWS `INFRA_HOST_IP`) and the current one before Pass 2 of `iac apply`. If hit manually: `ssh-keygen -R <ip>` and retry. |
+| `Error: ... x509: certificate signed by unknown authority` after Zitadel readiness probe | Stage 3 | Caddy served `/debug/ready` via its internal CA while ACME was still completing the TLS-ALPN-01 challenge. | Probe checks the cert issuer (`tlsprobe.probeCertIssuer`) — must NOT be "Caddy Local Authority". If hit: 6-min budget should cover ACME; `ssh root@$HOST docker logs infra-caddy` shows LE rate-limit / firewall issues. |
+| `Errors.Target.DeniedURL` on action_target create in `bin/zitadel-apply` | Stage 3 | Zitadel's URL validator can't resolve `menu.iedora.com` from inside the iedora docker network (resolver cached NXDOMAIN before CF DNS propagated). | `zitadel-apply` runs `waitForMenuDNS` before creating action targets — SSHes to the box and `docker exec infra-caddy nslookup menu.iedora.com` until it answers. 90s budget. Increase if it fires. |
+| `zitadel-apply` fails with `found N PATs on machine user "menu-sa" (expected 0 or 1)` | Stage 3 | A prior run crashed mid-create OR two operators raced. Concurrent-operator guard refuses to silently delete the wrong one. | Operator reconciles via Zitadel UI: delete extras, leaving the one whose value matches `INFRA_ZITADEL_MENU_SA_TOKEN` in BWS. Re-run `task app:apply`. |
+| `task deploy:menu` fails with `BWS missing INFRA_ZITADEL_*` | Stage 4 | Stage 3 didn't complete (or didn't run) — the 6 Zitadel outputs aren't in BWS yet. | Run `task app:apply` first. Or re-run `task up` which chains both. |
+| `task deploy:menu` fails with `tofu output X empty` | Stage 4 | Stage 2 didn't run, OR the central tfstate was wiped, OR a new `menu_*` output was added to `outputs.tf` but not applied yet. | Run `task infra:up` to refresh state. Confirm with `infra/bin/with-secrets --stage iac -- tofu -chdir=infra/tofu output -raw <name>`. |
+| `menu-db-migrations` fails with `connection refused` | Stage 3 | `infra-postgres` isn't up. | `ssh root@$HOST docker ps` to confirm. If missing, re-run `task infra:up`. If running but unreachable, `docker logs infra-postgres`. |
+| `bws secret create` 409 "already exists" | Stage 2/3/4 | BWS has no native upsert. | The `internal/bws.Upsert` helper lists first, edits if present, creates if absent. If hit directly: `bws secret list | grep <key>` to confirm; `bws secret edit <id>` to update. |
+| Destroy aborts mid-flight with `network is unreachable` or `dial tcp: i/o timeout` | iac destroy | Operator's local network blipped, OR Hetzner/CF had a partial outage. State is half-destroyed. | Re-run `task infra:down` (idempotent: state-rm's whatever remains and continues). If it keeps failing, sanity-check `ping 1.1.1.1` and `dig api.cloudflare.com @1.1.1.1`. |
+| `iac apply` hangs at "Pass 2: full tofu apply" with no progress | Stage 2 | Cloud-init still installing Docker. `null_resource.docker_ready` (`until docker info`) waits up to 5 min. | `ssh root@<ip> 'cloud-init status'`. If stuck > 10 min, `infra/bin/with-secrets --stage iac -- tofu -chdir=infra/tofu apply -replace=hcloud_server.iedora` to get a fresh box. |
 
 ## Detection cheat-sheet
 
-```
-# Quick triage from operator shell — no SSH needed.
-bin/iedora doctor                                    # bootstrap secrets present?
-dig @1.1.1.1 auth.iedora.com +short                   # does CF know about the record?
-dig auth.iedora.com +short                            # does YOUR resolver know about it?
+```bash
+# Quick triage — no SSH needed.
+task doctor                                          # bootstrap secrets present?
+dig @1.1.1.1 auth.iedora.com +short                  # does CF know about the record?
+dig auth.iedora.com +short                           # does YOUR resolver know?
 echo | openssl s_client -connect <ip>:443 \
     -servername auth.iedora.com 2>/dev/null | \
-    openssl x509 -issuer -noout                       # is the cert real LE yet?
-curl -sS https://menu.iedora.com/up                   # menu container alive?
+    openssl x509 -issuer -noout                      # is the cert real LE yet?
+curl -sS https://menu.iedora.com/up                  # menu container alive?
 ```
 
-If `dig @1.1.1.1` works but `dig` doesn't, you're hitting the NXDOMAIN
-cache that the in-process HTTPS_PROXY exists to sidestep. The deploy
-recipe will handle it; manual workarounds are only needed for hand-run
-`tofu apply` (in which case: `bin/iedora deploy` instead — same end
-state).
+If `dig @1.1.1.1` works but `dig` doesn't, your resolver has a stale
+NXDOMAIN — typically clears in ~30s. Stage 3 (`zitadel-apply`) doesn't
+hit this anymore because it talks to Zitadel through Caddy on the real
+IP and the in-binary `waitForMenuDNS` gate runs from inside the docker
+network (not the operator's machine).
+
+## Historical failures (pre-refactor — kept for context)
+
+These were specific to the pre-refactor 3-pass deploy dance + the
+Zitadel TF provider. They CANNOT recur in the current pipeline because
+the machinery that caused them is gone:
+
+- **mDNSResponder NXDOMAIN cache for `auth.iedora.com`** during the
+  Zitadel provider's plan-time discovery. The HTTPS_PROXY DNS-override
+  sidecar workaround is also gone — Stage 3's `bin/zitadel-apply`
+  doesn't dial Zitadel at plan time (there is no plan; it's a Go
+  reconciler), and by the time it runs, `tlsprobe.Wait` has already
+  resolved the hostname.
+- **`Errors.Token.Invalid (AUTH-7fs1e)` on warm deploys** caused by the
+  Zitadel provider's placeholder-auth-mode refresh. The provider is
+  gone; the reconciler authenticates with the real SA key always.
+- **`tainted` state from a half-failed `local-exec`** for the
+  `iedora_admin_grants` null_resource. That null_resource is gone;
+  admin grants are now part of `zitadel-apply --grants-only`.
+
+If you see references to "Pass 3", "placeholder Zitadel", "HTTPS_PROXY
+proxy", or `zitadel.tf` in any error trace, you're running stale code
+— `git pull` and rebuild.
