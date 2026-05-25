@@ -38,7 +38,7 @@ RUN --mount=type=cache,target=/root/.bun/install/cache,sharing=locked \
     bun install --frozen-lockfile --ignore-scripts
 
 # ── Stage 2: build ────────────────────────────────────────────────────────────
-FROM node:24-bookworm-slim@sha256:24dc26ef1e3c3690f27ebc4136c9c186c3133b25563ae4d7f0692e4d1fe5db0e AS builder
+FROM node:24-bookworm-slim@sha256:242549cd46785b480c832479a730f4f2a20865d61ea2e404fdb2a5c3d3b73ecf AS builder
 WORKDIR /workspace
 # Copy the ENTIRE /workspace from deps — this brings every workspace's
 # node_modules tree, including packages/design-system/node_modules where
@@ -63,7 +63,7 @@ ENV SKIP_ENV_VALIDATION=1
 RUN node --run build
 
 # ── Stage 3: runtime ──────────────────────────────────────────────────────────
-FROM node:24-bookworm-slim@sha256:24dc26ef1e3c3690f27ebc4136c9c186c3133b25563ae4d7f0692e4d1fe5db0e AS runner
+FROM node:24-bookworm-slim@sha256:242549cd46785b480c832479a730f4f2a20865d61ea2e404fdb2a5c3d3b73ecf AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
