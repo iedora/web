@@ -100,22 +100,52 @@ tasks:
       - "bin/with-secrets --stage deploy -- bin/iedora destroy"
       - task: infra:down
 
-  # ── Local dev stack ───────────────────────────────────────────────────
-  # Boots the docker-compose-equivalent local stack (dev/orchestrator).
-  # Different target (local Docker daemon, host-published ports, LocalStack
-  # for R2) but conceptually the same 4 stages.
+  runbook:
+    desc: "Pre-merge runbook: down → up → up → down → up → up (full state-vs-cloud + idempotency validation, ~45-60 min)"
+    # docs/deploy.md § Pre-merge runbook — 6 steps that catch
+    # cross-stage bugs (DNS races, state drift, one-shot reveal
+    # recovery, hot-swap regressions) that unit tests can't.
+    # Fails fast: any non-zero exit aborts the chain.
+    cmds:
+      - task: down       # 1: tear down from any state — idempotent
+      - task: up         # 2: cold deploy (full bootstrap)
+      - task: up         # 3: warm — every stage should be no-diff/no-op
+      - task: down       # 4: destroy from a full estate
+      - task: up         # 5: cold deploy AGAIN — catches drift
+      - task: up         # 6: warm — final idempotency check
 
-  dev:
-    desc: "Boot the local dev stack (Postgres, Zitadel, OpenObserve, …)"
+  # ── Local stack ───────────────────────────────────────────────────────
+  # Boots the docker-compose-equivalent local stack (deploy/dev — the
+  # binary keeps its dev/ path for now; namespace renamed to `local:` to
+  # match Rule 1's `mode.Local`). Different target (local Docker daemon,
+  # host-published ports, LocalStack for R2) but conceptually the same
+  # 4 stages as live.
+
+  local:
+    desc: "Boot the local stack (Postgres, Zitadel, OpenObserve, …)"
     cmds: ["go run ./dev/orchestrator"]
 
-  dev:down:
-    desc: "Tear down the local dev stack"
+  local:down:
+    desc: "Tear down the local stack"
     cmds: ["go run ./dev/orchestrator --destroy"]
 
-  dev:reset-db:
-    desc: "Drop + recreate one database without touching the rest (e.g. `task dev:reset-db -- menu`)"
+  local:reset-db:
+    desc: "Drop + recreate one database without touching the rest (e.g. `task local:reset-db -- menu`)"
     cmds: ["go run ./dev/orchestrator --reset-db {{.CLI_ARGS}}"]
+
+  local:runbook:
+    desc: "Local-stack pre-merge runbook: down → up → up → down → up → up (~5 min, no real cloud)"
+    # Mirror of `task runbook` against the local stack. Catches the same
+    # cross-stage bugs (binary regressions, mode-flag drift, lint
+    # warnings) without spending 45-60 min on real Hetzner/CF. Cheap
+    # smoke pass before the live runbook.
+    cmds:
+      - task: local:down
+      - task: local
+      - task: local
+      - task: local:down
+      - task: local
+      - task: local
 
   # ── Ad-hoc helpers ────────────────────────────────────────────────────
 

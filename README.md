@@ -11,7 +11,7 @@ Identity is Zitadel (`auth.iedora.com`, self-hosted). Menu is a thin OIDC client
 
 ```bash
 bun install                            # at the repo root
-task dev                               # boots postgres, localstack,
+task local                               # boots postgres, localstack,
                                        # zitadel, openobserve, house
                                        # (menu runs via bun run dev)
 cd products/menu && bun run dev        # menu HMR (reads .env + .env.local)

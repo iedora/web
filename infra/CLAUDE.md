@@ -33,25 +33,51 @@ The menu app (`infra-menu-web`) is **not** here — it's owned by Stage 4 (`task
 
 ```
 infra/
-  tofu/                                 single encrypted Tofu root
-    versions.tf                         hcloud, cloudflare ~> 5.19, github ~> 6.12, kreuzwerker/docker ~> 3.7
-    variables.tf                        bootstrap creds + GH config + hostnames + container secrets
-    hetzner.tf                          hcloud_server.iedora + firewall + SSH key
-    main.tf                             R2 buckets + DNS (menu/auth/obs/assets)
-    containers.tf                       docker_network.iedora + docker_volume.zitadel_bootstrap +
-                                        every SHARED docker_container
-    secrets.tf                          random_password.* + IAC_* BWS write-through
-    github.tf                           Tofu-managed GH Actions secrets + variables
-    outputs.tf                          hetzner_ipv4 + menu_* env outputs for Stage 4
-  modules/services/                     Tofu sub-modules (postgres, openobserve, zitadel, …)
-  postgres/init.sql                     CREATE DATABASE menu / zitadel (runs on first container boot)
-  backup/                               self-built Postgres-backup image (Dockerfile, run.sh, backup.sh, restore.sh)
-  bws-upsert/                           Go helper invoked by terraform_data.bws_sync_autogen (Stage 2 only)
+  tofu/                  Single Tofu root: Hetzner + Cloudflare + GitHub
+                         config + shared service containers
+                         (postgres, openobserve, zitadel, zitadel-login,
+                         caddy, backups). Per-product containers (menu)
+                         are NOT here — they're owned by Stage 4.
+  cmd/iedora/            Stage 2/3/4 orchestrator (live).
+                         Subcommands: iac, app, deploy, destroy,
+                         pipeline, doctor.
+  cmd/dev/               Local dev orchestrator (`task local`).
+                         Mirrors the prod pipeline shape against
+                         a local Docker daemon.
+  cmd/zitadel-apply/     Stage 3 — reconciles Zitadel app state
+                         (org, project, OIDC app, machine user + PAT,
+                         action targets, admin grants).
+  cmd/menu-db-migrations/ Stage 3 — drizzle-kit migrate against menu's
+                         postgres database.
+  cmd/openobserve-dashboards/ Stage 3 — pushes embedded JSON dashboards
+                         via SSH `-L` tunnel.
+  cmd/with-secrets/      BWS env wrapper. Stage-filtered (iac / app /
+                         deploy + per-product).
+  cmd/bws-upsert/        Idempotent BWS list-then-edit-or-create helper.
+                         Used by Tofu's `terraform_data.bws_sync_*`.
+  modules/services/      Tofu modules — one per shared container type.
+  internal/              Go helpers: bws, cloudflare, r2, tlsprobe.
+  bin/                   `go run` wrappers the Taskfile shells through.
+  backup/                Self-built `iedora-backup` image (Dockerfile +
+                         backup.sh / restore.sh / run.sh).
+  postgres/              `init.sql` — bootstrap databases on first boot.
 ```
 
 ## See also
 
-- **[`docs/deploy.md`](../docs/deploy.md)** — full pipeline doc (all 4 stages, CI, failure modes, secret rotation, day-2 ops).
-- **[`docs/terraform-style.md`](../docs/terraform-style.md)** — LLM-safe HCL conventions.
-- **[`app-state/`](../app-state/)** — Stage 3 configurators (Zitadel, DB migrations, OO dashboards).
-- **[`deploy/iedora/`](../deploy/iedora/)** — orchestrator that walks every stage.
+The [root Taskfile](../Taskfile.yml) is the only entry point operators
+should need:
+
+```
+task doctor           # preflight: BWS auth, bootstrap secrets, PATH
+task infra:up         # Stage 2: tofu apply on infra/tofu/
+task app:apply        # Stage 3: every configurator
+task deploy:menu      # Stage 4: docker pull + run on the box
+task deploy:house     # Stage 4: bun build + per-product tofu apply
+task up               # Full pipeline: 2 → 3 → 4
+task down             # Full teardown: products → infra:down
+task local              # Local dev stack
+```
+
+For day-2 raw-SSH ops (logs, psql, backup, restore, rotation, Zitadel
+rebootstrap), see [`docs/deploy.md` § Day-2 operations](../docs/deploy.md#day-2-operations).

@@ -41,7 +41,7 @@ introduced.
 
 |             | local                                  | live                              |
 |-------------|----------------------------------------|-----------------------------------|
-| Where       | operator's machine (`task dev`)        | Hetzner + Cloudflare + GHCR       |
+| Where       | operator's machine (`task local`)        | Hetzner + Cloudflare + GHCR       |
 | Targets     | Docker daemon on `localhost`; LocalStack for S3 | Public APIs, real DNS    |
 | Auth        | FirstInstance bootstrap; no BWS needed | BWS-stored, no defaults           |
 | Side effects| freely destructible                    | gated by the guardrails below     |
@@ -538,9 +538,12 @@ task deploy:menu                 # Stage 4 menu.
 task deploy:house                # Stage 4 house.
 task deploy:all                  # Stage 4 — fan out every product in parallel.
 
-task dev                         # Boot the local dev stack (docker on local).
-task dev:down                    # Tear down dev.
-task dev:reset-db -- menu        # Drop + recreate one database without touching the rest.
+task local                       # Boot the local stack (docker on operator's machine).
+task local:down                  # Tear down the local stack.
+task local:reset-db -- menu      # Drop + recreate one database without touching the rest.
+task local:runbook               # Local-stack pre-merge runbook (cheap smoke pass before `task runbook`).
+
+task runbook                     # Live pre-merge runbook: down → up → up → down → up → up (~45-60 min).
 
 task bws -- <cmd>                # Exec a command with BWS hydrated (stage=iac default).
 task zitadel:grants              # Re-run iedora-admin grants only (`bin/zitadel-apply --grants-only`).
@@ -571,7 +574,7 @@ State commit-back: both `infra-deploy.yml` and the per-product Tofu
 side of `deploy.yml` commit the encrypted `terraform.tfstate` back to
 `main` after a successful apply — git stays canonical.
 
-## Local dev stack (`task dev`)
+## Local dev stack (`task local`)
 
 [`dev/orchestrator/`](../dev/orchestrator/) boots the same shape on the
 operator's Docker daemon — postgres, zitadel, zitadel-login,
@@ -585,8 +588,8 @@ tofu outputs + minted random session secret.
 Menu runs via `bun run dev` from the host (not as a container in
 dev). House runs as a container.
 
-`task dev --only menu` brings up menu's deps only. `--except <service>`
-boots everything except the named ones. `task dev:reset-db -- <name>`
+`task local --only menu` brings up menu's deps only. `--except <service>`
+boots everything except the named ones. `task local:reset-db -- <name>`
 drops + recreates one database.
 
 ## Day-2 operations
