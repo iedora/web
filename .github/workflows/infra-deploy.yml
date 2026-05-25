@@ -58,7 +58,7 @@ jobs:
     timeout-minutes: 25
 
     permissions:
-      contents: write   # commit encrypted tfstate back after apply
+      contents: read
       id-token: write   # reserved for future Sigstore plan attestations
 
     env:
@@ -163,40 +163,3 @@ jobs:
           if-no-files-found: ignore
           retention-days: 30
 
-      - name: Commit encrypted state back to main
-        # The encrypted Tofu state IS the source of truth for what
-        # exists on Hetzner + CF. Skipping the commit-back leaves git
-        # out of sync — the NEXT run starts from stale state and
-        # cascades into "resource already exists" conflicts.
-        # Idempotent: skips when apply was a no-op (no state diff).
-        if: success()
-        run: |
-          set -euo pipefail
-          if git diff --quiet -- infra/tofu/terraform.tfstate; then
-            echo "[infra-deploy] no state changes — nothing to commit"
-            exit 0
-          fi
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add infra/tofu/terraform.tfstate
-          MSG=$(mktemp)
-          {
-            echo "chore(infra): tfstate updated by CI (${GITHUB_WORKFLOW} #${GITHUB_RUN_NUMBER})"
-            echo ""
-            echo "Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-            echo "Triggered by: ${GITHUB_EVENT_NAME}"
-          } > "$MSG"
-          git commit -F "$MSG"
-          rm -f "$MSG"
-          # One retry on contention — if a human pushed between checkout
-          # and now, rebase and try again. Beyond one retry, fail loudly.
-          for i in 1 2; do
-            git pull --rebase origin "${GITHUB_REF_NAME}" || true
-            if git push origin "HEAD:${GITHUB_REF_NAME}"; then
-              echo "[infra-deploy] state committed + pushed"
-              exit 0
-            fi
-            echo "[infra-deploy] push attempt $i failed, retrying..."
-          done
-          echo "[infra-deploy] FAIL: couldn't push state after 2 attempts" >&2
-          exit 1

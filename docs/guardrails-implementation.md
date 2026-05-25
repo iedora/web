@@ -5,11 +5,9 @@
 > we get there from today's code. One section per rule; each ends with
 > a concrete, ordered task list and the files that change.
 >
-> Order of recommended landing: ~~Rule 5 → Rule 1~~ → Rule 2 → Rule 3 → Rule 4.
-> Rules 1 and 5 landed first (commits `ab72194` and the Rule 5 commit
-> referenced below). Rule 2 is next — the bootstrap-heavy one that
-> frees us from the encrypted-state-in-git pattern. 3 and 4 are then
-> independent.
+> Order of recommended landing: ~~Rule 5 → Rule 1 → Rule 2~~ → Rule 3 → Rule 4.
+> Rules 1, 2, and 5 landed (this doc tracks each). Rules 3 and 4 are
+> independent and can land in either order.
 
 ## Status at a glance
 
@@ -17,7 +15,7 @@
 |------|------------------------------------|-------------|--------|--------------|
 | 1    | Binary environment (`local`/`live`)| ✅ landed   | —      | done in `ab72194` |
 | 5    | Zitadel anti-panic lock            | ✅ landed   | —      | done — see this doc § Rule 5 |
-| 2    | Tofu state in R2                   | Not started | L      | High — touches every apply, bootstrap problem |
+| 2    | Tofu state in R2                   | ✅ landed   | —      | done — see this doc § Rule 2 |
 | 3    | Expand-contract migrations         | Not started | M      | Medium — process + lint |
 | 4    | Zero-downtime hot-swap             | Not started | M      | Medium — `runtime_docker.go` rewrite |
 
@@ -42,82 +40,81 @@ binaries:
 No back-compat surface — fresh ecosystem, no callers needed a
 deprecation window.
 
-## Rule 2 — Tofu state in R2
+## Rule 2 — Tofu state in R2 ✅ landed
 
-### Today
-- `infra/tofu/terraform.tfstate` is git-tracked, encrypted with
-  PBKDF2 + AES-GCM via the `encryption {}` block in `versions.tf`.
-- CI workflows (`infra-deploy.yml`, `deploy.yml`) commit state back
-  to `main` after every apply.
-- Two state files in repo: `infra/tofu/terraform.tfstate` +
-  `products/house/infra/tofu/terraform.tfstate`.
+### What landed
 
-### Target
-- OpenTofu `s3` backend pointed at the `iedora-tofu-state` R2 bucket.
-  Native locking via R2 (DynamoDB-style lock table not supported by
-  R2 → use Tofu's [`use_lockfile = true`](https://opentofu.org/docs/language/settings/backends/s3/#s3-state-locking)).
-- State file gone from git; both state files `git rm --cached`'d and
-  added to `.gitignore`.
-- Bootstrap: a one-shot `infra/cmd/state-bucket-bootstrap/` Go binary
-  creates the R2 bucket + scoped API token + writes the credentials
-  to BWS under `IAC_BOOTSTRAP_TOFU_STATE_*`. Run once per fresh
-  ecosystem. After that, `tofu init` consumes those credentials.
-- `task infra:up` first-run flow: `tofu init -migrate-state` (move
-  the in-repo encrypted file → R2). After that, no migrate flag.
-- The `encryption {}` block stays — R2 sees encrypted bytes, never
-  plaintext.
+OpenTofu `s3` backend pointed at the new `iedora-tofu-state` R2 bucket
+(EEUR). Two roots share the bucket with different keys:
 
-### The bootstrap problem
-We can't manage the state bucket with Tofu and also keep state in it
-— chicken-and-egg. Three options:
+- `infra/tofu/` → key `infra/tofu/terraform.tfstate`
+- `products/house/infra/tofu/` → key `products/house/infra/tofu/terraform.tfstate`
 
-| Option | Approach | Trade-off |
-|--------|----------|-----------|
-| A | One-shot Go bootstrap binary creates bucket + token via CF API, writes to BWS. Bucket lives outside Tofu state. | Cleanest. Mirrors `bws-upsert`'s shape. One-time op. |
-| B | Bucket managed by a tiny separate Tofu root (`infra/tofu-bootstrap/`) whose own state stays in git. | Two Tofu roots forever; the bootstrap one's state has to stay encrypted-in-git, which is the pattern we're escaping. Reject. |
-| C | Manual CF dashboard creation. | Operator step we want to eliminate. Reject. |
+Concurrency is R2-native via OpenTofu 1.10+ `use_lockfile = true` (no
+DynamoDB lock table — R2 has no equivalent). The `encryption {}` block
+stays — R2 sees encrypted bytes, never plaintext.
 
-**Pick A.**
+### Bootstrap
 
-### Migration steps
-1. Write `infra/cmd/state-bucket-bootstrap/` — creates
-   `iedora-tofu-state` R2 bucket, mints a scoped API token, writes
-   `IAC_BOOTSTRAP_TOFU_STATE_ACCESS_KEY` +
-   `IAC_BOOTSTRAP_TOFU_STATE_SECRET_KEY` to BWS. Idempotent.
-2. Add to `bin/with-secrets --stage iac` env: `AWS_ACCESS_KEY_ID`
-   and `AWS_SECRET_ACCESS_KEY` mapped from the BWS keys above.
-3. Add the `backend "s3"` block to `infra/tofu/versions.tf` with
-   `endpoints.s3 = "https://<acct>.r2.cloudflarestorage.com"`,
-   `region = "auto"`, `skip_credentials_validation = true`,
-   `skip_metadata_api_check = true`, `use_path_style = true`,
-   `use_lockfile = true`.
-4. Operator runs once: `bin/with-secrets --stage iac --
-   tofu -chdir=infra/tofu init -migrate-state` — moves the
-   in-repo state into R2.
-5. `git rm --cached infra/tofu/terraform.tfstate
-   products/house/infra/tofu/terraform.tfstate` and add both to
-   `.gitignore`.
-6. Drop the "commit tfstate back to main" steps from
-   `.github/workflows/infra-deploy.yml` and
-   `.github/workflows/deploy.yml`.
-7. Drop the now-obsolete `### Encrypted state` section in
-   `deploy.md`; replace with a `### State backend (R2)` section.
-8. Repeat for `products/house/infra/tofu/` — second `backend "s3"`
-   block, different key in the same bucket.
+`infra/cmd/state-bucket-bootstrap/` is the one-shot Go binary that
+solves the chicken/egg: it creates the R2 bucket + scoped API token
+via the Cloudflare API and writes the credentials to BWS. Idempotent
+— warm runs rotate the token value in place so BWS converges. Run
+once per fresh ecosystem via `bin/with-secrets --stage iac --
+bin/state-bucket-bootstrap`.
+
+The scoped token has only `Workers R2 Storage Bucket Item Write` on
+the single state bucket — same permission group ID as the data/assets
+buckets in `infra/tofu/main.tf`.
+
+### BWS surface
+
+Three new keys, taxonomy `IAC_BOOTSTRAP_TOFU_STATE_*`:
+
+| Key | Value |
+|-----|-------|
+| `IAC_BOOTSTRAP_TOFU_STATE_ACCESS_KEY` | Cloudflare API token ID (= S3 access key) |
+| `IAC_BOOTSTRAP_TOFU_STATE_SECRET_KEY` | hex(sha256(token value)) (= S3 secret key) |
+| `IAC_BOOTSTRAP_TOFU_STATE_BUCKET` | `iedora-tofu-state` (literal, for sanity-checking) |
+
+`bin/with-secrets --stage iac` and `--stage deploy` both export these
+as `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` so the s3 backend
+authenticates without per-workflow boilerplate.
+
+### Migration (executed once on the fresh ecosystem)
+
+1. `task down` against the old local-state setup (the backend block was
+   stashed during destroy).
+2. `bin/with-secrets --stage iac -- bin/state-bucket-bootstrap` — R2
+   bucket + token + BWS keys.
+3. `git rm --cached` both `terraform.tfstate` files; `rm -rf
+   .terraform/` from both roots so init starts clean.
+4. `task up` cold against the empty R2 bucket — init creates the state
+   object, apply lands 34 resources, configurators run, deploys ship.
+
+Smoke-tested green: `menu.iedora.com/up` → 200 `{"ok":true,"db":"ok"}`,
+`auth.iedora.com/debug/ready` → 200, `iedora.com` → 200.
 
 ### Files
-- `infra/cmd/state-bucket-bootstrap/main.go` (new)
-- `infra/internal/r2/bootstrap.go` (helper: create bucket + token)
-- `infra/cmd/with-secrets/env.go` (map state creds → AWS_* env)
-- `infra/tofu/versions.tf` (add backend)
-- `products/house/infra/tofu/versions.tf` (add backend)
-- `infra/tofu/terraform.tfstate` (delete from index)
-- `products/house/infra/tofu/terraform.tfstate` (delete from index)
-- `.gitignore` (re-add the rules I added earlier in this session)
-- `.github/workflows/infra-deploy.yml` (drop state commit-back)
-- `.github/workflows/deploy.yml` (drop state commit-back)
-- `docs/deploy.md` (rewrite § Encrypted state)
-- `infra/CLAUDE.md` (drop the "state encrypted in git" claim)
+
+- [`infra/cmd/state-bucket-bootstrap/`](../infra/cmd/state-bucket-bootstrap/) — Go binary (main.go, r2_bucket.go, r2_token.go, main_test.go).
+- [`infra/internal/cloudflare/r2_bucket.go`](../infra/internal/cloudflare/r2_bucket.go) + [`api_token.go`](../infra/internal/cloudflare/api_token.go) — helpers added during the work.
+- [`infra/bin/state-bucket-bootstrap`](../infra/bin/state-bucket-bootstrap) — wrapper shim.
+- [`infra/tofu/versions.tf`](../infra/tofu/versions.tf) + [`products/house/infra/tofu/versions.tf`](../products/house/infra/tofu/versions.tf) — `backend "s3"` blocks.
+- [`infra/cmd/with-secrets/env.go`](../infra/cmd/with-secrets/env.go) — new BWS keys + AWS_* env aliases.
+- `.github/workflows/infra-deploy.yml` + `deploy.yml` — commit-back steps removed; `permissions: contents: write` → `read`.
+- `.gitignore` — state files excluded; build-artefact binary list extended.
+- State files `git rm --cached`'d.
+
+### Follow-up surfaced
+
+- `cloudflare.R2S3Credentials` (the older `verify`-roundtrip helper) and
+  the bootstrap's inline `sha256Hex` overlap. Worth extracting
+  `cloudflare.SecretFromTokenValue(value)` so both call sites share the
+  formula.
+- The R2-bucket-item-write permission group ID is duplicated as a Go
+  const and a Tofu local. Acceptable today; long-term a `//go:generate`
+  driven by `tofu output` would eliminate drift risk.
 
 ## Rule 3 — expand-contract migrations
 

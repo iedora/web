@@ -1,9 +1,10 @@
 // Package cloudflare wraps the bits of the Cloudflare REST API the
 // deploy stack needs. Today: account discovery for the wrapping
 // `bin/with-secrets` script + token-ID lookup for using a CF API
-// token as an R2 S3 access key.
+// token as an R2 S3 access key + R2-bucket / scoped-API-token CRUD
+// for the state-bucket bootstrap.
 //
-// Every outbound request flows through `getWithRetry` — a bounded
+// Every outbound request flows through `doWithRetry` — a bounded
 // exponential-backoff loop that retries transport errors, HTTP 5xx,
 // and HTTP 429. The CF edge serves intermittent 503s for "unknown
 // API error" that resolve in a second; without retry, a single one
@@ -11,6 +12,7 @@
 package cloudflare
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -21,6 +23,17 @@ import (
 	"net/http"
 	"time"
 )
+
+// PermissionGroupR2BucketItemWrite is the global (not per-account),
+// stable UUID for "Workers R2 Storage Bucket Item Write". Mirrors
+// `infra/tofu/main.tf::locals.permission_group_r2_bucket_item_write`
+// so the bootstrap binary and Tofu agree on which permission group to
+// bind R2 tokens to. Found via:
+//
+//	curl -H "Authorization: Bearer $TOKEN" \
+//	  https://api.cloudflare.com/client/v4/user/tokens/permission_groups |
+//	  jq '.result[] | select(.name=="Workers R2 Storage Bucket Item Write")'
+const PermissionGroupR2BucketItemWrite = "2efd5506f9c8494dacb1fa10a3e7d5b6"
 
 var httpClient = &http.Client{Timeout: 10 * time.Second}
 
@@ -112,7 +125,7 @@ func tokenID(ctx context.Context, cfToken string) (string, error) {
 // 4xx propagates immediately (bad token, missing endpoint — no point
 // retrying).
 func getJSON(ctx context.Context, url, bearer string, target any) error {
-	body, err := getWithRetry(ctx, url, bearer)
+	body, _, err := doWithRetry(ctx, http.MethodGet, url, bearer, nil)
 	if err != nil {
 		return err
 	}
@@ -122,23 +135,28 @@ func getJSON(ctx context.Context, url, bearer string, target any) error {
 	return nil
 }
 
-// getWithRetry issues a GET with bounded exponential backoff. Returns
-// the response body on the first 2xx, or the last error on exhaustion.
-func getWithRetry(ctx context.Context, url, bearer string) ([]byte, error) {
+// doWithRetry issues an HTTP request with bounded exponential backoff.
+// Returns the response body + status on the first 2xx, or the last
+// error on exhaustion. 4xx responses (except 429) propagate
+// immediately with the response status surfaced — callers that want
+// to special-case e.g. 409 ("already exists") can inspect the
+// returned APIError.
+func doWithRetry(ctx context.Context, method, url, bearer string, body []byte) ([]byte, int, error) {
 	backoff := initialBackoff
 	var lastErr error
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		body, status, err := getOnce(ctx, url, bearer)
+		respBody, status, err := doOnce(ctx, method, url, bearer, body)
 
 		// Success.
 		if err == nil && status >= 200 && status < 300 {
-			return body, nil
+			return respBody, status, nil
 		}
 
-		// Deterministic failure — don't retry.
+		// Deterministic failure — don't retry. Return a typed error
+		// so callers can branch on status (e.g. 409 → already exists).
 		if err == nil && status >= 400 && status < 500 && status != http.StatusTooManyRequests {
-			return nil, fmt.Errorf("CF %s returned %d: %s", url, status, string(body))
+			return respBody, status, &APIError{Method: method, URL: url, Status: status, Body: string(respBody)}
 		}
 
 		// Build a diagnostic for this attempt.
@@ -146,7 +164,7 @@ func getWithRetry(ctx context.Context, url, bearer string) ([]byte, error) {
 		case err != nil:
 			lastErr = fmt.Errorf("transport: %w", err)
 		default:
-			lastErr = fmt.Errorf("CF %s returned %d: %s", url, status, string(body))
+			lastErr = fmt.Errorf("CF %s %s returned %d: %s", method, url, status, string(respBody))
 		}
 
 		if attempt == maxAttempts {
@@ -156,7 +174,7 @@ func getWithRetry(ctx context.Context, url, bearer string) ([]byte, error) {
 		// Honor context cancellation while waiting.
 		select {
 		case <-ctx.Done():
-			return nil, errors.Join(lastErr, ctx.Err())
+			return nil, 0, errors.Join(lastErr, ctx.Err())
 		case <-time.After(backoff):
 		}
 		if backoff < maxBackoff {
@@ -166,23 +184,54 @@ func getWithRetry(ctx context.Context, url, bearer string) ([]byte, error) {
 			}
 		}
 	}
-	return nil, fmt.Errorf("CF API gave up after %d attempts: %w", maxAttempts, lastErr)
+	return nil, 0, fmt.Errorf("CF API gave up after %d attempts: %w", maxAttempts, lastErr)
 }
 
-// getOnce dispatches a single GET. Body is always drained + returned so
-// callers can include it in error messages.
-func getOnce(ctx context.Context, url, bearer string) ([]byte, int, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+// doOnce dispatches a single request. Body is always drained +
+// returned so callers can include it in error messages.
+func doOnce(ctx context.Context, method, url, bearer string, body []byte) ([]byte, int, error) {
+	var reqBody io.Reader
+	if body != nil {
+		reqBody = bytes.NewReader(body)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, url, reqBody)
 	if err != nil {
 		return nil, 0, fmt.Errorf("create CF request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+bearer)
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, 0, err
 	}
 	defer resp.Body.Close()
-	body, readErr := io.ReadAll(resp.Body)
-	return body, resp.StatusCode, readErr
+	respBody, readErr := io.ReadAll(resp.Body)
+	return respBody, resp.StatusCode, readErr
+}
+
+// APIError is the typed error doWithRetry returns for deterministic
+// HTTP failures (4xx that aren't 429). Callers that need to branch on
+// status (e.g. 409 → already exists, treat as no-op) use errors.As.
+type APIError struct {
+	Method string
+	URL    string
+	Status int
+	Body   string
+}
+
+func (e *APIError) Error() string {
+	return fmt.Sprintf("CF %s %s returned %d: %s", e.Method, e.URL, e.Status, e.Body)
+}
+
+// IsStatus reports whether err wraps an APIError with the given HTTP
+// status. Convenience over errors.As at the call site.
+func IsStatus(err error, status int) bool {
+	var ae *APIError
+	if errors.As(err, &ae) {
+		return ae.Status == status
+	}
+	return false
 }

@@ -16,6 +16,8 @@ func allBWSSecrets() []bws.Secret {
 		// iac
 		{Key: "IAC_BOOTSTRAP_CLOUDFLARE_API_TOKEN", Value: "cf-token-123"},
 		{Key: "IAC_BOOTSTRAP_STATE_PASSPHRASE", Value: "passphrase-abc"},
+		{Key: "IAC_BOOTSTRAP_TOFU_STATE_ACCESS_KEY", Value: "r2-state-akid"},
+		{Key: "IAC_BOOTSTRAP_TOFU_STATE_SECRET_KEY", Value: "r2-state-secret"},
 		{Key: "IAC_BOOTSTRAP_GITHUB_API_TOKEN", Value: "github-token-456"},
 		{Key: "IAC_BOOTSTRAP_SSH_PRIVATE_KEY", Value: "ssh-key-789"},
 		{Key: "IAC_BOOTSTRAP_CLAUDE_CODE_OAUTH_TOKEN", Value: "claude-token-xyz"},
@@ -108,6 +110,13 @@ func TestBuildEnvironment_IaCStage(t *testing.T) {
 	}
 	if got["IEDORA_STAGE"] != "iac" {
 		t.Errorf("iac: IEDORA_STAGE should be 'iac', got %q", got["IEDORA_STAGE"])
+	}
+	// AWS_* aliases for the R2 s3 backend (Rule 2).
+	if got["AWS_ACCESS_KEY_ID"] != "r2-state-akid" {
+		t.Errorf("iac: AWS_ACCESS_KEY_ID should be r2-state-akid, got %q", got["AWS_ACCESS_KEY_ID"])
+	}
+	if got["AWS_SECRET_ACCESS_KEY"] != "r2-state-secret" {
+		t.Errorf("iac: AWS_SECRET_ACCESS_KEY should be r2-state-secret, got %q", got["AWS_SECRET_ACCESS_KEY"])
 	}
 }
 

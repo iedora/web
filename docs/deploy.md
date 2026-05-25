@@ -57,9 +57,9 @@ the `iedora-tofu-state` R2 bucket (S3-compatible, scoped API token).
 Reason: race conditions on concurrent applies, lockfile-style state
 locking, and the "encrypted binary in a 3-way git merge" failure mode.
 
-⚠️ **Not enforced yet.** Today's state is git-tracked (see
-[§ Encrypted state](#encrypted-state) for the existing flow). Migration
-plan: [guardrails-implementation.md § Rule 2](./guardrails-implementation.md#rule-2--tofu-state-in-r2).
+Implementation lives at [§ State backend (R2)](#state-backend-r2)
+below, with the bootstrap details in
+[guardrails-implementation.md § Rule 2](./guardrails-implementation.md#rule-2--tofu-state-in-r2).
 
 ### 3. Database migrations are expansion-only
 
@@ -247,17 +247,24 @@ already has its own conventions.
 The 2-pass dance is INTERNAL — operator just runs `task infra:up`. On
 warm runs both passes are no-diff refreshes (~3s each).
 
-### Encrypted state
+### State backend (R2)
 
-> ⚠️ **Deprecated by [Guardrail #2](#2-tofu-state-lives-in-r2-never-in-git).**
-> The git-tracked encrypted state file is the path we're migrating
-> away from. Until the R2 `s3` backend lands, what's below is what
-> runs.
+State lives in the `iedora-tofu-state` R2 bucket via the OpenTofu
+`s3` backend. Two roots share the bucket with different keys:
 
-`infra/tofu/terraform.tfstate` is encrypted at rest (PBKDF2 +
-AES-GCM). Passphrase from BWS key `IAC_BOOTSTRAP_STATE_PASSPHRASE`. CI commits
-the encrypted state back to `main` after every successful apply so the
-next run starts from canonical state.
+- `infra/tofu/` → `infra/tofu/terraform.tfstate`
+- `products/house/infra/tofu/` → `products/house/infra/tofu/terraform.tfstate`
+
+The state object is still encrypted at rest by Tofu's PBKDF2 +
+AES-GCM `encryption {}` block (passphrase from
+`IAC_BOOTSTRAP_STATE_PASSPHRASE`) — R2 only ever sees encrypted bytes.
+Concurrent applies are gated by R2-native `use_lockfile = true` (a
+sidecar `.tflock` object in the same bucket prefix).
+
+The R2 bucket + scoped API token are out-of-band; they're minted by
+`bin/state-bucket-bootstrap` (chicken/egg — Tofu can't manage the
+bucket that stores its own state). See
+[guardrails-implementation.md § Rule 2](./guardrails-implementation.md#rule-2--tofu-state-in-r2).
 
 ## Stage 3 — App state (`task app:apply`)
 

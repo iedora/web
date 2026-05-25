@@ -48,11 +48,8 @@ jobs:
     name: deploy ${{ inputs.product }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
-    # Per-product tfstate commit-back needs write access — same pattern
-    # as infra-deploy.yml. Skipped at runtime for Docker-runtime products
-    # whose state lives in the central tfstate (committed by infra-deploy).
     permissions:
-      contents: write
+      contents: read
 
     env:
       BWS_ACCESS_TOKEN: ${{ secrets.BWS_ACCESS_TOKEN }}
@@ -174,47 +171,3 @@ jobs:
           echo "[deploy] FAIL /up never returned 200 after 30s" >&2
           exit 1
 
-      - name: Commit per-product tfstate back to main
-        # Products with per-product Tofu (e.g. house — CF Workers) have
-        # their own encrypted tfstate under products/<name>/infra/tofu/.
-        # Same rationale as infra-deploy.yml: CI applies that don't
-        # commit state back leave git out of sync. No-op when there's
-        # no diff (steady-state warm deploys) or no per-product tfstate
-        # (Docker-runtime products like menu).
-        if: success()
-        env:
-          PRODUCT: ${{ inputs.product }}
-        run: |
-          set -euo pipefail
-          TFSTATE="products/${PRODUCT}/infra/tofu/terraform.tfstate"
-          if [ ! -f "$TFSTATE" ]; then
-            echo "[deploy] no per-product tfstate at $TFSTATE — skipping commit-back"
-            exit 0
-          fi
-          if git diff --quiet -- "$TFSTATE"; then
-            echo "[deploy] no state changes for ${PRODUCT} — nothing to commit"
-            exit 0
-          fi
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add "$TFSTATE"
-          MSG=$(mktemp)
-          {
-            echo "chore(${PRODUCT}): tfstate updated by CI (${GITHUB_WORKFLOW} #${GITHUB_RUN_NUMBER})"
-            echo ""
-            echo "Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-            echo "Triggered by: ${GITHUB_EVENT_NAME}"
-            echo "Image SHA: ${{ inputs.image_sha }}"
-          } > "$MSG"
-          git commit -F "$MSG"
-          rm -f "$MSG"
-          for i in 1 2; do
-            git pull --rebase origin main || true
-            if git push origin HEAD:main; then
-              echo "[deploy] state committed + pushed"
-              exit 0
-            fi
-            echo "[deploy] push attempt $i failed, retrying..."
-          done
-          echo "[deploy] FAIL: couldn't push state after 2 attempts" >&2
-          exit 1

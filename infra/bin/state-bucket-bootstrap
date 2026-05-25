@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Transparent wrapper for the Go state-bucket-bootstrap command at
+# infra/cmd/state-bucket-bootstrap. Same shape as bin/iedora /
+# bin/with-secrets / bin/zitadel-apply — `go run` compiles once into
+# the user's GOCACHE; subsequent invocations reuse the cached binary.
+#
+# Stage -1 (pre-pipeline) — provisions the R2 bucket + scoped API
+# token that the OpenTofu s3 backend (Rule 2) talks to. Chicken/egg:
+# this can't be Tofu-managed because Tofu needs the bucket to store
+# its state.
+#
+# Idempotent. Run once per fresh ecosystem; safe to re-run (warm path
+# rotates the API token value in place, BWS upserts converge).
+#
+# Reads from env (injected by bin/with-secrets --stage iac):
+#   IAC_BOOTSTRAP_CLOUDFLARE_API_TOKEN
+#   CLOUDFLARE_ACCOUNT_ID
+#
+# Writes to BWS (consumed by the s3 backend via with-secrets):
+#   IAC_BOOTSTRAP_TOFU_STATE_ACCESS_KEY
+#   IAC_BOOTSTRAP_TOFU_STATE_SECRET_KEY
+#   IAC_BOOTSTRAP_TOFU_STATE_BUCKET
+#
+# Typical invocation:
+#   bin/with-secrets --stage iac -- bin/state-bucket-bootstrap
+set -euo pipefail
+
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+INFRA_DIR="$(dirname "$DIR")"
+
+exec go run -C "$INFRA_DIR" ./cmd/state-bucket-bootstrap "$@"

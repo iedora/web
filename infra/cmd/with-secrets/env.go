@@ -59,6 +59,12 @@ var secretAllow = map[string]map[stage]bool{
 	// IaC — provider credentials for the central Tofu root.
 	"IAC_BOOTSTRAP_CLOUDFLARE_API_TOKEN":        {stageIaC: true, stageDeploy: true},
 	"IAC_BOOTSTRAP_STATE_PASSPHRASE":            {stageIaC: true, stageDeploy: true},
+	// Tofu R2 `s3` backend credentials (Rule 2 — state in R2). Both
+	// the central Tofu root (stage iac) and per-product Tofu roots
+	// (stage deploy, e.g. house's CF Workers root) authenticate to
+	// R2 via these. Minted by `bin/state-bucket-bootstrap`.
+	"IAC_BOOTSTRAP_TOFU_STATE_ACCESS_KEY":       {stageIaC: true, stageDeploy: true},
+	"IAC_BOOTSTRAP_TOFU_STATE_SECRET_KEY":       {stageIaC: true, stageDeploy: true},
 	"IAC_BOOTSTRAP_GITHUB_API_TOKEN":            {stageIaC: true},
 	"IAC_BOOTSTRAP_CLAUDE_CODE_OAUTH_TOKEN":     {stageIaC: true},
 	"IAC_BOOTSTRAP_HCLOUD_TOKEN":                {stageIaC: true},
@@ -179,6 +185,19 @@ func buildEnvironment(ctx context.Context, secrets []bws.Secret, bwsAccessToken,
 		envMap["TF_VAR_account_id"] = cfAccountID
 		envMap["TF_VAR_bws_access_token"] = bwsAccessToken
 		envMap["TF_VAR_bws_project_id"] = projectID
+
+		// AWS_* aliases for OpenTofu's `s3` backend pointed at R2
+		// (Rule 2 — state in R2). The backend reads AWS_ACCESS_KEY_ID
+		// and AWS_SECRET_ACCESS_KEY directly; no Tofu variable
+		// indirection. Silently skipped when the source keys aren't
+		// in BWS yet (pre-bootstrap; the `tofu init` will then error
+		// loudly with a clear "credentials" message).
+		if v := envMap["IAC_BOOTSTRAP_TOFU_STATE_ACCESS_KEY"]; v != "" {
+			envMap["AWS_ACCESS_KEY_ID"] = v
+		}
+		if v := envMap["IAC_BOOTSTRAP_TOFU_STATE_SECRET_KEY"]; v != "" {
+			envMap["AWS_SECRET_ACCESS_KEY"] = v
+		}
 	}
 
 	envSlice := make([]string, 0, len(envMap))
