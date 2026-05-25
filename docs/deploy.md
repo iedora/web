@@ -103,8 +103,8 @@ table even acknowledges the 5s 502 window. Plan:
 ### 5. Zitadel reconciler — anti-panic lock
 
 If a Zitadel resource exists on the live IdP but the corresponding
-sync key is missing from BWS, the reconciler **must fail loudly in
-`live`** — never run an automated `delete + recreate`.
+sync key is missing from BWS, the reconciler **fails loudly in `live`**
+— never runs an automated `delete + recreate`.
 
 Reason: protects against the cascade where a transient BWS API
 timeout returns "key not found", the reconciler "recovers" by
@@ -112,11 +112,19 @@ re-creating live IAM resources, and live users / service accounts /
 org structures are silently destroyed. Lookup failure is
 operator-investigates territory, not auto-heal.
 
-In `local`, the lock is off — `--no-bws` mode is allowed to mint
-fresh keys at will (that's the whole point of `local`).
+In `local` mode, the lock is off — delete+recreate is the normal
+first-boot/reset behaviour.
 
-⚠️ **Audit pending.** Plan:
-[guardrails-implementation.md § Rule 5](./guardrails-implementation.md#rule-5--zitadel-anti-panic-lock).
+**Escape hatch.** When a one-shot reveal is genuinely lost (audited
+by the operator), pass `--allow-recreate=<resource>` to opt in
+per-resource. Known tokens: `pat`, `target:menu-permissions`,
+`target:menu-grants`. Each opt-in is single-resource — there's no
+`--allow-recreate=all`.
+
+Implementation: `guardRecreate` helper at
+[`infra/cmd/zitadel-apply/reconcile.go`](../infra/cmd/zitadel-apply/reconcile.go),
+gated at the PAT and action-target delete branches. Tested via
+[`infra/cmd/zitadel-apply/reconcile_test.go`](../infra/cmd/zitadel-apply/reconcile_test.go).
 
 ## Architecture
 
@@ -539,7 +547,7 @@ side of `deploy.yml` commit the encrypted `terraform.tfstate` back to
 operator's Docker daemon — postgres, zitadel, zitadel-login,
 localstack (S3), openobserve. Same configurator pattern: after
 containers come up, the dev orchestrator runs `bin/zitadel-apply
---no-bws --output-file infra/dev/.zitadel-bootstrap/outputs.json`
+--mode local --output-file infra/dev/.zitadel-bootstrap/outputs.json`
 against `localhost:8080`, then composes
 `products/menu/.env` + `.env.local` in Go from the outputs file +
 tofu outputs + minted random session secret.

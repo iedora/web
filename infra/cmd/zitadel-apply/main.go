@@ -32,7 +32,12 @@
 //	--output-file PATH   when --mode local, serialise outputs as JSON to PATH
 //	                     (also seeds the store from this path if it exists,
 //	                     so warm dev runs keep stable PAT + signing keys)
-//	--no-bws             DEPRECATED alias for --mode local; will be removed
+//	--allow-recreate L   comma-separated resources allowed to delete+recreate
+//	                     in live mode when their BWS key is missing. Default
+//	                     empty = strict (Rule 5 anti-panic lock — refuses
+//	                     destructive recovery without explicit opt-in).
+//	                     Tokens: "pat", "target:menu-permissions",
+//	                     "target:menu-grants".
 package main
 
 import (
@@ -67,16 +72,19 @@ func run(ctx context.Context, argv []string) error {
 	fs.SetOutput(io.Discard) // we own error formatting
 	grantsOnly := fs.Bool("grants-only", false, "skip full reconcile; only run admin email grants")
 	modeFlag := fs.String("mode", string(mode.Live), "binary environment guardrail: live | local")
-	// TODO(guardrails): remove --no-bws after the dev orchestrator + any
-	// other in-tree callers migrate to --mode local. Tracked alongside the
-	// other Rule 1 follow-ups in docs/guardrails-implementation.md.
-	noBWS := fs.Bool("no-bws", false, "DEPRECATED: use --mode local")
 	outputFile := fs.String("output-file", "", "when --mode local, serialise outputs as JSON to PATH")
+	// Rule 5 (anti-panic lock): comma-separated list of resources the
+	// reconciler is allowed to delete+recreate in live mode when their
+	// BWS key is missing. Default empty = strict (refuse + error).
+	// Known tokens: "pat", "target:menu-permissions", "target:menu-grants".
+	// See docs/deploy.md § Environment guardrails (Rule 5).
+	allowRecreate := fs.String("allow-recreate", "",
+		"comma-separated resources to allow delete+recreate on BWS miss in live mode (e.g. pat,target:menu-permissions)")
 	if err := fs.Parse(argv); err != nil {
 		return err
 	}
 
-	m, err := reconcileModeFlags(*modeFlag, *noBWS, modeFlagExplicit(argv))
+	m, err := mode.Resolve(*modeFlag)
 	if err != nil {
 		return err
 	}
@@ -85,6 +93,7 @@ func run(ctx context.Context, argv []string) error {
 	if err != nil {
 		return err
 	}
+	cfg.AllowRecreate = parseAllowRecreate(*allowRecreate)
 
 	// Self-bootstrap: if the SA key isn't already in env, TLS-probe
 	// Zitadel + fetch the FirstInstance key off the box. Keeps Stage 3's
@@ -180,58 +189,6 @@ func buildStore(m mode.Mode, outputFile string) (secretStore, error) {
 	}
 }
 
-// reconcileModeFlags resolves the (--mode, --no-bws) pair into a single
-// mode.Mode. The bool --no-bws is the legacy flag the dev orchestrator
-// still passes; it's accepted with a deprecation warning until every
-// caller migrates.
-//
-// Truth table:
-//
-//	--no-bws=false, --mode default(live) → live
-//	--no-bws=false, --mode local         → local
-//	--no-bws=true,  --mode default(live) → local, warn on stderr
-//	--no-bws=true,  --mode local         → local, no warning (same intent)
-//	--no-bws=true,  --mode live (explicit) → error (contradictory)
-func reconcileModeFlags(modeStr string, noBWS, modeExplicit bool) (mode.Mode, error) {
-	m, err := mode.Resolve(modeStr)
-	if err != nil {
-		return "", err
-	}
-	if !noBWS {
-		return m, nil
-	}
-	if !modeExplicit {
-		// Legacy callsite: only --no-bws set. Honor it + warn.
-		fmt.Fprintln(stderr, "warning: --no-bws is deprecated; use --mode local")
-		return mode.Local, nil
-	}
-	if m == mode.Local {
-		// Both set, same intent — accept silently.
-		return mode.Local, nil
-	}
-	// Both set, contradictory.
-	return "", fmt.Errorf("--no-bws cannot be combined with --mode live (use --mode local instead)")
-}
-
-// modeFlagExplicit returns true when the operator passed --mode (in any
-// of its accepted spellings) on the command line. We can't rely on
-// fs.Visit alone after fs.Parse because the FlagSet is captured in a
-// closure; cheaper to re-scan argv.
-func modeFlagExplicit(argv []string) bool {
-	for _, a := range argv {
-		if a == "--" {
-			return false // end of flags
-		}
-		if a == "--mode" || a == "-mode" {
-			return true
-		}
-		if strings.HasPrefix(a, "--mode=") || strings.HasPrefix(a, "-mode=") {
-			return true
-		}
-	}
-	return false
-}
-
 func envOr(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
@@ -248,6 +205,30 @@ func parseDurationOr(s string, fallback time.Duration) time.Duration {
 		return fallback
 	}
 	return d
+}
+
+// parseAllowRecreate splits a comma-separated --allow-recreate value
+// into a lookup map. Empty/whitespace-only input → nil map (treated as
+// strict). Per-token trimming so `--allow-recreate=pat, target:menu-grants`
+// works the same as `pat,target:menu-grants`. Unknown tokens are kept —
+// validating them against an allowlist here would couple this helper
+// to the schema (which lives in reconcile.go), and an unknown token
+// is a silent no-op (the gate just never matches it) which is the
+// safer failure mode than a flag-parse-time error blocking the rest
+// of the run.
+func parseAllowRecreate(s string) map[string]bool {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil
+	}
+	out := map[string]bool{}
+	for tok := range strings.SplitSeq(s, ",") {
+		tok = strings.TrimSpace(tok)
+		if tok != "" {
+			out[tok] = true
+		}
+	}
+	return out
 }
 
 // parseEmails accepts a JSON array (`["a@x","b@x"]`) or a

@@ -33,6 +33,43 @@ type Config struct {
 	//   - bwsStore   live mode (prod default)
 	//   - memoryStore local mode (optionally serialises to JSON)
 	Store secretStore
+
+	// AllowRecreate gates the live-mode "delete + recreate on missing
+	// BWS key" paths. Rule 5 (Zitadel anti-panic lock) — see
+	// docs/deploy.md § Environment guardrails. Empty map = strict
+	// (no recreate). Operator opts in per-resource via
+	// `--allow-recreate=pat`, `--allow-recreate=target:menu-permissions`,
+	// etc. Local mode ignores this — recreate is normal in local.
+	AllowRecreate map[string]bool
+}
+
+// guardRecreate decides whether a live-mode delete+recreate path may
+// proceed. Rule 5: a transient BWS read returning "not found" must
+// not silently destroy + replace a live IAM resource. In live mode
+// the path is refused unless the operator opted in via
+// `--allow-recreate=<resource>`. In local mode delete+recreate is
+// the normal first-boot/reset behaviour and proceeds without question.
+//
+// resource is the operator-facing token ("pat", "target:menu-permissions").
+// bwsKey is the missing BWS key (named in the error so operators can
+// `bws secret get <id>` to investigate). zitadelDescriptor names the
+// live resource that would be destroyed.
+func guardRecreate(cfg Config, resource, bwsKey, zitadelDescriptor string) error {
+	if cfg.Mode.IsLocal() {
+		return nil
+	}
+	if cfg.AllowRecreate[resource] {
+		return nil
+	}
+	return fmt.Errorf(
+		"Rule 5 (anti-panic lock): %s missing from BWS but %s exists on Zitadel — "+
+			"refusing to delete+recreate a live IAM resource. "+
+			"Recovery: (1) verify BWS availability — a transient API timeout returns the same shape as a true miss; "+
+			"(2) restore the key via `bws secret edit ...`, then re-run; "+
+			"(3) if the value is truly lost, audit the operator handoff and re-run with `--allow-recreate=%s`. "+
+			"See docs/deploy.md § Environment guardrails (Rule 5).",
+		bwsKey, zitadelDescriptor, resource,
+	)
 }
 
 // State accumulates the IDs + one-shot secret values produced across the
@@ -408,8 +445,15 @@ func reconcilePAT(ctx context.Context, c *client, s *State, cfg Config) error {
 		s.PATToken = bwsTok
 		return nil
 	case !hasBWS && hasZitadel:
-		// One-shot reveal was lost. Delete + recreate. Loud warning at
-		// the end of the run.
+		// One-shot reveal was lost. The PAT is the menu container's
+		// Zitadel auth — deleting it logs every user out until the new
+		// token lands in BWS + menu restarts. Rule 5 (anti-panic lock)
+		// refuses the recreate in live mode unless the operator
+		// explicitly opted in via --allow-recreate=pat.
+		if err := guardRecreate(cfg, "pat", bwsKeyMenuSAToken,
+			fmt.Sprintf("PAT %s on machine user %s", existingPATs[0], s.MachineUserID)); err != nil {
+			return err
+		}
 		if err := c.doJSON(ctx, http.MethodDelete,
 			"/management/v1/users/"+s.MachineUserID+"/pats/"+existingPATs[0],
 			nil, nil, requestOpts{orgID: s.OrgID}); err != nil {
@@ -517,8 +561,17 @@ func reconcileOneTarget(ctx context.Context, c *client, s *State, cfg Config,
 		*signingKeyOut = bwsVal
 		return nil
 	case existing != "" && !hasBWS:
-		// One-shot reveal lost — delete + recreate. Dependent executions
-		// (bound by target ID) get rebound by reconcileExecutions next.
+		// One-shot reveal lost. Deleting a live target produces a brief
+		// (~1s) webhook gap until reconcileExecutions rebinds — during
+		// which scope claims may be stale and permission checks may
+		// fail. Rule 5 (anti-panic lock) refuses in live mode unless
+		// the operator explicitly opted in via
+		// --allow-recreate=target:<name>. Dependent executions are
+		// rebound automatically by reconcileExecutions next.
+		if err := guardRecreate(cfg, "target:"+name, bwsKey,
+			fmt.Sprintf("action target %s (id=%s)", name, existing)); err != nil {
+			return err
+		}
 		if err := c.doJSON(ctx, http.MethodDelete, "/v2/actions/targets/"+existing,
 			nil, nil, requestOpts{}); err != nil {
 			return fmt.Errorf("delete stale target %s: %w", existing, err)

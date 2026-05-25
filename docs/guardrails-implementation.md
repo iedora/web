@@ -5,58 +5,42 @@
 > we get there from today's code. One section per rule; each ends with
 > a concrete, ordered task list and the files that change.
 >
-> Order of recommended landing: Rule 5 → Rule 1 → Rule 2 → Rule 3 → Rule 4.
-> Reasoning: 5 is small and safety-critical, 1 is a refactor that
-> unblocks the rest, 2 is the bootstrap-heavy one that frees us from
-> the encrypted-state-in-git pattern, 3 and 4 are then independent.
+> Order of recommended landing: ~~Rule 5 → Rule 1~~ → Rule 2 → Rule 3 → Rule 4.
+> Rules 1 and 5 landed first (commits `ab72194` and the Rule 5 commit
+> referenced below). Rule 2 is next — the bootstrap-heavy one that
+> frees us from the encrypted-state-in-git pattern. 3 and 4 are then
+> independent.
 
 ## Status at a glance
 
-| Rule | Title                              | Status   | Effort | Blast radius |
-|------|------------------------------------|----------|--------|--------------|
-| 1    | Binary environment (`local`/`live`)| Partial  | S      | Low — refactor |
-| 2    | Tofu state in R2                   | Not started | L   | High — touches every apply, bootstrap problem |
-| 3    | Expand-contract migrations         | Not started | M   | Medium — process + lint |
-| 4    | Zero-downtime hot-swap             | Not started | M   | Medium — `runtime_docker.go` rewrite |
-| 5    | Zitadel anti-panic lock            | Audit needed | S | Low — single code path |
+| Rule | Title                              | Status      | Effort | Blast radius |
+|------|------------------------------------|-------------|--------|--------------|
+| 1    | Binary environment (`local`/`live`)| ✅ landed   | —      | done in `ab72194` |
+| 5    | Zitadel anti-panic lock            | ✅ landed   | —      | done — see this doc § Rule 5 |
+| 2    | Tofu state in R2                   | Not started | L      | High — touches every apply, bootstrap problem |
+| 3    | Expand-contract migrations         | Not started | M      | Medium — process + lint |
+| 4    | Zero-downtime hot-swap             | Not started | M      | Medium — `runtime_docker.go` rewrite |
 
-## Rule 1 — binary environment
+## Rule 1 — binary environment ✅ landed (`ab72194`)
 
-### Today
-- Two separate orchestrators: `infra/cmd/iedora/` (live) and
-  `infra/cmd/dev/` (local). Separation is good.
-- Configurators take per-binary mode flags (`zitadel-apply --no-bws`
-  for local). Implicit and per-binary; no shared constant.
-- No `IEDORA_MODE` or equivalent. Branching is by env presence
-  (`if os.Getenv("BWS_ACCESS_TOKEN") == "" {...}`) and by which CLI
-  entered.
+Single source of truth: [`infra/internal/mode`](../infra/internal/mode/) —
+`Mode` enum (`Local | Live`), `Resolve` / `MustResolve` / `Require`
+(panics on mismatch) / `IsLive` / `IsLocal`. Adopted across all 5
+binaries:
 
-### Target
-- Single source of truth: `infra/internal/mode/Mode` enum =
-  `Local | Live`. Resolved exactly once at process start.
-- Helper `mode.Require(Live)` panics with a clear message if a
-  live-only code path is reached in local (and vice versa).
-- All configurators take `--mode` (or read `IEDORA_MODE` from env)
-  and converge on the same flag name.
+- `cmd/iedora` — pinned to `Live`, with `Require(Live)` at the top of
+  every destructive entry point (`runIacApply`, `runIacDestroy`,
+  `runAppApply`, `runDeployProduct`, `runDestroyProduct`).
+- `cmd/dev` — pinned to `Local`.
+- `cmd/zitadel-apply` — the only dual-mode binary; takes `--mode
+  live|local` (default `live`). Mode plumbs through `loadConfig`,
+  `buildStore` (live → `bwsStore`, local → `memoryStore`), `ensureSAKey`,
+  and `waitForMenuDNS` (local short-circuits).
+- `cmd/menu-db-migrations`, `cmd/openobserve-dashboards` — live-only
+  by deployment topology; `const runsIn = mode.Live` documents it.
 
-### Migration steps
-1. Add `infra/internal/mode/` package: `Mode` type, `Resolve()`,
-   `Require(Mode)`. ~40 lines + tests.
-2. Wire `iedora` (`live`) and `cmd/dev` (`local`) to set the mode
-   before any subcommand runs.
-3. Rename `zitadel-apply --no-bws` → `--mode local` (deprecate
-   `--no-bws` for one release with a translation shim).
-4. Audit Stage-3 configurators for hidden mode branches; route them
-   through `mode.Mode` instead of env-presence checks.
-
-### Files
-- `infra/internal/mode/mode.go` (new)
-- `infra/internal/mode/mode_test.go` (new)
-- `infra/cmd/iedora/main.go` (set `mode.Live`)
-- `infra/cmd/dev/main.go` (set `mode.Local`)
-- `infra/cmd/zitadel-apply/main.go` (flag rename + lookup)
-- `infra/cmd/menu-db-migrations/main.go` (audit)
-- `infra/cmd/openobserve-dashboards/main.go` (audit)
+No back-compat surface — fresh ecosystem, no callers needed a
+deprecation window.
 
 ## Rule 2 — Tofu state in R2
 
@@ -240,50 +224,42 @@ We can't manage the state bucket with Tofu and also keep state in it
 - `infra/cmd/iedora/products.go` (add Healthcheck to menu)
 - `docs/deploy.md` (§ dockerOnHetzner — drop the ⚠️, update flow)
 
-## Rule 5 — Zitadel anti-panic lock
+## Rule 5 — Zitadel anti-panic lock ✅ landed
 
-### Today
-- `infra/cmd/zitadel-apply/reconcile.go` (949 lines). Specific
-  paths to audit:
-  - `Org.iedora` lookup → if not in BWS but exists in Zitadel
-  - `Project.iedora` lookup
-  - `MachineUser menu-sa` lookup
-  - `OIDCApp menu` lookup
-  - `ActionTarget menu_*` lookups
-  - `PAT menu_sa` (already has a recovery matrix per
-    [deploy.md § Recovery matrix](./deploy.md))
-- Need to determine whether the current behavior on "exists in
-  Zitadel, missing from BWS" is delete-recreate or panic.
+### What landed
 
-### Target
-- All negative-lookup paths gated by `mode.Require(Live)` before
-  any `delete + recreate`.
-- In `live`: panic with a structured error that names the
-  Zitadel resource ID + the missing BWS key. The error message
-  tells the operator the exact `bws secret get` to run + how to
-  re-sync (likely: fetch from Zitadel, write to BWS, re-run).
-- In `local`: the existing delete-recreate behavior is kept —
-  that's the whole point of `local`, fresh-instance bootstraps
-  are normal.
+The audit found exactly **two** branches in `reconcile.go` that could
+silently `delete + recreate` a live IAM resource on a "BWS key missing"
+signal:
 
-### Migration steps
-1. Audit `reconcile.go` for every negative-lookup branch. Map
-   each to a "does this resource cascade-delete users / orgs /
-   service accounts if recreated" risk score.
-2. For high-risk ones (org, project, machine user, IAM
-   memberships): wrap with `mode.Require(Live)` + panic.
-3. For low-risk ones (action targets, action executions —
-   pure config, no user impact): allow recreate in live with
-   a warning log.
-4. Add a `--allow-recreate=<resource>` escape hatch for the
-   genuinely lost-key case (operator explicitly opts in for one
-   resource at a time, only after audit).
-5. Table-driven test in `reconcile_test.go` for the 4-5
-   high-risk paths.
+| Branch | Resource | Blast radius |
+|--------|----------|--------------|
+| `reconcile.go::reconcilePAT` | PAT `menu-sa` access token | 🔴 critical — menu container loses Zitadel auth, every user logged out until new PAT lands in BWS + container restarts |
+| `reconcile.go::reconcileOneTarget` | Action target (`menu-permissions`, `menu-grants`) | 🔴 high — ~1s webhook gap until `reconcileExecutions` rebinds; stale scope claims during the window |
+
+Everything else in the 949-line reconciler is create-only on miss
+(project, project-roles, machine-user, OIDC app, OIDC client_secret
+which uses Zitadel's `regenerate` endpoint, not delete) or idempotent
+POSTs (IAM owner grant, action executions, admin grants).
+
+### How it's gated
+
+`guardRecreate(cfg, resource, bwsKey, descriptor)` in `reconcile.go`:
+- Local mode → returns `nil`, recreate proceeds. (Local IS supposed
+  to mint fresh on cold boot.)
+- Live mode + `cfg.AllowRecreate[resource]` true → returns `nil`,
+  recreate proceeds. (Operator-authorised destructive recovery.)
+- Live mode without opt-in → returns a structured error naming the
+  missing BWS key, the live resource ID, and the exact
+  `--allow-recreate=<resource>` token to use.
+
+Operator flag: `--allow-recreate=pat,target:menu-permissions` (comma-
+separated, parsed by `parseAllowRecreate`). No `all` token — opt-in
+is one resource at a time.
 
 ### Files
-- `infra/cmd/zitadel-apply/reconcile.go` (gate negative lookups)
-- `infra/cmd/zitadel-apply/reconcile_test.go` (new or extend)
-- `infra/cmd/zitadel-apply/main.go` (`--allow-recreate` flag)
-- `docs/deploy.md` (§ Failure modes — add the "lookup mismatch"
-  row with the `--allow-recreate` recovery)
+
+- [`infra/cmd/zitadel-apply/reconcile.go`](../infra/cmd/zitadel-apply/reconcile.go) — `Config.AllowRecreate` + `guardRecreate` helper + gates at the PAT and target delete branches.
+- [`infra/cmd/zitadel-apply/main.go`](../infra/cmd/zitadel-apply/main.go) — `--allow-recreate` flag + `parseAllowRecreate` (comma-separated → `map[string]bool`).
+- [`infra/cmd/zitadel-apply/reconcile_test.go`](../infra/cmd/zitadel-apply/reconcile_test.go) — table-driven tests for `guardRecreate` (7 cases covering local short-circuit, live strict, live with matching/wrong opt-in) + `parseAllowRecreate` (7 cases for split/trim/dedupe/empty).
+- [`docs/deploy.md` § Environment guardrails — Rule 5](./deploy.md#5-zitadel-reconciler--anti-panic-lock) — operator-facing copy.
