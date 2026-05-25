@@ -574,23 +574,38 @@ State commit-back: both `infra-deploy.yml` and the per-product Tofu
 side of `deploy.yml` commit the encrypted `terraform.tfstate` back to
 `main` after a successful apply — git stays canonical.
 
-## Local dev stack (`task local`)
+## Local stack (`task local`)
 
-[`dev/orchestrator/`](../dev/orchestrator/) boots the same shape on the
-operator's Docker daemon — postgres, zitadel, zitadel-login,
-localstack (S3), openobserve. Same configurator pattern: after
-containers come up, the dev orchestrator runs `bin/zitadel-apply
---mode local --output-file dev/.zitadel-bootstrap/outputs.json`
-against `localhost:8080`, then composes
-`products/menu/.env` + `.env.local` in Go from the outputs file +
-tofu outputs + minted random session secret.
+[`dev/docker-compose.yml`](../dev/docker-compose.yml)
+is the source of truth for the local stack shape: postgres,
+localstack (S3 mock), openobserve, zitadel + login UI, house, menu.
+Each service is gated by a compose profile matching its name.
 
-Menu runs via `bun run dev` from the host (not as a container in
-dev). House runs as a container.
+[`dev/orchestrator/`](../dev/orchestrator/) is a thin Go shim that:
 
-`task local --only menu` brings up menu's deps only. `--except <service>`
-boots everything except the named ones. `task local:reset-db -- <name>`
-drops + recreates one database.
+1. Translates `--only`/`--except` into compose profile flags.
+2. `docker compose up -d --wait` for everything except menu.
+3. Waits for Zitadel `/debug/ready` (no docker healthcheck — the
+   image is distroless, no shell to run one).
+4. Runs `bin/zitadel-apply --mode local --output-file
+   dev/.zitadel-bootstrap/outputs.json` against
+   `localhost:8080`. The SA key is `docker cp`'d out of the
+   `zitadel_bootstrap` named volume.
+5. Composes `products/menu/.env` from local-stack statics +
+   outputs.json + a minted session secret (persisted alongside the
+   outputs).
+6. `docker compose up -d menu` — the menu container's `env_file:`
+   picks up the just-written `.env`.
+
+Menu runs as a container by default (same image as prod). For HMR,
+opt out via `task local --except menu` and `cd products/menu && bun
+run dev` — the orchestrator drops the in-container env values and
+writes `<please_fill>` placeholders into `.env.local` for the
+operator to point at remote URLs.
+
+`task local --only menu` brings up menu's deps (postgres, localstack,
+openobserve, zitadel) too via the dep closure in the orchestrator.
+`task local:reset-db -- <name>` drops + recreates one database.
 
 ## Day-2 operations
 
@@ -808,7 +823,7 @@ infra/
     openobserve-dashboards/                Stage 3 — SSH-L tunnel + embedded JSONs + REST.
       main.go + dashboards/*.json
     bws-upsert/                            BWS write-through helper for Tofu.
-    dev/                                   local dev stack orchestrator.
+    local/                                 local-stack orchestrator (docker-compose shim).
 
   internal/
     bws/                                   bws CLI wrapper (ProjectID, ListSecrets, Find, Upsert, Delete)
@@ -820,10 +835,11 @@ infra/
   tofu/                                    Stage 2 — central Tofu root
     versions.tf, variables.tf, hetzner.tf, main.tf, containers.tf,
     secrets.tf, github.tf, outputs.tf
-  modules/services/                        Tofu modules for each shared service
-    postgres/, zitadel/, zitadel-login/, openobserve/, localstack/, house/
+  modules/services/                        Tofu modules for each live shared service
+    postgres/, zitadel/, zitadel-login/, openobserve/
 
-  dev/tofu/                                local dev Tofu root (mirrors prod shape)
+  local/                                   local-stack docker-compose root
+    docker-compose.yml, localstack-init.sh
   backup/                                  self-built Postgres-backup image (Dockerfile + sh scripts)
 ```
 

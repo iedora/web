@@ -41,9 +41,11 @@ infra/
   cmd/iedora/            Stage 2/3/4 orchestrator (live).
                          Subcommands: iac, app, deploy, destroy,
                          pipeline, doctor.
-  cmd/dev/               Local dev orchestrator (`task local`).
-                         Mirrors the prod pipeline shape against
-                         a local Docker daemon.
+  cmd/local/             Local-stack orchestrator (`task local`).
+                         Thin shim over `docker compose` against
+                         dev/docker-compose.yml.
+  local/                 docker-compose.yml + localstack init script
+                         + (gitignored) .zitadel-bootstrap/.
   cmd/zitadel-apply/     Stage 3 — reconciles Zitadel app state
                          (org, project, OIDC app, machine user + PAT,
                          action targets, admin grants).

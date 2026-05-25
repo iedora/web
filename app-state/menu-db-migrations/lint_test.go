@@ -190,7 +190,7 @@ func TestFormatViolationsEmpty(t *testing.T) {
 // Skips if the drizzle directory isn't found relative to the test
 // binary (so CI in a non-monorepo checkout doesn't false-fail).
 func TestLintRealMigrations(t *testing.T) {
-	// `infra/cmd/menu-db-migrations/` → repo root = `../../..`
+	// `app-state/menu-db-migrations/` → repo root = `../../..`
 	dir := filepath.Join("..", "..", "..", "products", "menu", "drizzle")
 	if _, err := os.Stat(dir); err != nil {
 		t.Skipf("real drizzle dir not at %s: %v", dir, err)

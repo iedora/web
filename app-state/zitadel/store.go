@@ -16,7 +16,7 @@ import (
 // persisted. Two implementations:
 //
 //   - bwsStore: live mode (prod default). Reads + writes go through
-//     Bitwarden Secrets Manager via the existing `infra/internal/bws`
+//     Bitwarden Secrets Manager via the existing `internal/bws`
 //     package.
 //   - memoryStore: local mode (dev). Reads + writes live in an in-process
 //     map. Optionally serialized to a JSON file at the end of the run via

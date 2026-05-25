@@ -1,217 +1,114 @@
-// Dev container orchestrator. Brings up the local dev stack via Tofu,
-// then reconciles the local Zitadel via `bin/zitadel-apply --mode local`
-// (Stage 3 in dev mode — writes outputs to a JSON file instead of BWS),
-// then composes products/menu/.env + .env.local in Go from a combination
-// of Tofu outputs, the JSON outputs file, and minted random secrets.
+// Local stack orchestrator. Thin shim over `docker compose` —
+// translates --only/--except into compose profiles, brings the stack
+// up, runs the Stage-3-equivalent `bin/zitadel-apply --mode local`,
+// composes products/menu/.env, then starts the menu container.
 //
-// Mirrors the prod 4-stage pipeline (infra → app → deploy) condensed into
-// one operator-friendly entry point. No docker-compose, no BWS dependency,
-// no Zitadel TF provider (replaced by the binary).
+// Replaces the previous Tofu-for-local design (infra/dev/tofu/) per
+// docs/deploy.md § Local stack — compose handles every dev concern
+// Tofu was bolted onto (network, volumes, profiles for selection,
+// depends_on for ordering, healthchecks). Go is only on the path
+// for things compose can't natively express: the Zitadel readiness
+// probe (distroless image, no healthcheck), the SA-key copy from
+// the named volume, and the env-compose-then-restart sequence menu
+// needs to receive its post-reconcile env.
 //
-// Default: bring everything up — `task dev`.
-//
-// Subset selection (each service is a `enable_*` TF input):
-//
-//	task dev -- -i                    interactive TUI per category
-//	task dev -- --only menu           everything menu needs
-//	task dev -- --except openobserve  everything else, deps preserved
-//	task dev:down                     tear down the full stack
-//
-// ─── File layout ──────────────────────────────────────────────────────
-//
-// main.go       Entry point + apply/destroy choreography.
-// consts.go     Centralised magic strings — paths, output names.
-// service.go    Service catalog — what runs and how. Iterated, never named.
-// selection.go  CLI flag parsing + dep-graph closure + TUI.
-// envfile.go    products/menu/.env + .env.local writers. Composes values
-//               from outputs.json + Tofu outputs + statics + minted bytes.
-// proc.go       Subprocess + I/O helpers. No business logic.
-// resetdb.go    --reset-db scoped reset per database.
-
+// All paths resolve relative to the repo root (the `go run` working
+// directory is `infra/`; repo root = parent).
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
-	"strings"
-	"time"
+	"syscall"
 
 	"github.com/eduvhc/iedora/internal/mode"
 )
 
-func main() {
-	// `cmd/dev` is the local twin of `cmd/iedora` — Docker daemon on
-	// localhost, no BWS, freely destructible. The Require call documents
-	// the invariant and panics if anyone ever flips this to Live by
-	// mistake. See docs/deploy.md § Environment guardrails (Rule 1).
-	m := mode.Local
-	m.Require(mode.Local)
+// currentMode pins this binary to Local. The orchestrator never touches
+// BWS, real cloud APIs, or the live infra — see docs/deploy.md
+// § Environment guardrails (Rule 1).
+var currentMode = mode.Local
 
-	sel := parseFlags()
+func main() {
+	currentMode.Require(mode.Local)
+
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
+
+	cli := parseFlags()
 
 	repoRoot := findRepoRoot()
-	devTofuDir := filepath.Join(repoRoot, devTofuDirRel)
-	menuDir := filepath.Join(repoRoot, menuDirRel)
-	envLocalPath := filepath.Join(menuDir, envLocalFileName)
-	envPath := filepath.Join(menuDir, envFileName)
-	zitadelSAKeyPath := filepath.Join(repoRoot, zitadelSAKeyPathRel)
-	zitadelOutputsPath := filepath.Join(repoRoot, zitadelOutputsPathRel)
-	zitadelApplyBin := filepath.Join(repoRoot, zitadelApplyBinRel)
+	composeDir := filepath.Join(repoRoot, "dev")
+	menuDir := filepath.Join(repoRoot, "products/menu")
+	envPath := filepath.Join(menuDir, ".env")
+	envLocalPath := filepath.Join(menuDir, ".env.local")
+	bootstrapDir := filepath.Join(repoRoot, "dev/.zitadel-bootstrap")
+	outputsPath := filepath.Join(bootstrapDir, "outputs.json")
+	zitadelApplyBin := filepath.Join(repoRoot, "infra/bin/zitadel-apply")
 
-	if sel.destroy {
-		destroyDevStack(repoRoot, devTofuDir, envLocalPath)
+	switch {
+	case cli.destroy:
+		runDestroy(ctx, composeDir, bootstrapDir, envLocalPath)
+		return
+	case cli.resetDB != "":
+		runResetDB(ctx, cli.resetDB)
 		return
 	}
-	if sel.resetDB != "" {
-		resetDB(sel.resetDB, repoRoot, devTofuDir)
-		return
-	}
 
-	selected, err := sel.resolve()
+	selected, err := cli.resolveSelection()
 	if err != nil {
 		fail("%v", err)
 	}
-
-	fmt.Printf("%s selection: %s\n", logPrefix, strings.Join(selected, ", "))
+	fmt.Printf("%s selection: %v\n", logPrefix, selected)
 
 	warnEnvLocalState(envLocalPath, selected)
 
-	applyDevStack(selected, devTofuDir, zitadelSAKeyPath, zitadelOutputsPath, zitadelApplyBin)
-	writeMenuEnvFiles(devTofuDir, zitadelOutputsPath, envPath, envLocalPath, selected)
-	printNextSteps(selected)
-}
+	// 1. compose up everything EXCEPT menu — menu needs the post-reconcile
+	//    env file which doesn't exist yet on a cold run.
+	step(1, "docker compose up — infra services")
+	composeUp(ctx, composeDir, withoutMenu(selected))
 
-// applyDevStack runs the 5-step dev choreography:
-//
-//  1. tofu init
-//  2. tofu apply -target=... — bring up containers (postgres, zitadel,
-//     openobserve, localstack, house). No menu_env modules, no zitadel
-//     provider — those went away in the iac/app split refactor.
-//  3. Wait for Zitadel /debug/ready.
-//  4. bin/zitadel-apply --mode local --output-file <path> — reconciles
-//     local Zitadel from scratch, writes a JSON file of its 6 outputs.
-//  5. (Env file composition is run by the caller via writeMenuEnvFiles,
-//     not here.)
-func applyDevStack(selected []string, devTofuDir, zitadelSAKeyPath, zitadelOutputsPath, zitadelApplyBin string) {
-	enableVars := tfEnableVars(selected)
-
-	step(1, "tofu init")
-	runIn(devTofuDir, "tofu", "init", "-upgrade", "-input=false")
-
-	step(2, "tofu apply (containers)")
-	// Containers only — postgres, localstack, zitadel, zitadel-login,
-	// openobserve, house. No menu container (menu runs via `bun run dev`
-	// from products/menu — or as a Stage 4 deploy in a future iteration).
-	targets := []string{
-		"-target=docker_network.iedora",
-		"-target=docker_volume.postgres_data",
-		"-target=docker_volume.localstack_data",
-		"-target=docker_volume.openobserve_data",
-		"-target=docker_container.zitadel_bootstrap_chmod",
-		"-target=module.postgres",
-		"-target=module.localstack",
-		"-target=module.zitadel",
-		"-target=module.zitadel_login",
-		"-target=module.openobserve",
-		"-target=docker_image.house",
-		"-target=module.house",
-	}
-	pass := append([]string{"apply", "-auto-approve", "-input=false"}, targets...)
-	pass = append(pass, enableVars...)
-	runIn(devTofuDir, "tofu", pass...)
-
-	step(3, "wait for Zitadel /debug/ready")
-	if err := waitForHTTP200(zitadelReadyURL, 90*time.Second); err != nil {
-		fail("%v\nhint: docker logs infra-zitadel", err)
-	}
-	saKey, err := readFileWhenReady(zitadelSAKeyPath)
-	if err != nil {
-		fail("read %s: %v\nhint: docker logs infra-zitadel", zitadelSAKeyPath, err)
-	}
-
-	step(4, "bin/zitadel-apply (Stage 3: reconcile local Zitadel → outputs.json)")
-	if err := os.MkdirAll(filepath.Dir(zitadelOutputsPath), 0o700); err != nil {
-		fail("mkdir for outputs.json: %v", err)
-	}
-	// `--mode local` swaps the bws-backed store for an in-memory one;
-	// the orchestrator passes the SA key + reconcile inputs as env vars.
-	// Outputs land at zitadelOutputsPath; subsequent runs seed from
-	// that file so PAT + signing keys stay stable across `task dev` cycles.
-	runInWithEnv(filepath.Dir(zitadelApplyBin),
-		[]string{
-			"IAC_BOOTSTRAP_ZITADEL_SA_KEY_JSON=" + string(saKey),
-			"ZA_BASE_URL=http://localhost:8080",
-			"ZA_MENU_HOSTNAME=localhost:3000",
-			// ZA_SSH_HOST is irrelevant in local mode — wait_dns.go
-			// short-circuits before reading it. Leaving it unset.
-		},
-		zitadelApplyBin, "--mode", "local", "--output-file", zitadelOutputsPath)
-}
-
-// destroyDevStack tears the dev stack down. Each step is best-effort
-// (continues on failure); the dev stack is throwaway by design.
-//
-// Note: no more state-rm of zitadel_* — those resources don't exist in
-// Tofu state anymore (extracted to bin/zitadel-apply). `tofu destroy`
-// just walks the container modules + network/volumes.
-func destroyDevStack(repoRoot, devTofuDir, envLocalPath string) {
-	stepOf(1, destroySteps, "tofu destroy")
-	runQuiet(devTofuDir, "tofu", "init", "-input=false")
-	runQuiet(devTofuDir, "tofu", "destroy", "-auto-approve")
-
-	stepOf(2, destroySteps, "remove infra-* containers")
-	removeInfraContainers()
-
-	stepOf(3, destroySteps, "remove docker network + volumes")
-	runQuiet("", "docker", "network", "rm", "iedora")
-	runQuiet("", "docker", "volume", "rm", "postgres-data", "localstack-data", "openobserve-data", "zitadel-bootstrap")
-
-	stepOf(4, destroySteps, "wipe local state + outputs + .env.local")
-	for _, p := range []string{
-		filepath.Join(repoRoot, "infra/dev/.zitadel-bootstrap"),
-		filepath.Join(devTofuDir, ".terraform"),
-		filepath.Join(devTofuDir, ".terraform.lock.hcl"),
-		filepath.Join(devTofuDir, "terraform.tfstate"),
-		filepath.Join(devTofuDir, "terraform.tfstate.backup"),
-		envLocalPath,
-	} {
-		if err := os.RemoveAll(p); err != nil {
-			warn("remove %s: %v", p, err)
+	// 2. Wait for Zitadel /debug/ready. The image is distroless (no sh,
+	//    no curl/wget) so we can't ship a docker healthcheck — orchestrator
+	//    polls from the host port-forward instead.
+	if contains(selected, "zitadel") {
+		step(2, "wait for Zitadel /debug/ready")
+		if err := waitForHTTP200(ctx, "http://localhost:8080/debug/ready", zitadelReadyBudget); err != nil {
+			fail("%v\nhint: docker logs infra-zitadel", err)
 		}
 	}
 
-	fmt.Printf("%s dev stack torn down.\n", logPrefix)
-}
-
-// tfEnableVars converts the user selection into the `-var enable_X=…`
-// flags Tofu expects.
-func tfEnableVars(selected []string) []string {
-	out := []string{}
-	for _, s := range allServices {
-		if s.tfVar == "" {
-			continue
+	// 3. Run bin/zitadel-apply --mode local. Copies the FirstInstance
+	//    SA key out of the zitadel-bootstrap named volume via
+	//    `docker cp` (volume has no host bind mount; the orchestrator
+	//    just needs the JSON for one process invocation).
+	if contains(selected, "zitadel") {
+		step(3, "bin/zitadel-apply (reconcile local Zitadel → outputs.json)")
+		if err := os.MkdirAll(bootstrapDir, 0o700); err != nil {
+			fail("mkdir %s: %v", bootstrapDir, err)
 		}
-		out = append(out, "-var", fmt.Sprintf("%s=%t", s.tfVar, contains(selected, s.name)))
+		saKey, err := dockerCp(ctx, "infra-zitadel", "/zitadel-bootstrap/menu-sa.json")
+		if err != nil {
+			fail("read SA key from infra-zitadel: %v", err)
+		}
+		runZitadelApply(ctx, zitadelApplyBin, string(saKey), outputsPath)
 	}
-	return out
-}
 
-// printNextSteps shows the post-apply summary — what URLs each product
-// is reachable at. Menu always runs via `bun run dev` from the host in
-// the new model (the container path went away with the menu_env Tofu
-// module).
-func printNextSteps(selected []string) {
-	fmt.Println()
-	fmt.Printf("%s infra is up.\n", logPrefix)
+	// 4. Compose menu's .env from statics + outputs.json + a stable
+	//    minted session secret. Skipped services land `<please_fill>`
+	//    in .env.local — same pattern the prior Tofu-driven version used.
+	step(4, "compose products/menu/.env + .env.local")
+	writeMenuEnvFiles(outputsPath, envPath, envLocalPath, selected)
+
+	// 5. Start menu now that .env exists. `compose up -d --wait menu`
+	//    picks up the env_file entries on container create.
 	if contains(selected, "menu") {
-		fmt.Println("  menu: cd products/menu && bun run dev   # hits http://localhost:3000")
+		step(5, "docker compose up — menu")
+		composeUp(ctx, composeDir, []string{"menu"})
 	}
-	if contains(selected, "house") {
-		fmt.Printf("  house (container): %s   # Astro static (busybox httpd)\n",
-			composePort(houseContainerName, "80"))
-	}
-	if !contains(selected, "menu") && !contains(selected, "house") {
-		fmt.Println("  (no product selected — infra stays up for ad-hoc work)")
-	}
+
+	printNextSteps(selected)
 }

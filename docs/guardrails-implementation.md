@@ -29,7 +29,7 @@ binaries:
 - `cmd/iedora` — pinned to `Live`, with `Require(Live)` at the top of
   every destructive entry point (`runIacApply`, `runIacDestroy`,
   `runAppApply`, `runDeployProduct`, `runDestroyProduct`).
-- `cmd/dev` — pinned to `Local`.
+- `cmd/local` — pinned to `Local`.
 - `cmd/zitadel-apply` — the only dual-mode binary; takes `--mode
   live|local` (default `live`). Mode plumbs through `loadConfig`,
   `buildStore` (live → `bwsStore`, local → `memoryStore`), `ensureSAKey`,
@@ -101,7 +101,7 @@ Smoke-tested green: `menu.iedora.com/up` → 200 `{"ok":true,"db":"ok"}`,
 - [`internal/cloudflare/r2_bucket.go`](../internal/cloudflare/r2_bucket.go) + [`api_token.go`](../internal/cloudflare/api_token.go) — helpers added during the work.
 - [`infra/bin/state-bucket-bootstrap`](../infra/bin/state-bucket-bootstrap) — wrapper shim.
 - [`infra/tofu/versions.tf`](../infra/tofu/versions.tf) + [`products/house/infra/tofu/versions.tf`](../products/house/infra/tofu/versions.tf) — `backend "s3"` blocks.
-- [`infra/cmd/with-secrets/env.go`](../infra/cmd/with-secrets/env.go) — new BWS keys + AWS_* env aliases.
+- [`deploy/with-secrets/env.go`](../deploy/with-secrets/env.go) — new BWS keys + AWS_* env aliases.
 - `.github/workflows/infra-deploy.yml` + `deploy.yml` — commit-back steps removed; `permissions: contents: write` → `read`.
 - `.gitignore` — state files excluded; build-artefact binary list extended.
 - State files `git rm --cached`'d.
