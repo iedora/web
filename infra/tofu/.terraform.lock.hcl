@@ -205,7 +205,7 @@ provider "registry.opentofu.org/integrations/github" {
 
 provider "registry.opentofu.org/kreuzwerker/docker" {
   version     = "3.9.0"
-  constraints = "~> 3.7"
+  constraints = "~> 3.9"
   hashes = [
     "h1:EAdNh5KgGPJT5jm848MRIfNfHUVJeTBdKKcFLax5g38=",
     "h1:Eglp2bA01CEx8KV/K9CMZ1deQaWKW5HVhE2n+2jIp20=",

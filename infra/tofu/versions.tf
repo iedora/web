@@ -37,7 +37,7 @@ terraform {
     # provider talks to the Docker daemon over SSH.
     docker = {
       source  = "kreuzwerker/docker"
-      version = "~> 3.7"
+      version = "~> 3.9"
     }
     # Mints the menu session cookie's encryption key directly in TF state.
     # Rotate via `tofu apply -replace=random_password.menu_session_secret`.
