@@ -111,10 +111,14 @@ playwright/.auth/
 # docker-compose root) — `go build ./cmd/local` would fail, so no
 # ignore entry is needed for it.
 /infra/iedora
+/infra/iedora-backup
 /infra/with-secrets
 /infra/zitadel-grant
 /infra/zitadel-apply
 /infra/bws-upsert
+/infra/menu-db-migrations
+/infra/openobserve-dashboards
+/infra/state-bucket-bootstrap
 /infra/menu-db-migrations
 /infra/openobserve-dashboards
 /infra/state-bucket-bootstrap

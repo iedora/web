@@ -126,9 +126,9 @@ module "openobserve" {
 
 # ── Backups (self-built image) ───────────────────────────────────────────────
 # Pulls from GHCR which requires auth; the provider's registry_auth block
-# below ties to `var.infra_ghcr_token`. The image runs an internal cron
-# that calls backup.sh every @daily and pg_dumpalls every database on
-# infra-postgres (menu + zitadel) → R2.
+# below ties to `var.infra_ghcr_token`. The image runs `iedora-backup`
+# (Go binary at infra/cmd/iedora-backup) in daemon mode every @daily:
+# pg_dumpalls every database on infra-postgres (menu + zitadel) → R2.
 
 resource "docker_container" "backups" {
   name    = "infra-backups"
@@ -146,7 +146,7 @@ resource "docker_container" "backups" {
     "S3_BUCKET=${cloudflare_r2_bucket.data.name}",
     "S3_PREFIX=pg",
     "POSTGRES_HOST=infra-postgres",
-    # Empty → backup.sh uses --all-databases (every iedora product).
+    # Empty → iedora-backup uses pg_dumpall (every iedora product).
     "POSTGRES_DATABASE=",
     "POSTGRES_USER=postgres",
     "POSTGRES_PASSWORD=${random_password.postgres.result}",

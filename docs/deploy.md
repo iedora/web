@@ -628,10 +628,10 @@ ssh root@$HOST docker logs -f --tail=200 infra-zitadel        # or infra-menu-we
 ssh -t root@$HOST docker exec -it infra-postgres psql -U postgres
 
 # Force a pg_dump now
-ssh root@$HOST docker exec infra-backups sh /backup.sh
+ssh root@$HOST docker exec infra-backups /iedora-backup backup
 
 # Restore latest dump
-ssh -t root@$HOST docker exec -it infra-backups sh /restore.sh
+ssh -t root@$HOST docker exec -it infra-backups /iedora-backup restore
 
 # Open the OpenObserve UI via SSH tunnel (OO is internal-only)
 ssh -L 5080:localhost:5080 root@$HOST   # then open http://localhost:5080
@@ -673,13 +673,15 @@ task deploy:menu      # restart menu with the new OIDC client_secret + PAT
 
 ### Backups
 
-`infra-backups` runs an internal cron that calls
-[`infra/backup/backup.sh`](../infra/backup/backup.sh) `@daily`:
-`pg_dumpall` every database on `infra-postgres` → R2 (`iedora-data`
-bucket, `pg/` prefix), GPG-encrypted with
-`IAC_BACKUP_PASSPHRASE`.
+`infra-backups` runs the Go binary
+[`infra/cmd/iedora-backup`](../infra/cmd/iedora-backup/) in daemon
+mode on `SCHEDULE=@daily`: `pg_dumpall` every database on
+`infra-postgres` → R2 (`iedora-data` bucket, `pg/` prefix),
+GPG-encrypted with `IAC_BACKUP_PASSPHRASE`. The S3 client is
+the pure-Go SigV4 implementation at `infra/internal/r2`; no
+`aws` CLI in the image.
 
-Restore: `ssh -t root@$HOST docker exec -it infra-backups sh /restore.sh`.
+Restore: `ssh -t root@$HOST docker exec -it infra-backups /iedora-backup restore`.
 
 Retention: 14 days (`BACKUP_KEEP_DAYS=14`).
 

@@ -44,8 +44,9 @@ infra/
   modules/services/      Tofu modules — one per shared container type.
   internal/              Go helpers: bws, cloudflare, r2, tlsprobe.
   bin/                   `go run` wrappers the Taskfile shells through.
-  backup/                Self-built `iedora-backup` image (Dockerfile +
-                         backup.sh / restore.sh / run.sh).
+  cmd/iedora-backup/     Daily encrypted pg_dumpall → R2 backup binary
+                         (replaces the prior infra/backup/*.sh scripts).
+                         Includes its own Dockerfile.
   postgres/              `init.sql` — bootstrap databases on first boot.
 ```
 
