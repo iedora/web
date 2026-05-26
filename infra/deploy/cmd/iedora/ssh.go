@@ -6,13 +6,6 @@ import (
 	sshlib "github.com/eduvhc/iedora/internal/ssh"
 )
 
-// rotateKnownHosts is the iedora-local alias for the shared helper so
-// callers in iac.go can keep the short name (used twice per destroy
-// path — keep the noise off the read).
-func rotateKnownHosts(ctx context.Context, ips ...string) {
-	sshlib.RotateKnownHosts(ctx, ips...)
-}
-
 // sshExecutor is the narrow seam dockerOnHetzner uses to talk to the
 // remote Docker daemon. *sshlib.Client (from internal/ssh)
 // implements it directly; tests inject a fake that records the command

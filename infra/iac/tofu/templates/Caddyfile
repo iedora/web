@@ -1,0 +1,22 @@
+{
+  email ${acme_email}
+}
+
+${zitadel_hostname} {
+  @login path /ui/v2/*
+  handle @login {
+    reverse_proxy http://infra-zitadel-login:3000
+  }
+
+  handle {
+    reverse_proxy http://infra-zitadel:8080 {
+      transport http {
+        versions h2c 2
+      }
+    }
+  }
+}
+
+${menu_hostname} {
+  reverse_proxy http://infra-menu-web:3000
+}

@@ -5,26 +5,31 @@
 
 ## The pipeline
 
-Four stages. Each runs independently and is idempotent. Locally:
-[Taskfile](../Taskfile.yml). In CI: per-stage workflows under
-[.github/workflows/](../.github/workflows/) that wrap the same `task`
-recipes.
+Four stages. Each runs independently and is idempotent. No task runner
+— operators invoke `tofu` and `bin/iedora` directly under `bws run`.
+CI: per-stage workflows under [.github/workflows/](../.github/workflows/).
 
 ```
 Stage 1: Build & Test      per-product (bun, docker build, tests)
-Stage 2: IaC               task infra:up    → tofu apply on infra/iac/tofu/
-Stage 3: App state         task app:apply   → configurator registry
-Stage 4: Deploy            task deploy:<p>  → per-product runtime
+Stage 2: IaC               bws run -- tofu -chdir=infra/iac/tofu apply
+Stage 3: App state         bws run -- bin/iedora app apply
+Stage 4: Deploy            bws run -- bin/iedora deploy <product>
 ```
 
-`task up` chains 2 → 3 → 4.
-
 **Hard split**: Tofu owns infrastructure ONLY — VPS, Cloudflare, GitHub
-config, Docker network, the *shared service containers*. Anything that
-lives **inside** a running service (Zitadel org/project/PAT, drizzle
+config, and the rendered docker-compose stack. Anything that lives
+**inside** a running service (Zitadel org/project/PAT, drizzle
 migrations on postgres, OpenObserve dashboards, the menu app container)
 is **not** in Tofu. App state belongs to Stage 3 (configurators) and
 Stage 4 (per-product deploys).
+
+**Container management**: Tofu renders `/etc/iedora/docker-compose.yml`
+(via [`compose.tf`](../infra/iac/tofu/compose.tf)). The box runs the
+stack via a systemd unit (`iedora.service`). cloud-init drops the
+compose on first boot; [`terraform_data.iedora_sync`](../infra/iac/tofu/sync.tf)
+SCPs new versions on day-2 changes and `systemctl restart
+iedora.service` reconciles via `docker compose up -d --remove-orphans`.
+The `kreuzwerker/docker` provider is intentionally NOT used.
 
 ## Environment guardrails
 
@@ -41,7 +46,7 @@ introduced.
 
 |             | local                                  | live                              |
 |-------------|----------------------------------------|-----------------------------------|
-| Where       | operator's machine (`task local`)        | Hetzner + Cloudflare + GHCR       |
+| Where       | operator's machine (`go run ./dev/cmd/local-stack`) | Hetzner + Cloudflare + GHCR |
 | Targets     | Docker daemon on `localhost`; LocalStack for S3 | Public APIs, real DNS    |
 | Auth        | FirstInstance bootstrap; no BWS needed | BWS-stored, no defaults           |
 | Side effects| freely destructible                    | gated by the guardrails below     |
@@ -213,26 +218,34 @@ Local: `bun run typecheck`, `bun run test`, `bun run build` per
 product. The Taskfile doesn't have a `build` stage because each product
 already has its own conventions.
 
-## Stage 2 — IaC (`task infra:up`)
+## Stage 2 — IaC (`bws run -- tofu -chdir=infra/iac/tofu apply`)
 
-`tofu apply` on [`infra/iac/tofu/`](../infra/iac/tofu/). Owns:
+Plain `tofu apply` on [`infra/iac/tofu/`](../infra/iac/tofu/). Owns:
 
-- **Hetzner VPS, firewall, SSH key** ([hetzner.tf](../infra/iac/tofu/hetzner.tf))
+- **Hetzner VPS, firewall, SSH key, cloud-init** ([hetzner.tf](../infra/iac/tofu/hetzner.tf))
 - **Cloudflare** R2 buckets, DNS records, scoped API tokens
   ([main.tf](../infra/iac/tofu/main.tf))
 - **GitHub Actions config** — secrets + variables on the repo, via the
   `integrations/github` provider ([github.tf](../infra/iac/tofu/github.tf))
-- **Docker network + named volumes** + **shared service containers**
-  ([containers.tf](../infra/iac/tofu/containers.tf)):
+- **The rendered docker-compose stack** ([compose.tf](../infra/iac/tofu/compose.tf))
+  — yamlencode'd document covering:
   - `infra-postgres` (Postgres 18, menu + zitadel databases)
   - `infra-zitadel` + `infra-zitadel-login` (IdP)
   - `infra-caddy` (TLS termination, reverse proxy)
   - `infra-openobserve` (observability backend, bound to 127.0.0.1:5080)
   - `infra-backups` (daily pg_dumpall → R2 GPG-encrypted)
+- **Day-2 sync** ([sync.tf](../infra/iac/tofu/sync.tf)) — single
+  `terraform_data` resource that SCPs `compose.yml` + `Caddyfile` to
+  `/etc/iedora/` and restarts `iedora.service` when the compose hash
+  changes.
+- **Destroy-time R2 purge** ([destroy-hooks.tf](../infra/iac/tofu/destroy-hooks.tf))
+  — `rclone purge` provisioners that empty the R2 buckets before the CF
+  API DELETE (otherwise: 409 on non-empty bucket).
 - **Random passwords minted by Tofu, written through to BWS** as
   `IAC_*` ([secrets.tf](../infra/iac/tofu/secrets.tf)) — postgres
   pwd, backup passphrase, zitadel masterkey, zitadel first-admin pwd,
-  openobserve pwd.
+  openobserve pwd. The Hetzner IPv4 also writes through here so Stage 3
+  configurators can find the box.
 
 **Does NOT own:**
 
@@ -243,19 +256,16 @@ already has its own conventions.
 - The menu session JWE secret — Stage 4 (`appSecrets`, minted on first
   deploy).
 
-### Two-pass apply
+### Single-pass apply
 
-`iedora iac apply` runs Tofu in two passes:
+`tofu apply` runs once with default parallelism. No `kreuzwerker/docker`
+provider on the apply graph means no per-container SSH and no
+MaxStartups concern. The only SSH on the graph is
+`terraform_data.iedora_sync` — one session per compose/Caddyfile hash
+change.
 
-1. **Pass 1**: targeted `tofu apply` of `hcloud_ssh_key`,
-   `hcloud_firewall`, `hcloud_server`, `null_resource.docker_ready`.
-   The `kreuzwerker/docker` provider needs an IP at plan time; this
-   provisions the box first. Then `ssh-keyscan` to pre-populate
-   `~/.ssh/known_hosts` for the docker provider's SSH calls.
-2. **Pass 2**: full apply. All shared containers + CF + GH config.
-
-The 2-pass dance is INTERNAL — operator just runs `task infra:up`. On
-warm runs both passes are no-diff refreshes (~3s each).
+**Prerequisites on the operator's machine**: `tofu`, `bws`, `rclone`
+(for destroy-time purge). All `brew install` away.
 
 ### State backend (R2)
 
@@ -276,7 +286,7 @@ The R2 bucket + scoped API token are out-of-band; they're minted by
 bucket that stores its own state). See
 [guardrails-implementation.md § Rule 2](./guardrails-implementation.md#rule-2--tofu-state-in-r2).
 
-## Stage 3 — App state (`task app:apply`)
+## Stage 3 — App state (`bws run -- bin/iedora app apply`)
 
 Walks the configurator registry in
 [`infra/deploy/cmd/iedora/configurators.go`](../infra/deploy/cmd/iedora/configurators.go).
@@ -395,7 +405,7 @@ Likely future entries: per-product DB role provisioner, S3 bucket
 policies on a future internal MinIO, additional Zitadel action targets
 when new products land.
 
-## Stage 4 — Deploy (`task deploy:<product>`)
+## Stage 4 — Deploy (`bws run -- bin/iedora deploy <product>`)
 
 Per-product. Fans out across the registry in
 [`infra/deploy/cmd/iedora/products.go`](../infra/deploy/cmd/iedora/products.go). Each
@@ -523,36 +533,45 @@ Tests at
 [`infra/deploy/cmd/with-secrets/env_test.go`](../infra/deploy/cmd/with-secrets/env_test.go)
 cover every stage path.
 
-## Local commands (Taskfile)
+## Local commands
 
 ```bash
-task doctor                      # Preflight: PATH, BWS auth, bootstrap secrets present.
+bws run -- bin/iedora doctor                            # Preflight: PATH, BWS auth, bootstrap secrets.
 
-task up                          # Full pipeline: infra:up → app:apply → deploy:all.
-task down                        # Full teardown: products → infra:down.
+# Stage 2 — IaC
+bws run -- tofu -chdir=infra/iac/tofu init -upgrade     # First-time / after provider bumps.
+bws run -- tofu -chdir=infra/iac/tofu plan              # Dry-run.
+bws run -- tofu -chdir=infra/iac/tofu apply             # Apply.
+bws run -- tofu -chdir=infra/iac/tofu destroy           # Teardown.
+bws run -- tofu -chdir=infra/iac/tofu fmt -recursive    # Format .tf files.
 
-task infra:up                    # Stage 2 only — tofu apply on infra/iac/tofu/.
-task infra:down                  # Stage 2 destroy.
-task app:apply                   # Stage 3 — every configurator.
-task deploy:menu                 # Stage 4 menu.
-task deploy:house                # Stage 4 house.
-task deploy:all                  # Stage 4 — fan out every product in parallel.
+# Stage 3 — App state
+bws run -- bin/iedora app apply                         # Every configurator.
+bws run -- bin/zitadel-apply --grants-only              # Just the iedora-admin grants.
 
-task local                       # Boot the local stack (docker on operator's machine).
-task local:down                  # Tear down the local stack.
-task local:reset-db -- menu      # Drop + recreate one database without touching the rest.
-task local:runbook               # Local-stack pre-merge runbook (cheap smoke pass before `task runbook`).
+# Stage 4 — Deploy
+bws run -- bin/iedora deploy menu                       # Menu.
+bws run -- bin/iedora deploy house                      # House.
+bws run -- bin/iedora destroy menu                      # Tear down menu's stage-4 artifacts.
 
-task runbook                     # Live pre-merge runbook: down → up → up → down → up → up (~45-60 min).
+# Local dev stack
+go run ./dev/cmd/local-stack                            # Boot.
+go run ./dev/cmd/local-stack --destroy                  # Wipe.
+go run ./dev/cmd/local-stack --reset-db menu            # Drop+recreate one DB.
 
-task bws -- <cmd>                # Exec a command with BWS hydrated (stage=iac default).
-task zitadel:grants              # Re-run iedora-admin grants only (`bin/zitadel-apply --grants-only`).
+# Pre-merge runbook — manual chain, ~45-60 min on live.
+bws run -- tofu -chdir=infra/iac/tofu destroy           # 1: tear down
+bws run -- tofu -chdir=infra/iac/tofu apply             # 2: cold deploy
+bws run -- tofu -chdir=infra/iac/tofu apply             # 3: warm (no-diff)
+bws run -- tofu -chdir=infra/iac/tofu destroy           # 4: tear down again
+bws run -- tofu -chdir=infra/iac/tofu apply             # 5: cold deploy AGAIN
+bws run -- tofu -chdir=infra/iac/tofu apply             # 6: warm (no-diff)
 ```
 
-Each task is a 1-line shim into the Go orchestrator. The Taskfile
-exists so the operator has a stable command surface; the actual logic
-is in `infra/deploy/cmd/iedora/` and the per-configurator/per-runtime
-binaries.
+`bws run` hydrates every BWS secret into the child process's env (no
+stage filtering — that defense-in-depth was dropped along with the
+`with-secrets` wrapper). `bin/iedora` is the Stage 3 + Stage 4 router;
+each `bin/<configurator>` is independently invocable for ad-hoc work.
 
 ## CI flow
 
@@ -561,20 +580,21 @@ flows via `workflow_run` triggers.
 
 | Workflow | Stage | Trigger |
 |----------|-------|---------|
-| [`infra-deploy.yml`](../.github/workflows/infra-deploy.yml) | 2 | push to main on `infra/iac/tofu/**`, `infra/deploy/cmd/iedora/**`, `infra/deploy/cmd/with-secrets/**`, `Taskfile.yml`. Manual dispatch. |
+| [`infra-deploy.yml`](../.github/workflows/infra-deploy.yml) | 2 | push to main on `infra/iac/**`, `internal/**`, `bin/{bws-upsert,state-bucket-bootstrap}`, `go.{mod,sum}`. Manual dispatch. |
 | [`app-state.yml`](../.github/workflows/app-state.yml)       | 3 | `workflow_run` on infra-deploy success. Also: push on `infra/app-state/cmd/zitadel-apply/**`, `infra/app-state/cmd/menu-db-migrations/**`, `infra/app-state/cmd/openobserve-dashboards/**`. Manual dispatch. |
 | [`menu.yml`](../.github/workflows/menu.yml)                 | 1+4 | push to main on `products/menu/**`. Build + push image, then dispatches `deploy.yml(product=menu, sha=...)`. |
 | [`house.yml`](../.github/workflows/house.yml)               | 1+4 | push to main on `products/house/**`. Dispatches `deploy.yml(product=house)`. |
 | [`deploy.yml`](../.github/workflows/deploy.yml)             | 4 | reusable `workflow_call` invoked by `menu.yml` / `house.yml`. Generic over `product`. |
 
-Every workflow runs `bin/with-secrets --stage <s> -- ...` so CI sees
-the same stage-scoped env operators do.
+Every workflow runs commands under `bws run --` so CI sees the same
+hydrated BWS env operators do. Stage filtering was dropped (the old
+`with-secrets` wrapper); all stages see all BWS keys.
 
 State commit-back: both `infra-deploy.yml` and the per-product Tofu
 side of `deploy.yml` commit the encrypted `terraform.tfstate` back to
 `main` after a successful apply — git stays canonical.
 
-## Local stack (`task local`)
+## Local stack (`go run ./dev/cmd/local-stack`)
 
 [`dev/docker-compose.yml`](../dev/docker-compose.yml)
 is the source of truth for the local stack shape: postgres,
@@ -850,6 +870,63 @@ dev/                                     Local stack (mirror of Stages 2-4)
   orchestrator/                            Go binary driving compose + the Stage-3-equivalent
                                            seed step (replaces the prior Tofu-for-dev root)
 ```
+
+## Scaling notes — multi-machine, multi-agent
+
+The model above is designed for multiple operators (and multiple Claude
+agents in different worktrees) hitting the same `live` environment.
+Three load-bearing properties:
+
+1. **R2 state + native locking (`use_lockfile = true`).** Two concurrent
+   `tofu apply` invocations from different machines / agents serialize
+   via a sidecar `.tflock` object. Without this, you'd race state
+   updates. State-in-git would be worse — every apply becomes a merge
+   conflict on `terraform.tfstate.encrypted`.
+
+2. **BWS as the single source of truth for secrets.** Every machine /
+   agent / CI runner authenticates with a `BWS_ACCESS_TOKEN`; one env
+   var unlocks the same secret set everywhere. New agent comes online →
+   set the token once → every `bws run -- …` command works. The
+   `IAC_BOOTSTRAP_*` keys are pasted **once per environment, not once
+   per agent**; subsequent agents inherit the already-bootstrapped state.
+
+3. **`bin/state-bucket-bootstrap` is a per-environment one-shot.** A new
+   agent on a new machine does NOT run it — the bucket already exists,
+   so day-1 for that agent looks identical to day-2 for everyone else:
+   ```bash
+   bws run -- tofu -chdir=infra/iac/tofu apply
+   ```
+
+### Multi-agent operating conventions
+
+Agents `tofu plan` in their worktrees to validate proposed changes
+locally — but `tofu apply` runs only from `main` via CI. This avoids
+two agents on different branches applying conflicting state (the lock
+keeps it correct, but you'd still waste apply time fighting over state
+versions). The convention:
+
+- **Local** — `bws run -- tofu -chdir=infra/iac/tofu plan` (read-only).
+- **CI** — `bws run -- tofu -chdir=infra/iac/tofu apply` (mutating),
+  triggered by push to `main` via `infra-deploy.yml`.
+
+`workflow_dispatch` on `infra-deploy.yml` is a manual escape hatch —
+use sparingly, document why.
+
+### Follow-ups worth doing as scale grows
+
+These are NOT required for the current size, but become attractive
+as the operator / agent count rises:
+
+- **GitHub OIDC → BWS workload identity.** Replace the long-lived
+  `BWS_ACCESS_TOKEN` GHA secret with per-workflow-run short-lived
+  tokens. Audited, zero long-lived secrets in GitHub. Blocked on BWS
+  exposing an OIDC federation endpoint — check Bitwarden's roadmap.
+- **Per-operator BWS access tokens.** Each human operator + each agent
+  gets its own token. Today everyone shares the project token; this is
+  fine for solo + a handful of agents, less fine at >5 humans.
+- **PR-driven applies** (Atlantis / Spacelift / Tofu Cloud). Plans
+  attached to PRs as comments, apply on merge. Standard at >10 people.
+  Massive overkill until then.
 
 ## Why this design
 

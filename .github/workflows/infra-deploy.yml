@@ -1,26 +1,16 @@
-# Stage 2 (IaC) — `task infra:up` against `infra/iac/tofu/`.
+# Stage 2 (IaC) — plain `tofu apply` against `infra/iac/tofu/`.
 #
 # What this workflow OWNS:
 #   - Hetzner VPS, firewall, SSH key
 #   - Cloudflare R2 buckets, DNS records, API tokens
 #   - GitHub Actions config (via the github provider)
-#   - Docker network + named volumes on the box
-#   - Shared service containers (postgres, zitadel, zitadel-login, caddy,
-#     openobserve, backups). Containers come up with their boot config
-#     intact; their *application state* is owned by app-state.yml.
+#   - The rendered docker-compose stack on the box (delivered via cloud-
+#     init on first boot, then `terraform_data.iedora_sync` on day-2)
 #
 # What this workflow does NOT own:
 #   - Zitadel app config (org, project, OIDC app, action targets…) — that's
-#     `app-state.yml` (Stage 3), which runs after this one via workflow_run.
-#   - Menu container — that's `deploy.yml` invoked by `menu.yml` (Stage 4).
-#   - House CF Workers script — `house.yml` calls `deploy.yml` directly.
-#
-# Triggers:
-#
-#   workflow_dispatch       manual button — the canonical "roll the infra"
-#                           lever after editing any `.tf` file.
-#   push (paths-filtered)   any change to the iac surface — Tofu source,
-#                           orchestrator, with-secrets wrapper.
+#     `app-state.yml` (Stage 3).
+#   - Per-product containers — that's `deploy.yml` (Stage 4).
 
 name: Infra deploy
 
@@ -30,15 +20,11 @@ on:
     branches: [main]
     paths:
       - 'infra/iac/**'
-      - 'infra/deploy/cmd/iedora/**'
-      - 'infra/deploy/cmd/with-secrets/**'
       - 'internal/**'
-      - 'bin/iedora'
-      - 'bin/with-secrets'
       - 'bin/bws-upsert'
+      - 'bin/state-bucket-bootstrap'
       - 'go.mod'
       - 'go.sum'
-      - 'Taskfile.yml'
       - '.github/workflows/infra-deploy.yml'
 
 # Never cancel mid-apply — partial applies leave the encrypted tfstate
@@ -52,7 +38,7 @@ permissions:
 
 jobs:
   apply:
-    name: task infra:up
+    name: tofu apply
     runs-on: ubuntu-24.04
     timeout-minutes: 25
 
@@ -81,13 +67,9 @@ jobs:
           unzip -q /tmp/bws.zip -d /tmp/bws
           sudo install -m 0755 /tmp/bws/bws /usr/local/bin/bws
 
-      - name: Install go-task
-        uses: arduino/setup-task@24c5e13bce349197642746563945fcdf9355e8f4 # v2.0.0
-        with:
-          version: 3.x
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Install Go
+        # Needed for `go run`-style execution of `bin/bws-upsert` (called
+        # by Tofu's `terraform_data.bws_sync_*` local-exec provisioners).
         uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v6
         with:
           go-version-file: go.mod
@@ -103,54 +85,34 @@ jobs:
           tofu_version: '1.12.0'
           tofu_wrapper: false
 
-      - name: Read Hetzner IP (existing-box detection)
-        # Source of truth is the encrypted tfstate via R2. `bin/iedora iac ip`
-        # lazily runs `tofu init -input=false` on first call (sync.Once
-        # inside the orchestrator), so no separate init step is needed.
-        # The subsequent `task infra:up` runs its own `tofu init -upgrade`
-        # to refresh provider versions before applying. Empty output is
-        # fine — first apply for a fresh repo provisions the VPS.
-        id: host
-        run: |
-          set -euo pipefail
-          HOST=$(bin/with-secrets --stage iac -- bin/iedora iac ip 2>/dev/null || echo "")
-          if [ -n "$HOST" ]; then
-            echo "::add-mask::$HOST"
-            echo "host=$HOST" >> "$GITHUB_OUTPUT"
-          fi
+      - name: Install rclone
+        # Required by the R2 bucket destroy-time hooks
+        # (`terraform_data.{data,assets}_bucket_purge`). Apt-get is
+        # plenty fast on the runner.
+        run: sudo apt-get update -qq && sudo apt-get install -yqq rclone
 
-      - name: Configure SSH (kreuzwerker/docker provider needs it)
-        # The kreuzwerker/docker Tofu provider connects to the Hetzner
-        # box over SSH to manage containers. Same key the operator uses
-        # from their laptop.
+      - name: Configure SSH (terraform_data.iedora_sync connects to the box)
         env:
           SSH_KEY: ${{ secrets.IAC_BOOTSTRAP_SSH_PRIVATE_KEY }}
-          HOST: ${{ steps.host.outputs.host }}
         run: |
           set -euo pipefail
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
           printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          if [ -n "$HOST" ]; then
-            ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
-            chmod 600 ~/.ssh/known_hosts
-          fi
-          eval "$(ssh-agent -s)"
-          ssh-add ~/.ssh/id_ed25519
-          echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
-          echo "SSH_AGENT_PID=$SSH_AGENT_PID" >> "$GITHUB_ENV"
+          # Accept any new host key — Tofu's SSH lib does the same.
+          printf 'StrictHostKeyChecking accept-new\n' > ~/.ssh/config
+          chmod 600 ~/.ssh/config
 
-      - name: task infra:up
-        # Runs `iedora iac apply` via the Taskfile shim. Internally:
-        # Pass 1 (targeted hcloud apply) → Pass 2 (full apply). No more
-        # Zitadel TF provider, no placeholder dance, no DNS-override
-        # proxy — those went away when Zitadel app state moved to
-        # bin/zitadel-apply (handled by app-state.yml after this).
+      - name: tofu init
         env:
-          # Captures the full apply log for post-mortem inspection.
+          TF_VAR_state_passphrase: ${{ secrets.IAC_BOOTSTRAP_STATE_PASSPHRASE }}
+        run: bws run -- tofu -chdir=infra/iac/tofu init -input=false -upgrade
+
+      - name: tofu apply
+        env:
           TF_CLI_ARGS_apply: "-json-into=${{ runner.temp }}/tf-apply.json"
-        run: task infra:up
+        run: bws run -- tofu -chdir=infra/iac/tofu apply -input=false -auto-approve
 
       - name: Upload tofu apply JSON
         if: always()
@@ -160,4 +122,3 @@ jobs:
           path: ${{ runner.temp }}/tf-apply.json
           if-no-files-found: ignore
           retention-days: 30
-

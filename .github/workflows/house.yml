@@ -2,7 +2,7 @@
 #
 # Thin dispatcher: this workflow exists for the per-product trigger
 # (push on `products/house/**` etc.), but the actual deploy logic lives
-# in the reusable `deploy.yml`. `task deploy:house` invokes the
+# in the reusable `deploy.yml`. `bin/iedora deploy house` invokes the
 # `cloudflareWorker` runtime which runs `bun run build` + `tofu apply`
 # on `products/house/infra/tofu/`.
 #

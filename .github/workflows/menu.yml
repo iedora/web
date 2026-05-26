@@ -8,8 +8,9 @@
 #
 # Architecture note: the menu container is owned by Stage 4
 # (`infra/deploy/cmd/iedora/runtime_docker.go`, dockerOnHetzner runtime), NOT by
-# Tofu — only the SHARED services (postgres, zitadel, caddy, openobserve,
-# backups) live in `infra/iac/tofu/containers.tf`. CI's job is build + push;
+# Tofu. The SHARED services (postgres, zitadel, caddy, openobserve,
+# backups) live in the rendered compose stack — see
+# `infra/iac/tofu/compose.tf`. CI's job is build + push;
 # the deploy job SSHes to the box, pulls the pinned image, runs
 # migrations, and replaces the container.
 #

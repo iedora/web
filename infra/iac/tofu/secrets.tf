@@ -74,7 +74,7 @@ resource "random_password" "openobserve_password" {
 
 # Sync each generated value to BWS under its IAC_* key.
 # Idempotent: if the secret exists, edit; else create. The bws CLI
-# inherits BWS_ACCESS_TOKEN from the wrapping `bin/with-secrets` call.
+# inherits BWS_ACCESS_TOKEN from the wrapping `bws run` call.
 #
 # No Bitwarden-Secrets-Manager provider exists in the OpenTofu registry
 # (checked 2026-05-20 — only `maxlaverse/bitwarden` for the password
@@ -113,6 +113,24 @@ resource "terraform_data" "bws_sync_autogen" {
     environment = {
       BWS_KEY        = each.key
       BWS_VALUE      = local.autogen_lookup[each.key]
+      BWS_PROJECT_ID = var.bws_project_id
+    }
+    command = "${path.module}/../../../bin/bws-upsert"
+  }
+}
+
+# ── Hetzner box IPv4 → BWS ──────────────────────────────────────────────────
+# Stage 3 configurators (zitadel-apply, openobserve-dashboards) read the
+# Hetzner box's IPv4 from BWS to know where to SSH. Tofu writes it on
+# every apply via the same bws-upsert pattern as the autogen secrets.
+# Replaces the Go post-apply write-through that lived in iac.go.
+resource "terraform_data" "bws_sync_host_ip" {
+  triggers_replace = sha256(hcloud_server.iedora.ipv4_address)
+
+  provisioner "local-exec" {
+    environment = {
+      BWS_KEY        = "IAC_BOOTSTRAP_HOST_IP"
+      BWS_VALUE      = hcloud_server.iedora.ipv4_address
       BWS_PROJECT_ID = var.bws_project_id
     }
     command = "${path.module}/../../../bin/bws-upsert"

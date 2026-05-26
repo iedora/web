@@ -24,7 +24,7 @@ locals {
     BWS_PROJECT_ID       = var.bws_project_id
     MENU_PUBLIC_HOSTNAME = var.menu_public_hostname
     # Pointer to which CF account owns the rest of the secrets. Local
-    # `bin/with-secrets` auto-discovers this from the CF /accounts API
+    # `bws run` auto-discovers this from the CF /accounts API
     # (only one account on the token). CI uses this GHA variable
     # directly instead of doing the API roundtrip per workflow run.
     CLOUDFLARE_ACCOUNT_ID = var.account_id
@@ -34,9 +34,9 @@ locals {
   # the values flow into GH-encrypted-secrets and never persist in
   # plaintext beyond the apply.
   github_secrets = {
-    BWS_ACCESS_TOKEN        = var.bws_access_token
-    IAC_BOOTSTRAP_SSH_PRIVATE_KEY   = var.infra_ssh_private_key
-    CLAUDE_CODE_OAUTH_TOKEN = var.claude_code_oauth_token
+    BWS_ACCESS_TOKEN              = var.bws_access_token
+    IAC_BOOTSTRAP_SSH_PRIVATE_KEY = var.infra_ssh_private_key
+    CLAUDE_CODE_OAUTH_TOKEN       = var.claude_code_oauth_token
   }
 }
 

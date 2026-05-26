@@ -10,7 +10,7 @@ terraform {
   # `bin/state-bucket-bootstrap` (it's a chicken/egg: this backend
   # block needs the bucket to exist before `tofu init` can run).
   # AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY are injected by
-  # `bin/with-secrets --stage iac` from the BWS-written keys
+  # `bws run` from the BWS-written keys
   # IAC_BOOTSTRAP_TOFU_STATE_{ACCESS,SECRET}_KEY.
   #
   # account_id is hardcoded here because backend blocks can't take
@@ -62,20 +62,6 @@ terraform {
       source  = "hashicorp/tls"
       version = "~> 4.1"
     }
-    # Synthetic "wait until X" resources used to block dependent resources
-    # behind a remote-exec readiness probe (Docker daemon on the new Hetzner
-    # box before the docker provider tries to connect).
-    null = {
-      source  = "hashicorp/null"
-      version = "~> 3.2"
-    }
-    # Manages every container on the Hetzner box (postgres, openobserve,
-    # zitadel, backups, caddy, tunnels, plus the menu app itself). The
-    # provider talks to the Docker daemon over SSH.
-    docker = {
-      source  = "kreuzwerker/docker"
-      version = "~> 3.9"
-    }
     # Mints the menu session cookie's encryption key directly in TF state.
     # Rotate via `tofu apply -replace=random_password.menu_session_secret`.
     # Zitadel app-state is no longer managed here — see app-state/zitadel.
@@ -122,25 +108,12 @@ provider "github" {
 
 # Hetzner Cloud — provisions the CAX11 VPS that runs every infra container.
 # Auth is a project-scoped API token (IAC_BOOTSTRAP_HCLOUD_TOKEN, set once in BWS).
+#
+# The Docker daemon on the box is NOT a Tofu provider. The box owns its
+# containers via `iedora.service` (a systemd unit that runs `docker
+# compose`); Tofu renders the compose file (compose.tf) and pushes
+# day-2 changes through `terraform_data.iedora_sync` (sync.tf).
+# ghcr.io auth is baked into /root/.docker/config.json by cloud-init.
 provider "hcloud" {
   token = var.infra_hcloud_token
-}
-
-# Docker — talks to the Hetzner box's Docker daemon over SSH. The IP comes
-# from `hcloud_server.iedora.ipv4_address` (output of the hcloud provider),
-# so the docker provider is implicitly downstream of the Hetzner one.
-# `IAC_BOOTSTRAP_SSH_PRIVATE_KEY` is registered as `hcloud_ssh_key.operator` so
-# cloud-init drops it into root's authorized_keys.
-#
-# `registry_auth` covers ghcr.io because the self-built backup image
-# (ghcr.io/eduvhc/iedora-backup) is private. Everything else
-# (postgres, openobserve, zitadel, caddy) is on public registries.
-provider "docker" {
-  host = "ssh://root@${hcloud_server.iedora.ipv4_address}"
-
-  registry_auth {
-    address  = "ghcr.io"
-    username = var.github_owner
-    password = var.infra_ghcr_token
-  }
 }

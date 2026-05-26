@@ -1,5 +1,5 @@
 variable "cloudflare_api_token" {
-  description = "Cloudflare bootstrap token. TF_VAR_cloudflare_api_token (set by bin/with-secrets from IAC_BOOTSTRAP_CLOUDFLARE_API_TOKEN)."
+  description = "Cloudflare bootstrap token. TF_VAR_cloudflare_api_token (set by bws run from IAC_BOOTSTRAP_CLOUDFLARE_API_TOKEN)."
   type        = string
   sensitive   = true
 }
@@ -98,7 +98,7 @@ variable "github_repo" {
 variable "github_token" {
   description = <<-EOT
     GitHub fine-grained PAT for the provider. TF_VAR_github_token (set by
-    bin/with-secrets from IAC_BOOTSTRAP_GITHUB_API_TOKEN). Repo-scoped with:
+    bws run from IAC_BOOTSTRAP_GITHUB_API_TOKEN). Repo-scoped with:
     Actions r/w, Secrets r/w, Variables r/w, Contents r.
   EOT
   type        = string
@@ -110,7 +110,7 @@ variable "github_token" {
 # default string (for variables that aren't secret).
 
 variable "bws_access_token" {
-  description = "BWS machine-account token. TF_VAR_bws_access_token (auto-set by bin/with-secrets — it's literally the env var that unlocked the bws fetch)."
+  description = "BWS machine-account token. TF_VAR_bws_access_token (auto-set by bws run — it's literally the env var that unlocked the bws fetch)."
   type        = string
   sensitive   = true
 }
@@ -121,13 +121,13 @@ variable "bws_project_id" {
 }
 
 variable "infra_ssh_private_key" {
-  description = "Private key (multi-line PEM) for root@<ONPREM_HOST>. TF_VAR_infra_ssh_private_key (set by bin/with-secrets from IAC_BOOTSTRAP_SSH_PRIVATE_KEY)."
+  description = "Private key (multi-line PEM) for root@<ONPREM_HOST>. TF_VAR_infra_ssh_private_key (set by bws run from IAC_BOOTSTRAP_SSH_PRIVATE_KEY)."
   type        = string
   sensitive   = true
 }
 
 variable "claude_code_oauth_token" {
-  description = "Claude Code Action OAuth token (Pro/Max, minted by `claude setup-token`). TF_VAR_claude_code_oauth_token (set by bin/with-secrets from IAC_BOOTSTRAP_CLAUDE_CODE_OAUTH_TOKEN)."
+  description = "Claude Code Action OAuth token (Pro/Max, minted by `claude setup-token`). TF_VAR_claude_code_oauth_token (set by bws run from IAC_BOOTSTRAP_CLAUDE_CODE_OAUTH_TOKEN)."
   type        = string
   sensitive   = true
 }
@@ -206,8 +206,8 @@ variable "hetzner_location" {
 }
 
 # ── Container secrets (BWS-sourced) ──────────────────────────────────────────
-# Tofu inputs that flow into the docker_container env arrays in
-# containers.tf. bin/with-secrets exports each as TF_VAR_* from its BWS key.
+# Tofu inputs that flow into the rendered docker-compose.yml under
+# compose.tf. bws run exports each as TF_VAR_* from its BWS key.
 
 variable "infra_ghcr_token" {
   description = <<-EOT
@@ -264,8 +264,8 @@ variable "iedora_admin_emails" {
 
     Add a teammate: append their email here, commit, deploy.
   EOT
-  type    = list(string)
-  default = ["eduardoferdcarvalho@gmail.com"]
+  type        = list(string)
+  default     = ["eduardoferdcarvalho@gmail.com"]
 }
 
 # NOTE: var.infra_zitadel_sa_key_json was removed. The Zitadel TF provider

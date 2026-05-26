@@ -17,7 +17,7 @@
 // `currentMode.Require(mode.Live)` gates the run() entry. The --mode
 // flag rejects anything other than "live".
 //
-// Inputs (env, injected by `bin/with-secrets --stage iac`):
+// Inputs (env, injected by `bws run`):
 //
 //	IAC_BOOTSTRAP_CLOUDFLARE_API_TOKEN  CF token with R2 + user-token-edit perms
 //	CLOUDFLARE_ACCOUNT_ID               CF account UUID
@@ -171,10 +171,10 @@ func loadConfig() (config, error) {
 		accountID: os.Getenv("CLOUDFLARE_ACCOUNT_ID"),
 	}
 	if cfg.cfToken == "" {
-		return cfg, errors.New("IAC_BOOTSTRAP_CLOUDFLARE_API_TOKEN not set (expected to be injected by `bin/with-secrets --stage iac`)")
+		return cfg, errors.New("IAC_BOOTSTRAP_CLOUDFLARE_API_TOKEN not set (expected to be injected by `bws run`)")
 	}
 	if cfg.accountID == "" {
-		return cfg, errors.New("CLOUDFLARE_ACCOUNT_ID not set (expected to be injected by `bin/with-secrets --stage iac`)")
+		return cfg, errors.New("CLOUDFLARE_ACCOUNT_ID not set (expected to be injected by `bws run`)")
 	}
 	return cfg, nil
 }

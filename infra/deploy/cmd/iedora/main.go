@@ -1,28 +1,20 @@
-// iedora — top-level infra orchestrator. Four pipeline stages, each
-// runnable on its own:
+// iedora — Stage-3 + Stage-4 orchestrator.
 //
-//	iedora iac apply       — Stage 2: bring up shared infra via Tofu.
-//	iedora iac destroy     — Stage 2: tear it down.
 //	iedora app apply       — Stage 3: run every app-state configurator.
 //	iedora deploy [prods…] — Stage 4: ship one or more product artifacts.
 //	iedora destroy [prods…] — Stage 4: undo Stage 4 (per product).
-//
-// Plus convenience:
-//
-//	iedora pipeline        — local-dev chain: iac → app → deploy --all.
-//	iedora pipeline -d     — reverse: destroy products → iac destroy.
 //	iedora doctor          — preflight on the operator's machine.
 //
-// Stage 1 (Build & Test) is owned per-product (bun, go, docker build) and
-// triggered by CI / the Taskfile — not a subcommand here.
+// Stage 2 (IaC) is plain Tofu — `bws run -- tofu -chdir=infra/iac/tofu
+// apply`. No subcommand here. Stage 1 (Build & Test) is owned per-
+// product and triggered by CI.
 //
-// `bin/iedora` is the BWS-wrapped entrypoint used by the root justfile +
-// the Taskfile + CI.
+// The operator invokes this binary via `bws run -- bin/iedora <verb>`
+// (or directly, if BWS env is already hydrated).
 package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/signal"
@@ -51,16 +43,12 @@ func main() {
 
 	var err error
 	switch os.Args[1] {
-	case "iac":
-		err = dispatchIac(ctx, os.Args[2:])
 	case "app":
 		err = dispatchApp(ctx, os.Args[2:])
 	case "deploy":
 		err = runDeployProduct(ctx, os.Args[2:])
 	case "destroy":
 		err = runDestroyProduct(ctx, os.Args[2:])
-	case "pipeline":
-		err = runPipeline(ctx, os.Args[2:])
 	case "doctor":
 		err = runDoctor(ctx, os.Args[2:])
 	case "-h", "--help", "help":
@@ -76,66 +64,6 @@ func main() {
 		fmt.Fprintf(os.Stderr, "iedora %s: %v\n", os.Args[1], err)
 		os.Exit(1)
 	}
-}
-
-func dispatchIac(ctx context.Context, argv []string) error {
-	if len(argv) == 0 {
-		return fmt.Errorf("iac requires a subcommand: apply | destroy | ip")
-	}
-	switch argv[0] {
-	case "apply":
-		return runIacApply(ctx, argv[1:])
-	case "destroy":
-		return runIacDestroy(ctx, argv[1:])
-	case "ip":
-		return runIacIP(ctx, argv[1:])
-	default:
-		return fmt.Errorf("iac: unknown subcommand %q (want apply | destroy | ip)", argv[0])
-	}
-}
-
-// runIacIP prints the provisioned Hetzner box's IPv4 to stdout (or nothing
-// if the box hasn't been provisioned yet). Used by CI workflows that need
-// the IP for `ssh-keyscan` / SSH agent setup BEFORE running a heavier
-// orchestrator subcommand. Centralises the box-IP read that previously
-// lived inline in three workflow files, each preceded by its own
-// copy-pasted `tofu init` step. Lazy init in `runTofuOutput` handles
-// the backend-init prerequisite automatically.
-//
-// Implementation note: uses `tofu output -json` (no name) and parses
-// client-side rather than `tofu output -raw hetzner_ipv4`. When state
-// has no outputs, `-raw <name>` emits a "Warning: No outputs found"
-// banner to STDOUT (not stderr — yes, really) and exits 0, which would
-// leak the banner into the captured value. `-json` returns clean `{}`
-// on empty state, exit 0 — safe for `HOST=$(bin/iedora iac ip)`.
-func runIacIP(ctx context.Context, argv []string) error {
-	if len(argv) > 0 {
-		return fmt.Errorf("iac ip takes no arguments")
-	}
-	currentMode.Require(mode.Live)
-	raw, err := runTofuOutput(ctx, nil, "output", "-json")
-	if err != nil {
-		// Backend not reachable / state corrupt → real error. Empty
-		// state isn't an error here (returns "{}").
-		return err
-	}
-	if raw == "" || raw == "{}" {
-		return nil
-	}
-	var outputs map[string]struct {
-		Value any `json:"value"`
-	}
-	if err := json.Unmarshal([]byte(raw), &outputs); err != nil {
-		return fmt.Errorf("parse tofu outputs: %w", err)
-	}
-	o, ok := outputs["hetzner_ipv4"]
-	if !ok {
-		return nil
-	}
-	if s, ok := o.Value.(string); ok && s != "" {
-		fmt.Println(s)
-	}
-	return nil
 }
 
 func dispatchApp(ctx context.Context, argv []string) error {
@@ -154,22 +82,20 @@ func usage() {
 	fmt.Fprintln(os.Stderr, `Usage: iedora <subcommand> [flags]
 
 Stage subcommands:
-  iac apply             Bring up shared infra via Tofu.
-  iac destroy           Tear down shared infra.
-  iac ip                Print the provisioned Hetzner box IPv4 (empty if none).
   app apply             Run every app-state configurator (Stage 3).
   deploy [products…]    Ship product artifacts (Stage 4). Empty list = all.
   destroy [products…]   Tear down product artifacts. Empty list = all.
-
-Convenience:
-  pipeline              Run iac apply → app apply → deploy --all.
-  pipeline -d           Run destroy --all → iac destroy.
   doctor                Diagnose deploy-readiness on the operator's machine.
 
 Flags for app apply:
   --ready-budget DUR    Max wait for Zitadel /debug/ready + LE cert (default 6m).
   --only NAME           Run only one configurator by name.
 
-The wrapping bin/iedora script injects BWS secrets as env vars before
-exec'ing this binary, exactly like bin/with-secrets does for tofu.`)
+Stage 2 (IaC) is plain Tofu — no subcommand here. Run:
+  bws run -- tofu -chdir=infra/iac/tofu init
+  bws run -- tofu -chdir=infra/iac/tofu apply
+  bws run -- tofu -chdir=infra/iac/tofu destroy
+
+Hydrate BWS env when invoking this binary:
+  bws run -- bin/iedora <subcommand>`)
 }

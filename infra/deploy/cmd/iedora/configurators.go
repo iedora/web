@@ -18,7 +18,7 @@ import (
 // `infra/app-state/<name>/` directory as an importable package; this
 // orchestrator calls the package's `Run(ctx)` (or `Run(ctx, argv)`)
 // directly. No subprocess fork, no PATH lookup, no env round-trip:
-// stage-app env is already in os.Environ from `bin/with-secrets`.
+// stage-app env is already in os.Environ from `bws run`.
 //
 // Adding a configurator:
 //   1. New package under `infra/app-state/<name>/` exporting `Run(ctx) error`.
@@ -78,7 +78,7 @@ var appConfigurators = []appConfigurator{
 
 // runConfigurator dispatches the configurator's Run closure. All env
 // the configurator needs (BWS_*, TF_VAR_*, IAC_*, APP_*) is already in
-// os.Environ — `bin/with-secrets --stage app` hydrated it before
+// os.Environ — `bws run --stage app` hydrated it before
 // reaching this orchestrator. No env shuffling here.
 func runConfigurator(ctx context.Context, ac appConfigurator) error {
 	if ac.run == nil {
