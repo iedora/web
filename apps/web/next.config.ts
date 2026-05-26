@@ -14,7 +14,13 @@ const nextConfig: NextConfig = {
   // linked @iedora/design-system package + its CSS / fonts. Without this
   // Next emits a warning and traces only inside products/menu/.
   outputFileTracingRoot: path.join(here, '..', '..'),
-  transpilePackages: ['@iedora/design-system', '@iedora/observability'],
+  transpilePackages: [
+    '@iedora/design-system',
+    '@iedora/observability',
+    '@iedora/product-core',
+    '@iedora/product-house',
+    '@iedora/product-menu',
+  ],
   outputFileTracingIncludes: {
     // Force-include files the migrate scripts need at runtime —
     // Turbopack's standalone trace misses them otherwise (vercel/next.js#88844).
