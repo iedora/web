@@ -3,22 +3,85 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Menu product — restaurant menu builder. Pages, slices, and server functions consumed by @iedora/web (which boots Next.js).",
+  "description": "Menu product — restaurant menu builder. Slices, pages, drizzle schema + migrations, e2e tests. Consumed by @iedora/web (the Next.js shell) via wildcard subpath exports.",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./*": "./src/*.tsx",
+    "./*/route": "./src/*/route.ts",
+    "./i18n/messages/*.json": "./src/i18n/messages/*.json"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src",
+    "lint": "eslint",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:ai-live": "bun --env-file=.env vitest run --config vitest.config.live.ts",
+    "test:e2e": "bun --env-file=.env.test playwright test",
+    "test:e2e:ui": "bun --env-file=.env.test playwright test --ui",
+    "test:e2e:debug": "PWDEBUG=1 bun --env-file=.env.test playwright test",
+    "db:generate": "bun --bun drizzle-kit generate",
+    "db:migrate": "bun --bun drizzle-kit migrate",
+    "db:push": "bun --bun drizzle-kit push",
+    "db:studio": "bun --bun drizzle-kit studio",
+    "db:migrate:test": "bun --env-file=.env.test --bun drizzle-kit migrate"
+  },
+  "dependencies": {
+    "@ai-sdk/google": "^3.0.79",
+    "@ai-sdk/openai-compatible": "^2.0.47",
+    "@aws-sdk/client-s3": "^3.1049.0",
+    "@aws-sdk/s3-request-presigner": "^3.1049.0",
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
+    "@iedora/auth": "workspace:*",
+    "@iedora/brand": "workspace:*",
+    "@iedora/design-system": "workspace:*",
+    "@iedora/observability": "workspace:*",
+    "ai": "^6.0.190",
+    "clsx": "^2.1.1",
+    "drizzle-orm": "^0.45.2",
+    "pino": "^10.3.1",
+    "postgres": "^3.4.9",
+    "qrcode": "^1.5.4",
+    "server-only": "^0.0.1",
+    "tailwind-merge": "^3.6.0",
+    "zod": "^4.4.3"
+  },
+  "peerDependencies": {
+    "next": "^16.0.0",
+    "next-intl": "^4.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.4.5",
     "@iedora/eslint-config": "workspace:*",
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/sdk-metrics": "^2.7.1",
+    "@playwright/test": "^1.60.0",
+    "@tailwindcss/postcss": "^4.3.0",
+    "@types/bun": "^1.3.14",
     "@types/node": "^22.19.19",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "drizzle-kit": "^0.31.10",
     "eslint": "^9.39.4",
+    "next": "16.2.6",
+    "next-intl": "^4.12.0",
+    "react": "19.2.6",
+    "react-dom": "19.2.6",
+    "tailwindcss": "^4.3.0",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.46.0",
     "vitest": "^4.1.7"
-  }
+  },
+  "ignoreScripts": [
+    "sharp",
+    "unrs-resolver"
+  ],
+  "trustedDependencies": [
+    "sharp",
+    "unrs-resolver"
+  ]
 }
