@@ -802,6 +802,113 @@ the affected stage; the rest have explicit recovery steps below.
 | `App state (Stage 3)` workflow fails with `Error loading key "/home/runner/.ssh/id_ed25519": error in libcrypto`, `SSH_KEY:` line is empty in the env dump | `tofu destroy` removed the `github_actions_secret.secrets` resources Tofu had written — `IAC_BOOTSTRAP_SSH_PRIVATE_KEY` and `BWS_ACCESS_TOKEN` are gone from the repo. | Expected after a `tofu destroy`. Either: (a) `bin/iedora-env tofu -chdir=infra/iac/tofu apply` rewrites them on next apply, (b) set manually with `gh secret set <NAME> --repo eduvhc/iedora`, or (c) ignore — next real deploy fixes it. |
 | `menu.yml` E2E run hangs / fails after long re-arrangement | Stale CI cache (e.g. node_modules, Playwright browsers) confused by a workspaces refactor. | Re-run the workflow with `gh run rerun <run-id> --failed`. If still red: bump the cache key or delete the cache via the Actions UI. |
 
+## IaC test layers
+
+Five layers, cheapest → most expensive. Each catches a different class
+of bug. Pick the cheapest one that can prove what you need; escalate
+only when you have to. Layer 5 (the pre-merge runbook, below) is the
+gate before shipping IaC changes to `main`.
+
+### Layer 1 — Render-time (no cloud APIs, ~30 s, free)
+
+```bash
+tofu -chdir=infra/iac/tofu fmt -check -recursive
+tofu -chdir=infra/iac/tofu validate
+bin/iedora-env tofu -chdir=infra/iac/tofu init -input=false -upgrade
+bin/iedora-env tofu -chdir=infra/iac/tofu plan
+# Optionally inspect rendered locals:
+bin/iedora-env tofu -chdir=infra/iac/tofu console <<< 'nonsensitive(local.caddyfile)'
+```
+
+**Catches**: HCL parse errors, `yamlencode` / `templatefile` / `indent`
+mistakes, unresolved variable references, drift between
+`triggers_replace` keys and the values they hash.
+
+**Does NOT catch**: cloud-init runtime errors, provider behaviour
+quirks, anything that needs `random_password` / cloud-API computed
+values (those are `(known after apply)` at plan time).
+
+### Layer 2 — Cold apply (~5–10 min, ~€0.01)
+
+```bash
+bin/iedora-env tofu -chdir=infra/iac/tofu apply
+```
+
+Provisions everything from an empty state. SSH into the box and
+verify each container:
+
+```bash
+HOST=$(bin/iedora-env tofu -chdir=infra/iac/tofu output -raw hetzner_ipv4)
+ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@$HOST \
+  'docker compose -f /etc/iedora/docker-compose.yml ps'
+curl -sI https://auth.iedora.com/debug/ready | head -1   # → HTTP/2 200
+```
+
+**Catches**: cloud-init failures (missing packages, bad write_files
+indent), provider quirks, the `terraform_data.iedora_sync` SSH push
+working at all, Let's Encrypt cert issuance, the docker-compose YAML
+actually being valid (this only fires on `docker compose up` on the
+box — `tofu plan` doesn't run compose).
+
+### Layer 2.5 — Warm apply (idempotency, < 1 min)
+
+```bash
+bin/iedora-env tofu -chdir=infra/iac/tofu apply
+```
+
+Immediately re-run. Expected: `Apply complete! Resources: 0 added, 0
+changed, 0 destroyed.`
+
+**Catches**: non-deterministic `yamlencode` ordering, unstable
+`triggers_replace` hashes (compose, Caddyfile, systemd unit). If
+*anything* shows as changed on a no-op re-apply, a sync resource
+will fire spuriously on every future apply.
+
+### Layer 3 — Day-2 simulation (~2 min)
+
+Edit a single container env in `compose.tf` (e.g. flip
+`BACKUP_KEEP_DAYS`), re-apply.
+
+```bash
+# Expected plan: 1 to add, 0 to change, 1 to destroy
+#   (only terraform_data.iedora_sync recreates)
+bin/iedora-env tofu -chdir=infra/iac/tofu apply
+
+# On the box: ONLY the affected container should be recreated.
+# postgres, zitadel, caddy, openobserve should preserve their uptime.
+ssh root@$HOST 'docker ps --format "{{.Names}}\t{{.RunningFor}}"'
+```
+
+**Catches**: regressions where a small config change bounces the
+whole stack (the `systemctl reload` vs `restart` finding — see
+`sync.tf`). Catches Caddyfile bind-mount changes not propagating
+without an explicit `caddy reload`.
+
+### Layer 4 — Destroy (~3 min, frees all paid resources)
+
+```bash
+TF_VAR_allow_masterkey_rotation=true \
+  bin/iedora-env tofu -chdir=infra/iac/tofu destroy
+```
+
+Expected: `Destroy complete! Resources: N destroyed.` with no R2 409s,
+no Hetzner orphans, no stale BWS `IAC_*` keys.
+
+**Catches**: missing destroy hooks (rclone purge before bucket
+DELETE), rate-limit problems on parallel mutating ops (BWS 429 →
+`bws-sync` batched fix), `prevent_destroy` lifecycle blocks that
+need an explicit override.
+
+**Rclone is a hard prereq** — `brew install rclone` first.
+
+### Layer 5 — Pre-merge runbook (~30–45 min, real cloud cycle)
+
+Full `down → up → up → down → up → up` chain — see § Pre-merge
+runbook below. The second cold/warm pair is the load-bearing test:
+catches DNS races, one-shot reveal recovery, cross-stage drift that
+no single-apply path exposes. Run before merging any IaC change to
+`main`.
+
 ## Pre-merge runbook
 
 Run before merging any change to the orchestrator (`infra/deploy/cmd/iedora/`,
