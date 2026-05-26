@@ -158,35 +158,35 @@ variable "infra_hcloud_token" {
 
 variable "hetzner_server_type" {
   description = <<-EOT
-    Hetzner SKU for the infra VPS. CX23 (x86_64 shared, 2 vCPU / 4 GB
-    RAM / 40 GB NVMe SSD, €3.99/mo) is the default — picked because
-    it's the cheapest tier that comfortably runs the full stack
-    (postgres + zitadel + caddy + openobserve + menu + backups).
+    Hetzner SKU for the infra VPS. CAX11 (arm64 Ampere Altra, 2 vCPU /
+    4 GB RAM / 40 GB NVMe SSD, €3.79/mo) is the default — cheapest
+    tier that comfortably runs the full stack (postgres + zitadel +
+    caddy + openobserve + menu + backups) now that the menu CI
+    workflow ships native arm64 images via the matrix build
+    (linux/amd64 on ubuntu-24.04, linux/arm64 on ubuntu-24.04-arm).
 
-    The earlier "ARM blocks Next.js" rationale was disproved in 2026-05:
-    Next.js + Turbopack ship arm64 native binaries (verified locally
-    via `docker buildx build --platform linux/arm64`). CAX SKUs are
-    now allowed; the menu CI workflow already produces a multi-arch
-    manifest (linux/amd64 + linux/arm64), so flipping to CAX is a
-    `terraform apply` away.
+    Cross-arch SKU changes (CX/CPX/CCX <-> CAX) force a destroy +
+    recreate of `hcloud_server.iedora` — Hetzner can't resize between
+    architectures in place. Restore from the R2 pg_dumpall backup
+    after a switch; see docs/deploy.md § Day-2 operations.
 
-    Scale path (in-place resize within an arch family):
-      x86_64 (cheapest start):
-        cx23   2/4GB/40GB    €3.99   — entry / pre-customer (default)
-        cpx22  2/4GB/80GB    €7.99   — more disk headroom
-        cpx32  4/8GB/160GB   €13.99  — Phase 4 multi-tenant ramp
-        ccx13  2/8GB/80GB    €16.99  — dedicated, noisy-neighbour proof
-      arm64 (Ampere — same price tier as x86_64):
-        cax11  2/4GB/40GB    €3.79   — entry / pre-customer
+    Scale path (in-place resize stays within an arch family):
+      arm64 (Ampere — default tier):
+        cax11  2/4GB/40GB    €3.79   — entry / pre-customer (default)
         cax21  4/8GB/80GB    €7.59
         cax31  8/16GB/160GB  €15.29
+      x86_64 (legacy / fallback if an upstream image lacks arm64):
+        cx23   2/4GB/40GB    €3.99
+        cpx22  2/4GB/80GB    €7.99
+        cpx32  4/8GB/160GB   €13.99
+        ccx13  2/8GB/80GB    €16.99  — dedicated, noisy-neighbour proof
   EOT
   type        = string
-  default     = "cx23"
+  default     = "cax11"
 
   validation {
     condition     = contains(["cx23", "cpx22", "cpx32", "cpx42", "ccx13", "ccx23", "cax11", "cax21", "cax31", "cax41"], var.hetzner_server_type)
-    error_message = "Use a Hetzner SKU from cx*/cpx*/ccx* (x86_64) or cax* (arm64). Multi-arch images already cover both."
+    error_message = "Use a Hetzner SKU from cax* (arm64, default) or cx*/cpx*/ccx* (x86_64). Multi-arch images cover both."
   }
 }
 
