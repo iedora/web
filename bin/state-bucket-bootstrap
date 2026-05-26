@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Transparent wrapper for the Go state-bucket-bootstrap command at
-# infra/cmd/state-bucket-bootstrap. Same shape as bin/iedora /
+# deploy/state-bucket-bootstrap. Same shape as bin/iedora /
 # bin/with-secrets / bin/zitadel-apply — `go run` compiles once into
 # the user's GOCACHE; subsequent invocations reuse the cached binary.
 #
@@ -26,6 +26,6 @@
 set -euo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-INFRA_DIR="$(dirname "$DIR")"
+REPO_ROOT="$(dirname "$DIR")"
 
-exec go run -C "$INFRA_DIR" ./cmd/state-bucket-bootstrap "$@"
+exec go run -C "$REPO_ROOT" ./deploy/state-bucket-bootstrap "$@"

@@ -123,15 +123,15 @@ tasks:
 
   local:
     desc: "Boot the local stack (Postgres, Zitadel, OpenObserve, House, Menu) via docker compose"
-    cmds: ["go run -C {{.INFRA}} ./cmd/local {{.CLI_ARGS}}"]
+    cmds: ["go run -C {{.ROOT_DIR}} ./dev/orchestrator {{.CLI_ARGS}}"]
 
   local:down:
     desc: "Tear down the local stack (docker compose down -v + wipe bootstrap + .env.local)"
-    cmds: ["go run -C {{.INFRA}} ./cmd/local --destroy"]
+    cmds: ["go run -C {{.ROOT_DIR}} ./dev/orchestrator --destroy"]
 
   local:reset-db:
     desc: "Drop + recreate one database without touching the rest (e.g. `task local:reset-db -- menu`)"
-    cmds: ["go run -C {{.INFRA}} ./cmd/local --reset-db {{.CLI_ARGS}}"]
+    cmds: ["go run -C {{.ROOT_DIR}} ./dev/orchestrator --reset-db {{.CLI_ARGS}}"]
 
   local:runbook:
     desc: "Local-stack pre-merge runbook: down → up → up → down → up → up (~5 min, no real cloud)"

@@ -103,25 +103,19 @@ playwright/.auth/
 **/terraform.tfvars
 # .terraform.lock.hcl SHOULD be committed — pins provider versions
 
-# Go build artefacts from `go build ./cmd/...` invoked at infra/. The
-# binaries are named after the cmd folder and land in infra/. We always
-# run via `go run` (through bin/ shims for the live binaries, direct
-# from Taskfile for `local`), never from a pre-built binary.
-# Note: `cmd/local` collides with the `dev/` directory (the
-# docker-compose root) — `go build ./cmd/local` would fail, so no
-# ignore entry is needed for it.
-/infra/iedora
-/infra/iedora-backup
-/infra/with-secrets
-/infra/zitadel-grant
-/infra/zitadel-apply
-/infra/bws-upsert
-/infra/menu-db-migrations
-/infra/openobserve-dashboards
-/infra/state-bucket-bootstrap
-/infra/menu-db-migrations
-/infra/openobserve-dashboards
-/infra/state-bucket-bootstrap
+# Go build artefacts from `go build ./...` or `go build ./<pkg>` invoked
+# at the repo root. The binaries are named after the package's directory
+# and land in the cwd. We always run via `go run` (through bin/ shims
+# for the live binaries, direct from Taskfile for `local`), never from
+# a pre-built binary, so any compiled binary at the repo root is stray.
+/iedora
+/iedora-backup
+/with-secrets
+/zitadel-apply
+/bws-upsert
+/menu-db-migrations
+/openobserve-dashboards
+/state-bucket-bootstrap
 
 # Backup artefacts — `make restore` and ad-hoc pg_dump leave these in cwd.
 # Database dumps are the most sensitive payload in the repo; never commit one
