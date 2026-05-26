@@ -109,12 +109,6 @@ variable "github_token" {
 # GitHub Actions secret or variable; the source is BWS (for secrets) or a
 # default string (for variables that aren't secret).
 
-variable "bws_access_token" {
-  description = "BWS machine-account token. TF_VAR_bws_access_token (auto-set by bws run — it's literally the env var that unlocked the bws fetch)."
-  type        = string
-  sensitive   = true
-}
-
 variable "bws_project_id" {
   description = "BWS project UUID. TF_VAR_bws_project_id."
   type        = string

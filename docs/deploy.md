@@ -724,8 +724,7 @@ First-time setup on a fresh laptop + empty cloud:
    PROJECT_ID=$(bws project list -o json | jq -r '.[]|select(.name=="iedora-deploy")|.id')
    for KEY in IAC_BOOTSTRAP_CLOUDFLARE_API_TOKEN IAC_BOOTSTRAP_STATE_PASSPHRASE \
               IAC_BOOTSTRAP_HCLOUD_TOKEN IAC_BOOTSTRAP_GITHUB_API_TOKEN IAC_BOOTSTRAP_GHCR_TOKEN \
-              IAC_BOOTSTRAP_SSH_PRIVATE_KEY IAC_BOOTSTRAP_CLAUDE_CODE_OAUTH_TOKEN \
-              IAC_BOOTSTRAP_OPENOBSERVE_ROOT_USER_EMAIL; do
+              IAC_BOOTSTRAP_SSH_PRIVATE_KEY IAC_BOOTSTRAP_OPENOBSERVE_ROOT_USER_EMAIL; do
      read -s -p "$KEY: " V && echo
      bws secret create "$KEY" "$V" "$PROJECT_ID" -o none
    done
@@ -740,13 +739,48 @@ First-time setup on a fresh laptop + empty cloud:
      grained + personal account + GHCR is GitHub's worst-supported
      combo — keep classic until iedora moves to an org).
    - `IAC_BOOTSTRAP_SSH_PRIVATE_KEY`: `cat ~/.ssh/id_ed25519`.
-   - `IAC_BOOTSTRAP_CLAUDE_CODE_OAUTH_TOKEN`: `claude setup-token`.
 
-   The 5 `IAC_*` keys are minted by Tofu on first apply — DO
-   NOT populate them.
+   The `IAC_BOOTSTRAP_TOFU_STATE_*` keys are minted by
+   `state-bucket-bootstrap` on first apply — DO NOT populate them.
 
-5. **Run the pipeline**: `bin/iedora-env bin/iedora doctor && bin/iedora-env tofu -chdir=infra/iac/tofu apply`. First time: 5–10
-   min. Validate `https://menu.iedora.com/up` returns
+5. **Set the two bootstrap GH Actions secrets** that the CI workflow
+   needs BEFORE it can even hydrate the BWS env. These can NOT be
+   Tofu-managed (chicken-egg: `infra-deploy.yml` reads them to run
+   Tofu in the first place). One-time, survives `tofu destroy`:
+
+   ```bash
+   # BWS machine token — same value as your shell BWS_ACCESS_TOKEN.
+   bws secret get $PROJECT_ID -o json | jq -r '.value' | gh secret set BWS_ACCESS_TOKEN --repo eduvhc/iedora
+   # Or just: gh secret set BWS_ACCESS_TOKEN --repo eduvhc/iedora    (paste interactively)
+
+   # Same SSH key that's in BWS IAC_BOOTSTRAP_SSH_PRIVATE_KEY.
+   gh secret set IAC_BOOTSTRAP_SSH_PRIVATE_KEY --repo eduvhc/iedora < ~/.ssh/id_ed25519
+   ```
+
+   You also need the `BWS_PROJECT_ID` and `CLOUDFLARE_ACCOUNT_ID` GH
+   Actions VARIABLES (not secrets) — these ARE Tofu-managed (via
+   `github_actions_variable.vars` in `github.tf`), but Tofu can't
+   write them until the first apply, so set them once:
+
+   ```bash
+   gh variable set BWS_PROJECT_ID --repo eduvhc/iedora --body "$PROJECT_ID"
+   gh variable set CLOUDFLARE_ACCOUNT_ID --repo eduvhc/iedora --body "<32-char-hex>"
+   gh variable set MENU_PUBLIC_HOSTNAME --repo eduvhc/iedora --body "menu.iedora.com"
+   ```
+
+   After the first successful apply, these get reconciled by Tofu and
+   you never touch them again.
+
+6. **Set the Claude Code Action token** (optional — only if using the
+   `claude.yml` workflow). Operator-managed, not in BWS:
+
+   ```bash
+   claude setup-token
+   gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo eduvhc/iedora
+   ```
+
+7. **Run the pipeline**: `bin/iedora-env bin/iedora doctor && bin/iedora-env bin/state-bucket-bootstrap && bin/iedora-env tofu -chdir=infra/iac/tofu init -upgrade && bin/iedora-env tofu -chdir=infra/iac/tofu apply`.
+   First time: 5–10 min. Validate `https://menu.iedora.com/up` returns
    `{"ok":true,"db":"ok"}`.
 
 ## Failure modes / troubleshooting

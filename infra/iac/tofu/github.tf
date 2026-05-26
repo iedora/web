@@ -30,13 +30,16 @@ locals {
     CLOUDFLARE_ACCOUNT_ID = var.account_id
   }
 
-  # Sensitive secrets. Sourced from BWS-fed Tofu vars at apply time;
-  # the values flow into GH-encrypted-secrets and never persist in
-  # plaintext beyond the apply.
-  github_secrets = {
-    BWS_ACCESS_TOKEN              = var.bws_access_token
-    IAC_BOOTSTRAP_SSH_PRIVATE_KEY = var.infra_ssh_private_key
-  }
+  # Sensitive secrets. Empty today — `BWS_ACCESS_TOKEN` and
+  # `IAC_BOOTSTRAP_SSH_PRIVATE_KEY` USED to live here, written-through
+  # by Tofu from BWS-fed vars. The hole: they're bootstrap credentials
+  # for CI itself (the workflow uses BWS_ACCESS_TOKEN to hydrate the
+  # env that runs Tofu — circular). On `tofu destroy`, the secrets
+  # vanished and the next CI run couldn't bootstrap.
+  #
+  # Both are now operator-managed via `gh secret set` (one-time, like
+  # CLAUDE_CODE_OAUTH_TOKEN). See docs/deploy.md § Bootstrap.
+  github_secrets = {}
 }
 
 resource "github_actions_variable" "vars" {
