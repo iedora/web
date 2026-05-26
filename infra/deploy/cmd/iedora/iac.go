@@ -43,15 +43,26 @@ func runIacApply(ctx context.Context, argv []string) error {
 		return fmt.Errorf("tofu init: %w", err)
 	}
 
-	// Pass 2 creates ~12 docker_container resources whose provider talks
-	// to the Hetzner box over SSH. sshd's default MaxStartups is 10:30:100
-	// (allows 10 unauthenticated connections, then random-drops above 30,
-	// rejects above 100), so the prior `-parallelism=20` regularly tripped
-	// "Connection reset by peer" on cold deploys when many container creates
-	// hit the auth phase concurrently. Five keeps us well under MaxStartups
-	// and barely costs latency — docker_container creates are I/O-bound,
-	// not CPU-bound, on the orchestrator side.
-	parallel := "-parallelism=5"
+	// Two parallelism budgets:
+	//
+	//   apiParallel    Cloud-API resources (cloudflare_*, github_actions_*,
+	//                  terraform_data.bws_sync_autogen[*], docker_network/volume
+	//                  primitives). Three separate vendors, each with its own
+	//                  rate limit — fanning out wide is safe and saves wall
+	//                  time (a GitHub Actions secret create is ~5 minutes
+	//                  end-to-end; without parallelism they serialize).
+	//
+	//   sshParallel    docker_container resources whose provider talks to the
+	//                  Hetzner box over SSH. sshd's default MaxStartups is
+	//                  10:30:100 (10 unauthenticated connections, then random-
+	//                  drops above 30, rejects above 100), so anything above
+	//                  ~5 trips "Connection reset by peer" on cold deploys
+	//                  when many container creates hit the auth phase
+	//                  concurrently. Five keeps us well under MaxStartups.
+	const (
+		apiParallel = "-parallelism=20"
+		sshParallel = "-parallelism=5"
+	)
 
 	// ── Pass 1: Hetzner box (UNCONDITIONAL) ─────────────────────────────
 	// Targeted apply so the docker provider (which reaches the box via
@@ -85,13 +96,50 @@ func runIacApply(ctx context.Context, argv []string) error {
 	_, priorIP, _ := bws.Find(allSecrets, "IAC_BOOTSTRAP_HOST_IP")
 	rotateKnownHosts(ctx, priorIP, hetznerIPv4)
 
-	// ── Pass 2: full apply ──────────────────────────────────────────────
-	// No zitadel provider → no placeholder dance, no HTTPS_PROXY, no
-	// waitForMenuDNS. menu_web is gone from this root too (Stage 4 owns
-	// it). Single clean apply.
-	fmt.Fprintln(stderr, "→ Pass 2/2: full tofu apply")
-	if err := runTofu(ctx, nil, "apply", "-auto-approve", parallel); err != nil {
-		return fmt.Errorf("apply: %w", err)
+	// ── Pass 2a: cloud-API + docker primitives (high parallelism) ──────
+	// Cloudflare (R2 buckets, DNS, R2 custom domains), GitHub Actions
+	// (secrets, variables), and the BWS write-through provisioners (each
+	// a separate POST against bitwarden) all hit different vendor APIs.
+	// Each has its own rate limit; fanning out at 20 saves real wall time
+	// because GH Actions secrets and R2 custom_domains are 5+ minutes
+	// each end-to-end. docker_network + docker_volume creates also belong
+	// here — they're per-resource SSH ops but quick (sub-second once the
+	// connection is up); piling them with docker_container creates
+	// wastes the SSH budget on cheap work.
+	fmt.Fprintln(stderr, "→ Pass 2a/2b: cloud APIs + docker primitives (parallelism=20)")
+	if err := runTofu(ctx, nil, "apply", "-auto-approve", apiParallel,
+		"-target=cloudflare_r2_bucket.data",
+		"-target=cloudflare_r2_bucket.assets",
+		"-target=cloudflare_r2_bucket_cors.assets",
+		"-target=cloudflare_r2_custom_domain.assets",
+		"-target=cloudflare_dns_record.menu_iedora",
+		"-target=cloudflare_dns_record.auth_iedora",
+		"-target=cloudflare_dns_record.obs_iedora",
+		"-target=cloudflare_api_token.tofu_state",
+		"-target=cloudflare_api_token.menu_assets",
+		"-target=github_actions_secret.secrets",
+		"-target=github_actions_variable.vars",
+		"-target=terraform_data.bws_sync_autogen",
+		"-target=docker_network.iedora",
+		"-target=docker_volume.caddy_data",
+		"-target=docker_volume.zitadel_bootstrap",
+		"-target=docker_container.zitadel_bootstrap_chmod",
+	); err != nil {
+		return fmt.Errorf("pass 2a apply: %w", err)
+	}
+
+	// ── Pass 2b: docker_container resources (low parallelism) ──────────
+	// Each docker_container.* SSHes to the box. parallelism=5 keeps us
+	// safely under sshd's MaxStartups 10:30:100. Pass 2b is an
+	// untargeted apply — Tofu picks up everything Pass 2a left
+	// unfinished (mostly docker_container.{postgres,zitadel,openobserve,
+	// caddy,backups}, the zitadel-login sidecar, and any output-only
+	// settle). Targets aren't required because the graph is now
+	// effectively just docker_container; running it untargeted also
+	// surfaces drift in resources we didn't list above.
+	fmt.Fprintln(stderr, "→ Pass 2b/2b: docker containers over SSH (parallelism=5)")
+	if err := runTofu(ctx, nil, "apply", "-auto-approve", sshParallel); err != nil {
+		return fmt.Errorf("pass 2b apply: %w", err)
 	}
 
 	fmt.Fprintln(stderr, "→ Write-through IAC_BOOTSTRAP_HOST_IP to BWS")
