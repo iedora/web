@@ -1,4 +1,4 @@
-import { toNextJsHandler } from 'better-auth/next-js'
+import { toNextJsHandler } from '@iedora/auth/next'
 import { auth } from '@/shared/auth'
 
 /**

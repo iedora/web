@@ -17,7 +17,7 @@
 #   introduce a code vuln, and the weekly cron picks up anything we'd
 #   miss between code-bearing commits.
 
-name: CodeQL
+name: '[Security] CodeQL'
 
 on:
   push:

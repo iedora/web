@@ -7,24 +7,22 @@
 # image SHA pinned.
 #
 # Architecture note: the menu container is owned by Stage 4
-# (`infra/deploy/cmd/iedora/runtime_docker.go`, dockerOnHetzner runtime), NOT by
-# Tofu. The SHARED services (postgres, zitadel, caddy, openobserve,
+# (`infra/deploy/cmd/iedora/runtime_docker.go`, dockerOnHetzner runtime),
+# NOT by Tofu. The SHARED services (postgres, cloudflared, openobserve,
 # backups) live in the rendered compose stack — see
-# `infra/iac/tofu/compose.tf`. CI's job is build + push;
-# the deploy job SSHes to the box, pulls the pinned image, runs
-# migrations, and replaces the container.
+# `infra/iac/tofu/compose.tf`. CI's job is build + push; the deploy
+# job SSHes to the box, pulls the pinned image, runs migrations, and
+# replaces the container.
 #
-# E2E (Playwright) runs against a production build of menu + a Bun-based
-# Zitadel mock (`tests/e2e/_bootstrap.ts`) + a Postgres service + adobe/s3mock
-# for S3 (LocalStack-latest now requires a licence — adobe/s3mock is the
-# open-source replacement). Specs are organised per slice
+# E2E (Playwright) runs against a production build of menu + a Postgres
+# service + adobe/s3mock for S3. Specs live per slice
 # (`src/features/<slice>/e2e/`) plus cross-slice journeys
 # (`tests/e2e/journeys/`) — see menu CLAUDE.md rule 15. Shard matrix is
 # wired but set to 1 today; bump when spec volume justifies.
 #
 # Self-contained on purpose: one file is the entire menu CI surface.
 
-name: Menu
+name: '[Build] Menu'
 
 on:
   push:
@@ -69,7 +67,7 @@ permissions:
 
 jobs:
   typecheck:
-    name: Typecheck
+    name: '[Lint] Typecheck'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     defaults:
@@ -81,7 +79,7 @@ jobs:
       - run: bun run typecheck
 
   lint:
-    name: Lint
+    name: '[Lint] ESLint'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     defaults:
@@ -93,7 +91,7 @@ jobs:
       - run: bun run lint
 
   unit:
-    name: Unit (Vitest)
+    name: '[Test] Unit (Vitest)'
     runs-on: ubuntu-24.04
     # ubuntu-24.04 ships Docker Engine. Most slices run against PGLite
     # in-process; any future testcontainers-based suite picks the daemon
@@ -112,7 +110,7 @@ jobs:
         run: bun run test
 
   security:
-    name: Security (Trivy + SBOM)
+    name: '[Security] Trivy + SBOM'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     # Scans the workspace lockfile (Bun workspaces dedupe deps at the root,
@@ -146,7 +144,7 @@ jobs:
           retention-days: 90
 
   e2e:
-    name: E2E (Playwright)
+    name: '[Test] E2E (Playwright)'
     needs: [typecheck, lint, unit]
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -243,7 +241,7 @@ jobs:
   # artifact so the merge job can stitch the manifest list. Pattern from
   # docs.docker.com/build/ci/github-actions/multi-platform.
   build:
-    name: Build + push (${{ matrix.platform }})
+    name: '[Build] Image (${{ matrix.platform }})'
     needs: [typecheck, lint, unit, security, e2e]
     # Only on push to main — PRs run the gates only. workflow_dispatch on main
     # still triggers a build for the "re-roll latest" flow.
@@ -355,7 +353,7 @@ jobs:
   # x86_64 — the merge is just registry plumbing, no image content
   # crosses the runner.
   merge:
-    name: Merge multi-arch manifest
+    name: '[Build] Merge multi-arch manifest'
     needs: [build]
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
@@ -454,7 +452,7 @@ jobs:
   # Day-2 (menu-only push): the latest app-state run is already success
   # from a prior CI run, this step returns ~immediately.
   wait_app_state:
-    name: Wait for Stage 3
+    name: '[Deploy] Wait for app-state'
     needs: merge
     runs-on: ubuntu-24.04
     timeout-minutes: 30

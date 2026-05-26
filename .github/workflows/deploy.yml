@@ -6,7 +6,7 @@
 # `infra/deploy/cmd/iedora/products.go`, (2) new caller workflow that
 # invokes THIS workflow with `inputs.product=<name>`.
 
-name: Deploy
+name: '[Deploy] Product'
 
 on:
   workflow_call:
@@ -37,7 +37,7 @@ permissions:
 
 jobs:
   deploy:
-    name: deploy ${{ inputs.product }}
+    name: '[Deploy] ${{ inputs.product }}'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:

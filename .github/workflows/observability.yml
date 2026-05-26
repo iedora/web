@@ -4,7 +4,7 @@
 # behaviour in NODE_ENV=test + the tenant-attribute contract. No DB, no
 # network. Fast suite (~30s).
 
-name: Observability
+name: '[Build] Observability'
 
 on:
   push:

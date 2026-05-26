@@ -8,6 +8,7 @@
     ".": "./src/index.ts",
     "./schema": "./src/schema.ts",
     "./client": "./src/client.ts",
+    "./next": "./src/next.ts",
     "./permissions": "./src/permissions.ts"
   },
   "scripts": {
@@ -20,7 +21,7 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
-    "better-auth": "^1.5.0",
+    "better-auth": "^1.6.11",
     "drizzle-orm": "^0.45.2",
     "postgres": "^3.4.9",
     "server-only": "^0.0.1",

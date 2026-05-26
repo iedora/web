@@ -15,7 +15,7 @@
 # Action on top, gated on `if: contains(github.event.pull_request.labels.*.name, 'doc-rewrite')`
 # so it only fires when explicitly requested. Out of scope for this gate.
 
-name: Docs Audit
+name: '[Lint] Docs'
 
 on:
   pull_request:

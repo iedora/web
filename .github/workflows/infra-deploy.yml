@@ -12,7 +12,7 @@
 #     `app-state.yml` (Stage 3).
 #   - Per-product containers — that's `deploy.yml` (Stage 4).
 
-name: Infra deploy
+name: '[Deploy] Infra'
 
 on:
   workflow_dispatch: {}
@@ -37,7 +37,7 @@ permissions:
 
 jobs:
   apply:
-    name: tofu apply
+    name: '[Deploy] Tofu apply'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
 

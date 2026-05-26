@@ -3,7 +3,7 @@
 # Editorial CSS + React primitives consumed by every product. jsdom-backed
 # Vitest suite — no DB, no services.
 
-name: Design System
+name: '[Build] Design System'
 
 on:
   push:
