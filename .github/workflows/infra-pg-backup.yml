@@ -1,0 +1,106 @@
+# Build + push the `ghcr.io/eduvhc/infra-pg-backup:18` image.
+#
+# This image is one of the SHARED compose services in
+# `infra/iac/tofu/compose.tf`. The Hetzner box's iedora.service refuses
+# to start without it (compose `docker compose up -d` errors with
+# "failed to resolve reference" if the image isn't in GHCR), so this
+# workflow has to ship the image BEFORE infra-deploy.yml provisions a
+# fresh box.
+#
+# Triggers:
+#   push to main on the source or its Dockerfile      → automatic
+#                                                       rebuild
+#   workflow_dispatch                                  → manual rebuild
+#                                                       (Day-0 / wipe
+#                                                       recovery)
+#
+# arm64-only — the only consumer is the Hetzner CAX (Ampere arm64);
+# building amd64 here would be wasted CI time + GHCR storage.
+#
+# Tag scheme: `:18` tracks the postgres major in the Dockerfile FROM
+# (matches the runtime's pg_dump version). Bump this tag together with
+# the postgres tag inside the Dockerfile when upgrading.
+
+name: '[infra] infra-pg-backup image'
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - 'infra/iac/cmd/infra-pg-backup/**'
+      - 'internal/**'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/infra-pg-backup.yml'
+
+concurrency:
+  group: infra-pg-backup-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build image (arm64)
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      # bin/iedora-env auto-discovers BWS_PROJECT_ID and hydrates
+      # IAC_BOOTSTRAP_GHCR_TOKEN — same pattern as web.yml.
+      - name: Install bws CLI
+        env:
+          BWS_VERSION: '2.0.0'
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/bws.zip \
+            "https://github.com/bitwarden/sdk-sm/releases/download/bws-v${BWS_VERSION}/bws-aarch64-unknown-linux-gnu-${BWS_VERSION}.zip"
+          unzip -q /tmp/bws.zip -d /tmp/bws
+          sudo install -m 0755 /tmp/bws/bws /usr/local/bin/bws
+
+      - name: Log in to GHCR
+        env:
+          BWS_ACCESS_TOKEN: ${{ secrets.BWS_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          bin/iedora-env bash -c '
+            set -euo pipefail
+            [ -n "${IAC_BOOTSTRAP_GHCR_TOKEN:-}" ] || { echo "IAC_BOOTSTRAP_GHCR_TOKEN missing in BWS" >&2; exit 1; }
+            echo "$IAC_BOOTSTRAP_GHCR_TOKEN" | docker login ghcr.io -u eduvhc --password-stdin
+          '
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/iac/cmd/infra-pg-backup/Dockerfile
+          platforms: linux/arm64
+          tags: |
+            ghcr.io/eduvhc/infra-pg-backup:18
+            ghcr.io/eduvhc/infra-pg-backup:${{ github.sha }}
+          push: true
+          provenance: true
+          sbom: true
+          cache-from: type=gha,scope=infra-pg-backup-arm64
+          cache-to: type=gha,mode=max,scope=infra-pg-backup-arm64
+
+      - name: Attest SLSA build provenance
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-name: ghcr.io/eduvhc/infra-pg-backup
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
