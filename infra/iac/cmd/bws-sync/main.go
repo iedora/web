@@ -1,10 +1,9 @@
 // bws-sync — batched BWS write/delete in a single process invocation.
 //
-// Replaces N parallel `bin/bws-upsert` calls (one per
-// `terraform_data.bws_sync_*`) with one sequential pass through the
-// BWS API. The bws cloud-side rate-limits mutations at ~1/s globally
-// per token; firing 7 parallel local-exec provisioners hit 429s even
-// with per-call retry, leaving the destroy partially complete.
+// Walks the secret list sequentially in one pass: the BWS cloud-side
+// rate-limits mutations at ~1/s globally per token, so any parallelism
+// trips 429s and leaves destroys partially complete. One Tofu local-
+// exec resource, one process, one pass.
 //
 // Modes:
 //

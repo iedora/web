@@ -515,7 +515,7 @@ flows via `workflow_run` triggers.
 
 | Workflow | Stage | Trigger |
 |----------|-------|---------|
-| [`infra-deploy.yml`](../.github/workflows/infra-deploy.yml) | 2 | push to main on `infra/iac/**`, `internal/**`, `bin/{bws-sync,bws-upsert,state-bucket-bootstrap}`, `go.{mod,sum}`. Manual dispatch. |
+| [`infra-deploy.yml`](../.github/workflows/infra-deploy.yml) | 2 | push to main on `infra/iac/**`, `internal/**`, `bin/state-bucket-bootstrap`, `go.{mod,sum}`. Manual dispatch. |
 | [`app-state.yml`](../.github/workflows/app-state.yml)       | 3 | `workflow_run` on infra-deploy success. Also: push on `infra/app-state/menu-db-migrations/**`, `infra/app-state/openobserve-dashboards/**`. Manual dispatch. |
 | [`menu.yml`](../.github/workflows/menu.yml)                 | 1+4 | push to main on `products/menu/**`. Build + push image (multi-arch), then dispatches `deploy.yml(product=menu, sha=...)`. Ships both menu.iedora.com AND iedora.com. |
 | [`deploy.yml`](../.github/workflows/deploy.yml)             | 4 | reusable `workflow_call` invoked by `menu.yml`. Generic over `product`. |
@@ -753,14 +753,6 @@ operator-managed bootstrap keys are reused across every Day 0/1 cycle.
    - `MENU_PUBLIC_HOSTNAME`   → `variables.tf` default
                                  (`menu.iedora.com`).
 
-6. **Set the Claude Code Action token** (optional — only if using the
-   `claude.yml` workflow). Operator-managed, not in BWS:
-
-   ```bash
-   claude setup-token
-   gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo eduvhc/iedora
-   ```
-
 ### Day 1 deploy
 
 The canonical sequence, top to bottom. ~6–8 min cold; idempotent
@@ -831,7 +823,7 @@ the affected stage; the rest have explicit recovery steps below.
 |---------|-------|----------|
 | `iedora.service failed because the control process exited with error code` after first apply, log says `service "X" refers to undefined volume "Y": invalid compose project` | HCL volume map key doesn't match the name referenced in the service's `volumes` list. yamlencode emits keys verbatim. | Quote hyphenated keys in `compose.tf::local.compose.volumes` — `"my-data" = { name = "my-data" }` — so the key matches the service reference. |
 | All containers restart on a small env change | Older `iedora.service` ran `systemctl restart` which fires `ExecStop = docker compose down` → `ExecStart` (full down/up). | Pull latest. The unit now has `ExecReload = docker compose up -d --remove-orphans` and `sync.tf` calls `systemctl reload` instead of restart — only containers whose config actually changed are recreated. |
-| BWS destroy hooks report `429 Too Many Requests` and leave 1–2 IAC_* keys behind | BWS mutating-call rate limit is ~1/s server-side. Older code fired N parallel `terraform_data.bws_sync_*` provisioners and saturated it. | Pull latest. `bws-sync` (single resource, sequential batch) replaces the per-key resources. If a key still lingers: `BWS_PROJECT_ID=... BWS_KEY=<key> BWS_DELETE=1 bin/bws-upsert`. |
+| BWS destroy hooks report `429 Too Many Requests` and leave 1–2 IAC_* keys behind | BWS mutating-call rate limit is ~1/s server-side. Older code fired N parallel `terraform_data.bws_sync_*` provisioners and saturated it. | Pull latest. `bws-sync` (single resource, sequential batch) replaces the per-key resources. Lingering keys: drop directly via `bws secret delete <id>`. |
 
 ### Stage 3 — app state
 
@@ -1011,18 +1003,16 @@ tunnel-then-reconcile flow on a fresh target.
 
 ```
 bin/                                     `go run` / `bash` shims operators invoke directly
-  iedora                                   → infra/deploy/cmd/iedora
+  iedora-env                               BWS → TF_VAR_* / AWS_* / CLOUDFLARE_ACCOUNT_ID hydration
+  iedora                                   → infra/deploy/cmd/iedora (Stage 3 + Stage 4)
   state-bucket-bootstrap                   → infra/iac/cmd/state-bucket-bootstrap (Stage -1)
-  bws-sync                                 → infra/iac/cmd/bws-sync
-  bws-upsert                               → infra/iac/cmd/bws-upsert (Tofu local-exec helper)
-                                            (menu-db-migrations + openobserve-dashboards
-                                             run in-process via bin/iedora app apply)
+  bws-sync                                 → infra/iac/cmd/bws-sync (Tofu local-exec helper)
 
 infra/deploy/cmd/iedora/                  Stage 3 + Stage 4 orchestrator
   main.go, app.go, deploy.go, doctor.go
-  runtime.go, runtime_docker.go, runtime_cf.go     productRuntime interface + 2 impls
-  configurators.go                                 Stage 3 registry
-  products.go                                      Stage 4 registry
+  runtime.go, runtime_docker.go            productRuntime interface + the only impl
+  configurators.go                         Stage 3 registry
+  products.go                              Stage 4 registry
   ssh.go, paths.go, log.go
 
 infra/app-state/                         Stage 3 — each subdir is a self-contained configurator
@@ -1042,11 +1032,10 @@ infra/                                   Stage 2 — IaC for the shared estate
   iac/
     tofu/                                  central Tofu root
       versions.tf, variables.tf, hetzner.tf, main.tf, compose.tf,
-      tunnel.tf, sync.tf, destroy-hooks.tf, secrets.tf, github.tf, outputs.tf
+      tunnel.tf, sync.tf, destroy-hooks.tf, secrets.tf, outputs.tf
       templates/{cloud-init.yml,iedora.service}
     cmd/
       bws-sync/                            Batched BWS write/delete (Tofu local-exec entry point)
-      bws-upsert/                          Single-key variant (ad-hoc)
       infra-pg-backup/                     Postgres-backup container (Go + Dockerfile, arm64)
       state-bucket-bootstrap/              Stage -1 — R2 bucket + token bootstrap
     postgres/                              init.sql — CREATE DATABASE menu / core on first boot

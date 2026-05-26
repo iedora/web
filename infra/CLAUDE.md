@@ -28,8 +28,6 @@ infra/
       bws-sync/              Batched BWS write/delete (Tofu local-exec entry
                              point). One sequential pass — sidesteps BWS's
                              ~1/s mutating-call rate limit.
-      bws-upsert/            Single-key variant (BWS_DELETE=1 supported).
-                             Ad-hoc operator scripts; Tofu uses bws-sync.
       infra-pg-backup/         Backup container: daily encrypted pg_dumpall → R2.
                              arm64-only image (CAX boxes are arm64); Go binary
                              + Dockerfile co-located.

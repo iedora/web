@@ -68,7 +68,6 @@ iedora/                                  repo root
     iedora                                  Stage 3 + Stage 4 orchestrator (app apply, deploy <prod>, doctor)
     state-bucket-bootstrap                  Stage -1 — provisions R2 bucket + token for Tofu's s3 backend
     bws-sync                                Batched Tofu BWS write/delete (single sequential pass)
-    bws-upsert                              Single-key BWS upsert/delete (ad-hoc, operator scripts)
                                             (menu-db-migrations + openobserve-dashboards run
                                              in-process via bin/iedora app apply)
 
@@ -83,7 +82,6 @@ iedora/                                  repo root
       postgres/init.sql                      CREATE DATABASE menu / core (compose volume init)
       cmd/
         bws-sync/                            Go helper for terraform_data.bws_sync (batched)
-        bws-upsert/                          Single-key variant (ad-hoc, BWS_DELETE=1 supported)
         infra-pg-backup/                     Backup container (Go + Dockerfile, arm64 only — CAX SKUs)
         state-bucket-bootstrap/              Stage -1 — R2 bucket + token bootstrap (chicken/egg)
     app-state/                             Stage 3 — configurators (one per concern)
@@ -170,7 +168,6 @@ One workflow per workspace. Each is self-contained: own `paths:` trigger, own en
     design-system.yml            unit (jsdom)
     observability.yml            unit (no-op-in-tests + tenant attrs)
     codeql.yml                   SAST (push + PR + weekly)
-    scorecard.yml                OpenSSF posture grading (weekly)
     dependency-review.yml        gates PRs that add HIGH/CRITICAL CVE deps
 ```
 

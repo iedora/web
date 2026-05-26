@@ -21,7 +21,6 @@ on:
     paths:
       - 'infra/iac/**'
       - 'internal/**'
-      - 'bin/bws-upsert'
       - 'bin/state-bucket-bootstrap'
       - 'go.mod'
       - 'go.sum'
@@ -66,8 +65,9 @@ jobs:
           sudo install -m 0755 /tmp/bws/bws /usr/local/bin/bws
 
       - name: Install Go
-        # Needed for `go run`-style execution of `bin/bws-upsert` (called
-        # by Tofu's `terraform_data.bws_sync_*` local-exec provisioners).
+        # Needed for `go run`-style execution of `bin/bws-sync` (called
+        # by Tofu's `terraform_data.bws_sync` local-exec provisioner) and
+        # `bin/state-bucket-bootstrap` (Stage -1).
         uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v6
         with:
           go-version-file: go.mod
