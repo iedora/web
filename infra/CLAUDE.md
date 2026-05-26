@@ -24,9 +24,14 @@ infra/
 
     postgres/init.sql        CREATE DATABASE menu / zitadel on first boot.
     cmd/
-      bws-upsert/            Tofu local-exec helper (idempotent BWS upsert).
+      bws-sync/              Batched BWS write/delete (Tofu local-exec entry
+                             point). One sequential pass — sidesteps BWS's
+                             ~1/s mutating-call rate limit.
+      bws-upsert/            Single-key variant (BWS_DELETE=1 supported).
+                             Ad-hoc operator scripts; Tofu uses bws-sync.
       infra-pg-backup/         Backup container: daily encrypted pg_dumpall → R2.
-                             Go binary + Dockerfile co-located.
+                             arm64-only image (CAX boxes are arm64); Go binary
+                             + Dockerfile co-located.
       state-bucket-bootstrap/ Stage -1 — provisions the R2 bucket + scoped CF
                              token the Tofu s3 backend needs (chicken/egg).
 
@@ -74,7 +79,7 @@ Operators always invoke via shims at the repo root (`bin/<name>`); those shims `
 ## Hard rules
 
 1. **Declarative-first.** Every cloud resource is Tofu-managed under `infra/iac/tofu/`. **Edit `.tf` files, never the upstream UI** — `tofu apply` silently clobbers UI edits.
-2. **Tofu-managed credentials write through to BWS** as `IAC_*` (`iac/tofu/secrets.tf::terraform_data.bws_sync_autogen` → `bin/bws-upsert`). Editing BWS directly is wasted work; the next apply restores Tofu's value.
+2. **Tofu-managed credentials write through to BWS** as `IAC_*` (`iac/tofu/secrets.tf::terraform_data.bws_sync` → `bin/bws-sync`). Editing BWS directly is wasted work; the next apply restores Tofu's value. On `tofu destroy`, the same wrapper deletes them.
 3. **Bootstrap order is BWS → Tofu → write-through.** Operator pastes the `IAC_BOOTSTRAP_*` keys first; everything else is Tofu-minted.
 4. **Follow [`docs/terraform-style.md`](../docs/terraform-style.md)** when editing any `.tf` — pessimistic `~>` pins, `for_each` over `count`, `validation` blocks.
 5. **State lives in Cloudflare R2** via the OpenTofu `s3` backend. Bootstrap helper at [`iac/cmd/state-bucket-bootstrap/`](iac/cmd/state-bucket-bootstrap/).

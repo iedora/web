@@ -36,7 +36,6 @@ locals {
   github_secrets = {
     BWS_ACCESS_TOKEN              = var.bws_access_token
     IAC_BOOTSTRAP_SSH_PRIVATE_KEY = var.infra_ssh_private_key
-    CLAUDE_CODE_OAUTH_TOKEN       = var.claude_code_oauth_token
   }
 }
 

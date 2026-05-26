@@ -126,12 +126,6 @@ variable "infra_ssh_private_key" {
   sensitive   = true
 }
 
-variable "claude_code_oauth_token" {
-  description = "Claude Code Action OAuth token (Pro/Max, minted by `claude setup-token`). TF_VAR_claude_code_oauth_token (set by bws run from IAC_BOOTSTRAP_CLAUDE_CODE_OAUTH_TOKEN)."
-  type        = string
-  sensitive   = true
-}
-
 variable "menu_public_hostname" {
   description = "Public FQDN for the menu app — used as MENU_PUBLIC_URL, the A record name, the Caddyfile site label, and the Zitadel OIDC redirect URI base."
   type        = string

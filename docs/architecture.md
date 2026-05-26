@@ -4,7 +4,7 @@ How code is organised across the products and shared packages, plus the menu-sid
 
 ## Shape
 
-**iedora** is a Bun-workspaces monorepo with one Next.js product (Menu), one Astro static site (House), and two shared packages (`@iedora/design-system`, `@iedora/observability`). Inside menu, code is organised as **vertical slices** on the outside and **light hexagonal** on the inside. Each business capability lives in `src/features/<slice>/` and owns everything it needs: a port (interface to the outside world), one or more adapters (production + tests), pure-ish use-cases that take the port as their first argument, an `actions.ts` shell for Next.js Server Actions, slice-owned UI, and a single `index.ts` barrel. `src/shared/` holds primitives with no domain knowledge. `src/app/` is the delivery layer. **Next.js is a delivery detail**, not the architecture.
+**iedora** is a Bun-workspaces monorepo with one Next.js product (Menu) serving two hostnames — `menu.iedora.com` (menu app) and `iedora.com` (house landing, at `src/app/house/`) via a Host-based rewrite in `src/proxy.ts` — plus two shared packages (`@iedora/design-system`, `@iedora/observability`). Inside menu, code is organised as **vertical slices** on the outside and **light hexagonal** on the inside. Each business capability lives in `src/features/<slice>/` and owns everything it needs: a port (interface to the outside world), one or more adapters (production + tests), pure-ish use-cases that take the port as their first argument, an `actions.ts` shell for Next.js Server Actions, slice-owned UI, and a single `index.ts` barrel. `src/shared/` holds primitives with no domain knowledge. `src/app/` is the delivery layer. **Next.js is a delivery detail**, not the architecture.
 
 ## Monorepo
 
@@ -16,7 +16,7 @@ iedora/
     iedora-observability/         @iedora/observability    (OTel wiring — traces + metrics)
   products/
     menu/                         menu.iedora.com          (SaaS menu builder)
-    house/                        iedora.com               (Astro static landing)
+                                  iedora.com               (brand landing at src/app/house/)
   bun.lock                        single workspace lockfile
 ```
 

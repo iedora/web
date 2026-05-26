@@ -1,32 +1,49 @@
 # iedora
 
-Bun-workspaces monorepo for two products and three shared packages.
+Bun-workspaces monorepo with one Next.js product serving two hostnames,
+plus three shared packages.
 
-- **Menu** (`menu.iedora.com` — `products/menu/`) — Next.js 16 SaaS for restaurants to build digital menus by drag-and-drop. Public menu at `/r/<slug>`; admin dashboard with reorderable categories, items, image uploads, themes, multi-language overrides, plans, analytics.
-- **House** (`iedora.com` — `products/house/`) — Astro static umbrella landing. No DB, no auth.
+- **Menu** (`menu.iedora.com`) — SaaS for restaurants to build digital
+  menus by drag-and-drop. Public menu at `/r/<slug>`; admin dashboard
+  with reorderable categories, items, image uploads, themes,
+  multi-language overrides, plans, analytics.
+- **House** (`iedora.com`) — brand landing page. Lives in the same
+  Next.js app at `src/app/house/`; `src/proxy.ts` inspects Host and
+  rewrites apex requests internally. One image, one container, two
+  hostnames.
 
-Identity is Zitadel (`auth.iedora.com`, self-hosted). Menu is a thin OIDC client — see `products/menu/src/features/auth/`.
+Identity is Zitadel (`auth.iedora.com`, self-hosted). Menu is a thin
+OIDC client — see `products/menu/src/features/auth/`.
 
 ## Run it locally
 
 ```bash
-bun install                            # at the repo root
-task local                               # boots postgres, localstack,
-                                       # zitadel, openobserve, house
-                                       # (menu runs via bun run dev)
-cd products/menu && bun run dev        # menu HMR (reads .env + .env.local)
+bun install                                  # at the repo root
+go run ./dev/cmd/local-stack                 # boots postgres, localstack,
+                                             # zitadel, openobserve
+cd products/menu && bun run dev              # menu HMR (reads .env + .env.local)
 ```
-
-`task --list-all` lists every recipe.
 
 ## Ship it
 
 ```bash
-task up        # full pipeline: infra → app state → deploy products
+# Stage 2 — IaC (Hetzner + Cloudflare + the compose stack)
+bin/iedora-env tofu -chdir=infra/iac/tofu apply
+
+# Stage 3 — app-state configurators (Zitadel, migrations, dashboards)
+bin/iedora-env bin/iedora app apply
+
+# Stage 4 — deploy a product
+bin/iedora-env bin/iedora deploy menu
 ```
 
-See [`docs/deploy.md`](docs/deploy.md) for the architecture, the 4-stage
-pipeline, and every operational runbook.
+`bin/iedora-env` is the one-line env-hydration helper — it pulls every
+BWS secret + exports the `TF_VAR_*` / `AWS_*` / `CLOUDFLARE_ACCOUNT_ID`
+aliases everything downstream expects. Same pattern as `op run --` or
+`doppler run --`. Required in your shell: `BWS_ACCESS_TOKEN`.
+
+See [`docs/deploy.md`](docs/deploy.md) for the architecture, the
+4-stage pipeline, and every operational runbook.
 
 ## Docs
 

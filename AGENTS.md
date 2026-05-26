@@ -6,9 +6,11 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 # Iedora monorepo — project conventions
 
-> Bun-workspaces monorepo. One Next.js product (`products/menu/`), one
-> Astro static site (`products/house/`), and two workspace packages
-> (`packages/design-system/`, `packages/iedora-observability/`). `bun install` runs ONCE at the repo
+> Bun-workspaces monorepo. One Next.js product (`products/menu/`)
+> serving both `menu.iedora.com` (menu app) and `iedora.com` (house
+> landing) through a Host-based rewrite in `src/proxy.ts`, plus two
+> workspace packages (`packages/design-system/`,
+> `packages/iedora-observability/`). `bun install` runs ONCE at the repo
 > root and resolves every workspace.
 >
 > Paths starting with `src/...` are relative to the product directory
@@ -17,7 +19,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 ## What this is
 
 - **Menu** (menu.iedora.com — `products/menu/`) — SaaS multi-tenant restaurant menu builder. Each tenant is an organization that owns one or more `restaurant` rows. Admins build menus via drag-and-drop; the public menu renders from the same data.
-- **House** (iedora.com — `products/house/`) — umbrella brand landing page. Astro static output, deployed to Cloudflare Workers Static Assets. No DB, no auth.
+- **House** (iedora.com — `products/menu/src/app/house/`) — brand landing page. Lives inside the menu Next.js app; `src/proxy.ts` inspects Host and rewrites apex requests under `/house/*` internally. One container, one image, two hostnames.
 
 **Identity is Zitadel.** Self-hosted at `auth.iedora.com` (single VPS, Tofu-managed). Menu is a thin OIDC client. The `menu_session_v2` cookie is a JWE carrying only `{sid, sub, exp}`; the authoritative state is a server-side `menu.session` row (roles, permissions, permissionsVersion) so Zitadel Actions v2 webhooks can rewrite scopes live without waiting for cookie TTL. See `products/menu/src/features/auth/README.md` for the revocation model. The identity slice calls Zitadel's management API for memberships + org provisioning via a PAT minted by `bin/zitadel-apply` (Stage 3) and written to BWS. See `products/menu/src/features/auth/` and `products/menu/src/features/identity/`.
 
@@ -42,8 +44,8 @@ Cross-product rules live in [`docs/agents/cross-product-rules.md`](docs/agents/c
 
 Each product's CLAUDE.md is auto-loaded under its subtree.
 
-- **[products/menu/CLAUDE.md](products/menu/CLAUDE.md)** — 16 rules: tenant scoping, schema source-of-truth, auth in DAL (not layouts), `proxy.ts` (not middleware), money in cents, dnd-kit position columns, registry pattern for templates/languages/plans, public-menu cache by tag, beacon view tracking, vertical slice boundaries, co-located E2E + testing surface per slice, **redirects via `publicUrl()`**.
-- **products/house/** — no house-specific hard rules; cross-product rules above suffice.
+- **[products/menu/CLAUDE.md](products/menu/CLAUDE.md)** — 16 rules: tenant scoping, schema source-of-truth, auth in DAL (not layouts), `proxy.ts` (not middleware — and now also handles Host-based rewrite for iedora.com → `/house/*`), money in cents, dnd-kit position columns, registry pattern for templates/languages/plans, public-menu cache by tag, beacon view tracking, vertical slice boundaries, co-located E2E + testing surface per slice, **redirects via `publicUrl()`**.
+- **House** (iedora.com) lives at `products/menu/src/app/house/` — no separate CLAUDE.md; same cross-product rules apply.
 
 ## Slice pattern
 
@@ -56,16 +58,18 @@ The slice contract (file layout, cross-slice rules, the Next.js boundary, how to
 ```
 iedora/                                  repo root
   bun.lock                               single workspace lockfile
-  package.json                           workspaces: packages/* + products/{menu,house}
+  package.json                           workspaces: packages/* + products/menu
   go.mod, go.sum                         single Go module rooted at the repo root
   .github/                               composite setup action + one workflow per pipeline stage
   .mcp.json                              shadcn, postgres, bun, next-devtools, playwright MCP servers
   docs/                                  brand-level docs
 
-  bin/                                   Shim entry points — `go run` wrappers operators invoke
+  bin/                                   Shim entry points — `go run` / `bash` wrappers operators invoke
+    iedora-env                              Env-hydration helper (BWS → TF_VAR_*/AWS_*/CLOUDFLARE_ACCOUNT_ID)
     iedora                                  Stage 3 + Stage 4 orchestrator (app apply, deploy <prod>, doctor)
     state-bucket-bootstrap                  Stage -1 — provisions R2 bucket + token for Tofu's s3 backend
-    bws-upsert                              Tofu local-exec helper for bws_sync_autogen
+    bws-sync                                Batched Tofu BWS write/delete (single sequential pass)
+    bws-upsert                              Single-key BWS upsert/delete (ad-hoc, operator scripts)
     zitadel-apply                           Stage 3 — Zitadel app config (org / project / OIDC / PAT)
     menu-db-migrations                      Stage 3 — drizzle-kit migrate on menu's postgres DB
     openobserve-dashboards                  Stage 3 — push dashboard JSONs via SSH-L tunnel
@@ -80,8 +84,9 @@ iedora/                                  repo root
                                              Menu container = Stage 4, NOT here.
       postgres/init.sql                      CREATE DATABASE menu / zitadel (compose volume init)
       cmd/
-        bws-upsert/                          Go helper for terraform_data.bws_sync_autogen
-        infra-pg-backup/                       Backup container (Go + Dockerfile co-located)
+        bws-sync/                            Go helper for terraform_data.bws_sync (batched)
+        bws-upsert/                          Single-key variant (ad-hoc, BWS_DELETE=1 supported)
+        infra-pg-backup/                     Backup container (Go + Dockerfile, arm64 only — CAX SKUs)
         state-bucket-bootstrap/              Stage -1 — R2 bucket + token bootstrap (chicken/egg)
     app-state/                             Stage 3 — configurators (one per concern)
       cmd/
@@ -111,11 +116,12 @@ iedora/                                  repo root
     iedora-observability/                one-line OTel wiring (traces + metrics)
 
   products/
-    menu/                                Next.js 16 — menu.iedora.com
-    house/                               Astro — iedora.com
+    menu/                                Next.js 16 — serves BOTH menu.iedora.com and iedora.com
+      src/proxy.ts                         Host-based rewrite: iedora.com/* → /house/*
+      src/app/house/                       Brand landing for iedora.com
 ```
 
-Menu's `infra/` owns a Dockerfile (built by CI into the GHCR image) plus a tiny Tofu root for the R2 assets bucket and `assets.iedora.com`. The menu container itself is NOT in the compose stack rendered by `infra/iac/tofu/compose.tf` — only the shared services (postgres, zitadel, caddy, openobserve, backups) live there. Menu's lifecycle (pull/run on every deploy) is owned by Stage 4 via [`infra/deploy/cmd/iedora/runtime_docker.go`](infra/deploy/cmd/iedora/runtime_docker.go); Caddy routes to it by network alias so the container can come and go between deploys without touching Tofu.
+Menu's container is NOT in the compose stack rendered by `infra/iac/tofu/compose.tf` — only the shared services (postgres, zitadel, caddy, openobserve, backups) live there. Menu's lifecycle (pull/run on every deploy) is owned by Stage 4 via [`infra/deploy/cmd/iedora/runtime_docker.go`](infra/deploy/cmd/iedora/runtime_docker.go); Caddy routes both `menu.iedora.com` and `iedora.com` (apex + www) to the same network alias so one container serves both sites.
 
 ## Commands
 
@@ -147,7 +153,7 @@ Stage 4: Deploy            bin/iedora-env bin/iedora deploy <product>
 - **Preflight** — `bin/iedora-env bin/iedora doctor` (PATH, BWS auth, bootstrap secrets).
 - Day-2 ops (logs / psql / backup / restore / rotate / wipe / zitadel-rebootstrap) are raw SSH against the Hetzner box.
 
-Menu image builds happen in CI (`.github/workflows/menu.yml`) on every push to main: buildx for `linux/amd64`, pushed to `ghcr.io/$GHCR_USER/menu:<sha>`. The menu workflow then dispatches `deploy.yml` with `product: menu` + `image_sha: <sha>`; the `dockerOnHetzner` runtime SSHs to the box, pulls the image, runs migrations, and replaces the container. Rollback: `gh workflow run deploy.yml --field product=menu --field image_sha=<older-sha>`.
+Menu image builds happen in CI (`.github/workflows/menu.yml`) on every push to main: buildx (multi-arch — `linux/amd64` for CI, `linux/arm64` for the CAX Hetzner box), pushed to `ghcr.io/$GHCR_USER/menu:<sha>`. The menu workflow then dispatches `deploy.yml` with `product: menu` + `image_sha: <sha>`; the `dockerOnHetzner` runtime SSHs to the box, pulls the image, runs migrations, and replaces the container with a zero-downtime hot-swap. Since the menu container serves BOTH `menu.iedora.com` and `iedora.com` (host-based rewrite in `proxy.ts`), the same deploy ships both. Rollback: `gh workflow run deploy.yml --field product=menu --field image_sha=<older-sha>`.
 
 ## CI
 
@@ -158,7 +164,7 @@ One workflow per workspace. Each is self-contained: own `paths:` trigger, own en
   actions/setup/action.yml      composite: Bun + bun install --frozen-lockfile
   workflows/
     menu.yml                     Stage 1+4: build + push menu image → dispatch deploy.yml
-    house.yml                    Stage 1+4: dispatch deploy.yml for house (Astro → CF Workers)
+                                 (ships BOTH menu.iedora.com AND iedora.com — one image)
     deploy.yml                   Stage 4 reusable workflow_call (product, image_sha)
     app-state.yml                Stage 3: bin/iedora-env bin/iedora app apply (configurator registry)
     infra-deploy.yml             Stage 2: bin/iedora-env tofu -chdir=infra/iac/tofu apply
