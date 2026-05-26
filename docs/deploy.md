@@ -754,23 +754,18 @@ First-time setup on a fresh laptop + empty cloud:
    gh secret set BWS_ACCESS_TOKEN --repo eduvhc/iedora
    ```
 
-   That's the only secret CI needs. Everything else (SSH private key,
-   CF/Hetzner/GHCR tokens, …) comes from BWS — `bin/iedora-env`
-   hydrates them inside each job from `BWS_ACCESS_TOKEN`.
+   That's the only thing CI needs out-of-band. Every other credential
+   (SSH private key, CF/Hetzner/GHCR tokens, project IDs, account IDs,
+   hostnames) is either in BWS or auto-derived by `bin/iedora-env`
+   from the CF/BWS APIs. No `gh variable set` either — the previous
+   `BWS_PROJECT_ID` / `CLOUDFLARE_ACCOUNT_ID` / `MENU_PUBLIC_HOSTNAME`
+   GH variables were Tofu write-throughs that vanished on every
+   destroy (same chicken-egg). `bin/iedora-env` auto-discovers them:
 
-   You also need the `BWS_PROJECT_ID` and `CLOUDFLARE_ACCOUNT_ID` GH
-   Actions VARIABLES (not secrets) — these ARE Tofu-managed (via
-   `github_actions_variable.vars` in `github.tf`), but Tofu can't
-   write them until the first apply, so set them once:
-
-   ```bash
-   gh variable set BWS_PROJECT_ID --repo eduvhc/iedora --body "$PROJECT_ID"
-   gh variable set CLOUDFLARE_ACCOUNT_ID --repo eduvhc/iedora --body "<32-char-hex>"
-   gh variable set MENU_PUBLIC_HOSTNAME --repo eduvhc/iedora --body "menu.iedora.com"
-   ```
-
-   After the first successful apply, these get reconciled by Tofu and
-   you never touch them again.
+   - `BWS_PROJECT_ID`         → first project from `bws project list`.
+   - `CLOUDFLARE_ACCOUNT_ID`  → CF `/accounts` API.
+   - `MENU_PUBLIC_HOSTNAME`   → `variables.tf` default
+                                 (`menu.iedora.com`).
 
 6. **Set the Claude Code Action token** (optional — only if using the
    `claude.yml` workflow). Operator-managed, not in BWS:
