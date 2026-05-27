@@ -40,15 +40,20 @@ COPY apps/web/package.json apps/web/package.json
 RUN --mount=type=cache,target=/root/.bun/install/cache,sharing=locked \
     bun install --frozen-lockfile --ignore-scripts
 RUN mkdir -p /out/core/scripts /out/core/drizzle \
-             /out/menu/scripts /out/menu/drizzle && \
+             /out/menu/scripts /out/menu/drizzle \
+             /out/imopush/scripts /out/imopush/drizzle && \
     bun build packages/auth/scripts/migrate.mjs \
         --target=node --format=esm \
         --outfile=/out/core/scripts/migrate.mjs && \
     bun build products/menu/scripts/migrate.mjs \
         --target=node --format=esm \
         --outfile=/out/menu/scripts/migrate.mjs && \
+    bun build products/imopush/scripts/migrate.mjs \
+        --target=node --format=esm \
+        --outfile=/out/imopush/scripts/migrate.mjs && \
     cp -r packages/auth/drizzle/. /out/core/drizzle/ && \
-    cp -r products/menu/drizzle/. /out/menu/drizzle/
+    cp -r products/menu/drizzle/. /out/menu/drizzle/ && \
+    cp -r products/imopush/drizzle/. /out/imopush/drizzle/
 
 # ── Stage 2: distroless runtime ───────────────────────────────────────────────
 # gcr.io/distroless/nodejs24-debian12 — Google's distroless image.
@@ -56,14 +61,20 @@ RUN mkdir -p /out/core/scripts /out/core/drizzle \
 # shell, no apt, no busybox. Runs as nonroot uid 65532 by default.
 #
 # Layout matches Stage-3 configurators' invocation:
-#   /migrate/core/scripts/migrate.mjs   (CORE_DATABASE_URL env)
-#   /migrate/core/drizzle/              (auth's sql + meta/_journal.json)
-#   /migrate/menu/scripts/migrate.mjs   (MENU_DATABASE_URL env)
-#   /migrate/menu/drizzle/              (menu's sql + meta/_journal.json)
+#   /migrate/core/scripts/migrate.mjs     (CORE_DATABASE_URL env)
+#   /migrate/core/drizzle/                (auth's sql + meta/_journal.json)
+#   /migrate/menu/scripts/migrate.mjs     (MENU_DATABASE_URL env)
+#   /migrate/menu/drizzle/                (menu's sql + meta/_journal.json)
+#   /migrate/imopush/scripts/migrate.mjs  (IMOPUSH_DATABASE_URL env)
+#   /migrate/imopush/drizzle/             (imopush's sql + meta/_journal.json)
 #
-# Stage 3 invokes:
+# Stage 3 invokes (one docker run per product):
 #   docker run --rm -e CORE_DATABASE_URL=... <image> \
 #     /migrate/core/scripts/migrate.mjs
+#
+# `iedora local migrate` invokes the same image with the same layout
+# against the dev infra-postgres container (joined to the `iedora`
+# docker network). See infra/deploy/cmd/iedora/local_migrate.go.
 FROM gcr.io/distroless/nodejs24-debian12:nonroot AS runtime
 WORKDIR /migrate
 COPY --from=bundler --chown=nonroot:nonroot /out/ /migrate/

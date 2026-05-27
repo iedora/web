@@ -15,15 +15,17 @@ import (
 // step 3. Non-destructive — does NOT shell out, does NOT touch the
 // live runtime, so the Live-mode guard in main.go doesn't apply.
 
-func runLocal(_ context.Context, argv []string) error {
+func runLocal(ctx context.Context, argv []string) error {
 	if len(argv) == 0 {
-		return fmt.Errorf("local requires a subcommand: env")
+		return fmt.Errorf("local requires a subcommand: env | migrate")
 	}
 	switch argv[0] {
 	case "env":
 		return runLocalEnv(argv[1:])
+	case "migrate":
+		return runLocalMigrate(ctx, argv[1:])
 	default:
-		return fmt.Errorf("local: unknown subcommand %q (want env)", argv[0])
+		return fmt.Errorf("local: unknown subcommand %q (want env | migrate)", argv[0])
 	}
 }
 

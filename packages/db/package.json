@@ -16,7 +16,6 @@
     "test:watch": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@iedora/observability": "workspace:*",
     "drizzle-orm": "catalog:",
     "postgres": "^3.4.9",
     "server-only": "^0.0.1"

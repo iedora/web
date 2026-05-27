@@ -21,60 +21,25 @@
  *      lock instead of corrupting state.
  *   4. Runs drizzle's programmatic `migrate()` with the supplied folder.
  *   5. Releases the lock + closes the connection.
- *   6. Flushes OTel traces/metrics so short-lived script processes don't
- *      lose telemetry on exit (the BatchSpanProcessor's default 5s cycle
- *      is longer than a typical migration run).
  *
  * Throws (rejects) on any failure with the original error preserved —
  * callers should let the rejection propagate so the process exits 1
  * with a useful stack trace. Never swallow.
  *
- * Observability surface (emitted only when OTEL_EXPORTER_OTLP_ENDPOINT
- * is set; otherwise the calls are global no-ops):
- *
- *   Spans (scope: `iedora`):
- *     migrate.run              — root span, attrs db.name + db.schema + lock.name
- *       migrate.ensure_db
- *       migrate.ensure_schema
- *       migrate.acquire_lock
- *       migrate.apply          — the drizzle migrate() call itself
- *
- *   Metrics (scope: `iedora`):
- *     iedora.migrations_total{schema, outcome=ok|fail}  — Counter
- *     iedora.migration_duration_ms{schema}              — Histogram
+ * Observability: this helper deliberately stays @iedora/observability-free.
+ * @vercel/otel's `registerOTel` doesn't bundle cleanly into a standalone
+ * distroless-node script via `bun build` (TDZ violation on BasicTracer
+ * init, seen in dev). The migrate container's stdout is captured by the
+ * runtime collector (fluentbit → OpenObserve) so log lines already land
+ * in OO; the missing piece — spans + duration metrics around each
+ * `docker run` — belongs in the parent orchestrator (`iedora local
+ * migrate` / Stage 3 configurators) where the @opentelemetry/sdk-node
+ * setup is unconstrained by the migrate image's distroless runtime.
  */
 
 import { drizzle } from 'drizzle-orm/postgres-js'
 import { migrate } from 'drizzle-orm/postgres-js/migrator'
 import postgres from 'postgres'
-import {
-  registerIedoraOtel,
-  shutdownIedoraOtel,
-  tracer,
-  meter,
-} from '@iedora/observability'
-
-// ─── OTel registration ─────────────────────────────────────────────
-// `registerIedoraOtel` is idempotent — second call is a no-op. Safe to
-// invoke at module load so the spans we create below have a real
-// provider underneath them. Service name is migration-specific so the
-// signal is distinguishable from the app's own traces in OO.
-//
-// If OTEL_EXPORTER_OTLP_ENDPOINT isn't set (dev without a collector,
-// some CI paths), the call still runs but the package logs a one-time
-// warning and downstream emits become no-ops. The script keeps working.
-registerIedoraOtel({ serviceName: 'iedora-migrate' })
-
-// Instruments. Created at module init so the underlying provider sees
-// a consistent identity across runs in the same process (relevant for
-// migrate-test.mjs which spawns three migrate scripts in one process).
-const migrationsCounter = meter.createCounter('iedora.migrations_total', {
-  description: 'Total Drizzle migration runs, by schema and outcome.',
-})
-const migrationDuration = meter.createHistogram('iedora.migration_duration_ms', {
-  description: 'Wall-clock duration of a Drizzle migration run, by schema.',
-  unit: 'ms',
-})
 
 /**
  * crc32 of an ASCII string. Tiny implementation to avoid a runtime
@@ -127,25 +92,6 @@ async function ensureSchema(sql, schemaName, log) {
 }
 
 /**
- * Wrap an async operation in a span. Records exceptions onto the span
- * with the OTel-standard pattern so failures show up red in OO.
- */
-async function withSpan(name, attrs, fn) {
-  return tracer.startActiveSpan(name, { attributes: attrs }, async (span) => {
-    try {
-      const result = await fn()
-      return result
-    } catch (err) {
-      span.recordException(err)
-      span.setStatus({ code: 2, message: err?.message ?? String(err) }) // 2 = ERROR
-      throw err
-    } finally {
-      span.end()
-    }
-  })
-}
-
-/**
  * @param {object} opts
  * @param {string} opts.databaseUrl     - Postgres connection string. Must include a DB name in the path.
  * @param {string} opts.migrationsFolder - Absolute path to the drizzle/ folder.
@@ -169,98 +115,38 @@ export async function runMigrations({
 
   const lockKey = crc32(lockName)
   const log = (msg) => console.log(`[migrate:${label}] ${msg}`)
-  const dbName = dbNameFromUrl(databaseUrl)
   const startedAt = Date.now()
 
-  log(`target database "${dbName}"`)
+  log(`target database "${dbNameFromUrl(databaseUrl)}"`)
 
-  // One root span covers the whole run; the four phases hang off it as
-  // children so OO shows the relative cost of each step.
-  let outcome = 'ok'
+  await ensureDatabase(databaseUrl, log)
+
+  const sql = postgres(databaseUrl, { max: 1, onnotice: () => {} })
+  const db = drizzle(sql)
+
+  let locked = false
   try {
-    await tracer.startActiveSpan(
-      'migrate.run',
-      {
-        attributes: {
-          'db.name': dbName,
-          'db.schema': migrationsSchema,
-          'migrate.lock_name': lockName,
-        },
-      },
-      async (rootSpan) => {
-        try {
-          await withSpan('migrate.ensure_db', { 'db.name': dbName }, () =>
-            ensureDatabase(databaseUrl, log),
-          )
+    await ensureSchema(sql, migrationsSchema, log)
 
-          const sql = postgres(databaseUrl, { max: 1, onnotice: () => {} })
-          const db = drizzle(sql)
-          let locked = false
-          try {
-            await withSpan(
-              'migrate.ensure_schema',
-              { 'db.schema': migrationsSchema },
-              () => ensureSchema(sql, migrationsSchema, log),
-            )
+    await sql`SELECT pg_advisory_lock(${lockKey})`
+    locked = true
+    log(`acquired advisory lock (key=${lockKey}, name="${lockName}")`)
 
-            await withSpan(
-              'migrate.acquire_lock',
-              { 'migrate.lock_key': lockKey, 'migrate.lock_name': lockName },
-              async () => {
-                await sql`SELECT pg_advisory_lock(${lockKey})`
-                locked = true
-                log(`acquired advisory lock (key=${lockKey}, name="${lockName}")`)
-              },
-            )
-
-            await withSpan(
-              'migrate.apply',
-              {
-                'db.schema': migrationsSchema,
-                'migrate.folder': migrationsFolder,
-              },
-              async () => {
-                await migrate(db, {
-                  migrationsFolder,
-                  migrationsTable,
-                  migrationsSchema,
-                })
-                log('migrations applied')
-              },
-            )
-          } finally {
-            if (locked) {
-              try {
-                await sql`SELECT pg_advisory_unlock(${lockKey})`
-              } catch (err) {
-                log(`warning: unlock failed: ${err?.message ?? err}`)
-              }
-            }
-            await sql.end()
-          }
-        } catch (err) {
-          rootSpan.recordException(err)
-          rootSpan.setStatus({ code: 2, message: err?.message ?? String(err) })
-          throw err
-        } finally {
-          rootSpan.end()
-        }
-      },
-    )
-  } catch (err) {
-    outcome = 'fail'
-    throw err
-  } finally {
-    const elapsed = Date.now() - startedAt
-    migrationsCounter.add(1, {
-      schema: migrationsSchema,
-      outcome,
+    await migrate(db, {
+      migrationsFolder,
+      migrationsTable,
+      migrationsSchema,
     })
-    migrationDuration.record(elapsed, { schema: migrationsSchema })
-    // Flush + shutdown so the short-lived script process doesn't exit
-    // before BatchSpanProcessor / BatchLogRecordProcessor / metric
-    // reader push to the collector. Bounded at 5s so a stuck exporter
-    // can't keep the deploy job hostage.
-    await shutdownIedoraOtel({ timeoutMs: 5_000 })
+    const elapsed = Date.now() - startedAt
+    log(`migrations applied (${elapsed}ms)`)
+  } finally {
+    if (locked) {
+      try {
+        await sql`SELECT pg_advisory_unlock(${lockKey})`
+      } catch (err) {
+        log(`warning: unlock failed: ${err?.message ?? err}`)
+      }
+    }
+    await sql.end()
   }
 }

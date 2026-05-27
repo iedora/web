@@ -296,22 +296,15 @@ main() {
   compose_up "${infra[@]}"
 
   if has_profile postgres; then
-    step 2 "apply DB migrations (core + per-product)"
-    # All product migration scripts share the same @iedora/db/scripts/run-migrations
-    # helper — ensureDatabase + advisory lock + programmatic migrate(). Adding a
-    # new product is one line below + a new products/<p>/scripts/migrate.mjs.
-    # `bun` runtime (not `node`) — the migrate scripts import
-    # @iedora/observability whose package exports point at TS source.
-    # bun resolves TS workspace sources natively. Prod uses a separate
-    # path (infra/migrate/Dockerfile bundles each migrate.mjs into a
-    # single self-contained ESM file via `bun build`, which the
-    # distroless runtime then executes with node).
-    CORE_DATABASE_URL="postgresql://postgres:Password1!@localhost:5432/core" \
-      bun "${REPO_ROOT}/packages/auth/scripts/migrate.mjs"
-    MENU_DATABASE_URL="postgresql://postgres:Password1!@localhost:5432/menu" \
-      bun "${REPO_ROOT}/products/menu/scripts/migrate.mjs"
-    IMOPUSH_DATABASE_URL="postgresql://postgres:Password1!@localhost:5432/imopush" \
-      bun "${REPO_ROOT}/products/imopush/scripts/migrate.mjs"
+    step 2 "apply DB migrations (core + per-product, via migrate container)"
+    # Mirror prod Stage 3 exactly: build the dedicated migrate image
+    # (infra/migrate/Dockerfile) and `docker run --rm` it on the
+    # `iedora` network — same image, same entrypoint layout, same env
+    # shape as `iedora app apply` would on Hetzner. Source of truth for
+    # the product list lives in infra/deploy/cmd/iedora/local_migrate.go
+    # (localMigrators slice); adding a new product is one entry there
+    # + the usual products/<p>/scripts/migrate.mjs.
+    "${REPO_ROOT}/bin/iedora" local migrate --repo "${REPO_ROOT}"
   fi
 
   step 3 "compose apps/web/.env"
