@@ -6,7 +6,6 @@ import {
   Field,
   FieldLabel,
   FieldInput,
-  Checkbox,
   Button,
 } from '@iedora/design-system'
 import { requireIedoraAdmin } from '@iedora/product-core'
@@ -62,11 +61,13 @@ export default async function SessionsAdminPage({
             />
           </Field>
           <label className="flex items-center gap-2 text-sm sm:pb-2">
-            <Checkbox
+            <input
+              type="checkbox"
               name="impersonated"
               value="true"
               defaultChecked={impersonatedOnly}
               data-test-id="admin-sessions-filter-impersonated"
+              className="h-4 w-4 accent-[var(--cinnabar)]"
             />
             <span>{t('filterImpersonated')}</span>
           </label>

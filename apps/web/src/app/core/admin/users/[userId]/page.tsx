@@ -19,7 +19,12 @@ import { AdminPage } from '@iedora/product-core/shared/ui/admin-page'
 import { RoleSelect } from '@iedora/product-core/features/admin-users/ui/role-select'
 import { UserRowActions } from '@iedora/product-core/features/admin-users/ui/user-row-actions'
 import { SessionRow } from '@iedora/product-core/features/admin-sessions/ui/session-row'
-import { revokeAllUserSessionsAction } from '@iedora/product-core/features/admin-users/actions'
+import { revokeAllUserSessionsAction as revokeAllAction } from '@iedora/product-core/features/admin-users/actions'
+
+async function revokeAllUserSessionsForm(userId: string) {
+  'use server'
+  await revokeAllAction({ userId })
+}
 import { APP_URL } from '@iedora/brand'
 
 type Params = Promise<{ userId: string }>
@@ -146,7 +151,7 @@ export default async function UserAdminDetailPage({
             </div>
             {!isSelf && (
               <form
-                action={revokeAllUserSessionsAction.bind(null, { userId })}
+                action={revokeAllUserSessionsForm.bind(null, userId)}
                 className="mt-4 flex justify-end"
               >
                 <Button

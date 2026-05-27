@@ -115,6 +115,7 @@ export {
   BreadcrumbHere,
 } from "./components/breadcrumb";
 export { SectionHeader } from "./components/section-header";
+export { Pagination, type PaginationProps } from "./components/pagination";
 
 // Admin stats — snapshot panels (Stat, Histogram, StatsPanel) shared
 // across cross-tenant admin surfaces (QR codes, sessions, …).

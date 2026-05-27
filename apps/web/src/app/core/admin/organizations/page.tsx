@@ -6,6 +6,7 @@ import {
   Table,
   Button,
   Badge,
+  Pagination,
 } from '@iedora/design-system'
 import { requireIedoraAdmin } from '@iedora/product-core'
 import {
@@ -129,31 +130,16 @@ export default async function OrganizationsAdminPage({
             </Table>
           </div>
           {totalPages > 1 ? (
-            <nav
-              className="mt-4 flex items-center justify-between gap-3 text-xs"
-              aria-label="Pagination"
+            <Pagination
+              prevHref={pageHref(params, Math.max(1, page - 1))}
+              nextHref={pageHref(params, Math.min(totalPages, page + 1))}
+              prevLabel={t('paginationPrev')}
+              nextLabel={t('paginationNext')}
+              status={t('paginationOf', { page, totalPages })}
+              isFirst={page <= 1}
+              isLast={page >= totalPages}
               data-test-id="admin-orgs-pagination"
-            >
-              <Button
-                as="a"
-                href={pageHref(params, Math.max(1, page - 1))}
-                variant="ghost"
-                aria-disabled={page <= 1}
-              >
-                ← {t('paginationPrev')}
-              </Button>
-              <span className="text-[var(--ink-70)]">
-                {t('paginationOf', { page, totalPages })}
-              </span>
-              <Button
-                as="a"
-                href={pageHref(params, Math.min(totalPages, page + 1))}
-                variant="ghost"
-                aria-disabled={page >= totalPages}
-              >
-                {t('paginationNext')} →
-              </Button>
-            </nav>
+            />
           ) : null}
         </Card>
       )}

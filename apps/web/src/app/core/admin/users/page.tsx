@@ -5,7 +5,7 @@ import {
   EmptyState,
   Table,
   Badge,
-  Button,
+  Pagination,
 } from '@iedora/design-system'
 import { requireIedoraAdmin } from '@iedora/product-core'
 import {
@@ -166,14 +166,14 @@ export default async function UsersAdminPage({
 
           {totalPages > 1 ? (
             <Pagination
-              currentPage={page}
-              totalPages={totalPages}
-              params={params}
-              labels={{
-                prev: t('paginationPrev'),
-                next: t('paginationNext'),
-                of: t('paginationOf', { page, totalPages }),
-              }}
+              prevHref={pageHref(params, Math.max(1, page - 1))}
+              nextHref={pageHref(params, Math.min(totalPages, page + 1))}
+              prevLabel={t('paginationPrev')}
+              nextLabel={t('paginationNext')}
+              status={t('paginationOf', { page, totalPages })}
+              isFirst={page <= 1}
+              isLast={page >= totalPages}
+              data-test-id="admin-users-pagination"
             />
           ) : null}
         </Card>
@@ -182,51 +182,15 @@ export default async function UsersAdminPage({
   )
 }
 
-function Pagination({
-  currentPage,
-  totalPages,
-  params,
-  labels,
-}: {
-  currentPage: number
-  totalPages: number
-  params: Record<string, string | undefined>
-  labels: { prev: string; next: string; of: string }
-}) {
-  const buildHref = (page: number) => {
-    const sp = new URLSearchParams()
-    for (const [k, v] of Object.entries(params)) {
-      if (k !== 'page' && v) sp.set(k, v)
-    }
-    if (page > 1) sp.set('page', String(page))
-    const q = sp.toString()
-    return q ? `?${q}` : '?'
+function pageHref(
+  params: Record<string, string | undefined>,
+  page: number,
+): string {
+  const sp = new URLSearchParams()
+  for (const [k, v] of Object.entries(params)) {
+    if (k !== 'page' && v) sp.set(k, v)
   }
-  return (
-    <nav
-      className="mt-4 flex items-center justify-between gap-3 text-xs"
-      aria-label="Pagination"
-      data-test-id="admin-users-pagination"
-    >
-      <Button
-        as="a"
-        href={buildHref(Math.max(1, currentPage - 1))}
-        variant="ghost"
-        aria-disabled={currentPage <= 1}
-        data-test-id="admin-users-pagination-prev"
-      >
-        ← {labels.prev}
-      </Button>
-      <span className="text-[var(--ink-70)]">{labels.of}</span>
-      <Button
-        as="a"
-        href={buildHref(Math.min(totalPages, currentPage + 1))}
-        variant="ghost"
-        aria-disabled={currentPage >= totalPages}
-        data-test-id="admin-users-pagination-next"
-      >
-        {labels.next} →
-      </Button>
-    </nav>
-  )
+  if (page > 1) sp.set('page', String(page))
+  const q = sp.toString()
+  return q ? `?${q}` : '?'
 }
