@@ -1,16 +1,23 @@
 #!/usr/bin/env bash
-# Pre-commit hook — runs actionlint on changed workflow files.
+# Pre-commit hook — mirrors the [security] Workflow policy CI job locally.
+# Runs actionlint on ALL workflow files + shellcheck on ALL CI scripts.
 # Installed by `bun install` (via root postinstall script).
-# Skips when actionlint is not found or when running in CI.
 set -euo pipefail
 
 [ -n "${CI:-}" ] && exit 0
 
+# ── Step 1: ensure actionlint is on PATH (download if missing, like CI) ──
 if ! command -v actionlint &>/dev/null; then
-  echo "pre-commit: actionlint not found — skipping (install: go install github.com/rhysd/actionlint/cmd/actionlint@latest)"
-  exit 0
+  if [ -f ./actionlint ]; then
+    PATH="$PWD:$PATH"
+  else
+    echo "pre-commit: downloading actionlint..."
+    bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash) >/dev/null 2>&1
+    PATH="$PWD:$PATH"
+  fi
 fi
 
+# ── Step 2: only run when CI files changed ──
 changed=$(git diff --cached --name-only --diff-filter=ACM | grep -E '^\.github/(workflows|actions|scripts)/' || true)
 if [ -z "$changed" ]; then
   exit 0
@@ -19,26 +26,23 @@ fi
 echo "pre-commit: linting CI files..."
 echo "$changed" | while read -r f; do echo "  $f"; done
 
-# actionlint checks workflow YAML files directly.
-# .sh scripts under .github/scripts/ are checked with shellcheck via actionlint
-# only when embedded in workflow run: blocks. Standalone .sh files need separate
-# shellcheck — but actionlint >=1.7 can't lint standalone .sh files.
-echo "$changed" | grep '\.github/workflows/.*\.yml$' | xargs -r actionlint -color || {
+# ── Step 3: actionlint ALL workflow files (same as CI) ──
+echo ""
+if ! actionlint -color .github/workflows/*.yml; then
   echo ""
   echo "pre-commit: actionlint failed. Fix the issues above and try again."
-  echo "  Run manually: actionlint -color .github/workflows/*.yml"
+  echo "  Run manually: bun run ci:check"
   exit 1
-}
+fi
 
-# Shellcheck standalone .sh scripts (not embedded in YAML).
-script_changes=$(echo "$changed" | grep '\.github/scripts/.*\.sh$' || true)
-if [ -n "$script_changes" ] && command -v shellcheck &>/dev/null; then
-  echo "pre-commit: shellcheck scripts..."
-  echo "$script_changes" | xargs -r shellcheck --shell=bash || {
+# ── Step 4: shellcheck ALL CI scripts (if available) ──
+if command -v shellcheck &>/dev/null && ls .github/scripts/*.sh &>/dev/null; then
+  if ! shellcheck --shell=bash .github/scripts/*.sh; then
     echo ""
     echo "pre-commit: shellcheck failed. Fix the issues above and try again."
     exit 1
-  }
+  fi
 fi
 
+echo ""
 echo "pre-commit: OK"

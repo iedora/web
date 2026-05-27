@@ -11,8 +11,8 @@
     "typecheck": "bun run --workspaces typecheck",
     "lint": "bun run --workspaces lint",
     "test": "bun run --workspaces test",
-    "ci:check": "actionlint -color .github/workflows/*.yml",
-    "postinstall": "[ -n \"${CI:-}\" ] && exit 0; cp -f scripts/git-hooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit && echo 'git hooks installed' || true"
+    "ci:check": "actionlint -color .github/workflows/*.yml && (command -v shellcheck >/dev/null && shellcheck --shell=bash .github/scripts/*.sh || true)",
+    "postinstall": "[ -n \"${CI:-}\" ] && exit 0; mkdir -p .git/hooks && cp scripts/git-hooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit && echo '✓ git hooks installed (actionlint + shellcheck)' || true"
   },
   "catalog": {
     "drizzle-orm": "^0.45.2",
