@@ -7,8 +7,13 @@ node_modules
 
 # Every env variant — keep the broad glob so `.env.production`,
 # `.env.preview`, etc. never leak. `infra/.env.example` is already
-# covered by the `infra/` rule below.
-.env*
+# covered by the `infra/` rule below. The `**/` prefix is load-bearing:
+# without it the pattern only matched root-level `.env*` and the
+# committed `apps/web/.env` (localhost values) was reaching the prod
+# image, where Next inlined `NEXT_PUBLIC_CORE_URL=http://localhost:3000`
+# into the browser bundle. With the .env excluded, brand's fallback
+# `https://core.${BRAND_DOMAIN}` is the single source of truth for prod.
+**/.env*
 
 # Infra & docs não vão para a imagem da app — EXCEPT the
 # infra-pg-backup Go source which IS the build context for that

@@ -213,7 +213,6 @@ jobs:
           sbom: true
           build-args: |
             DEPLOYMENT_VERSION=${{ github.sha }}
-            NEXT_PUBLIC_CORE_URL=https://core.iedora.com
           cache-from: type=gha,scope=web-arm64
           cache-to: type=gha,mode=max,scope=web-arm64
 

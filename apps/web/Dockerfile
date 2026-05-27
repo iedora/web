@@ -93,15 +93,6 @@ ENV NEXT_SERVER_ACTIONS_ENCRYPTION_KEY=${NEXT_SERVER_ACTIONS_ENCRYPTION_KEY}
 ARG DEPLOYMENT_VERSION
 ENV DEPLOYMENT_VERSION=${DEPLOYMENT_VERSION}
 
-# Client-side core origin — Next inlines `NEXT_PUBLIC_*` into the browser
-# bundle at build time, so this MUST be set during `next build`, not at
-# container runtime. Without this override Next picks the value up from
-# the committed `apps/web/.env` (localhost) and bakes it into prod.
-# Default points at the canonical production origin; CI passes the same
-# value explicitly for clarity.
-ARG NEXT_PUBLIC_CORE_URL=https://core.iedora.com
-ENV NEXT_PUBLIC_CORE_URL=${NEXT_PUBLIC_CORE_URL}
-
 RUN --mount=type=cache,target=/workspace/apps/web/.next/cache,sharing=locked \
     node --run build
 
