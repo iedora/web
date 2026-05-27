@@ -76,6 +76,48 @@ only when reached from a product's entrypoint". Valid argument, but
 the same logic doesn't apply when ZERO JS/TS files change — there's
 nothing new to taint-flow into.
 
+**Required before landing the optimization — security coverage audit:**
+Confirm that EVERY security-relevant path is still scanned by SOMETHING
+on every change to it. Coverage matrix to verify:
+
+| Path | What scans it today | Still scanned after CI-5? |
+|---|---|---|
+| `apps/web/**`, `products/**`, `packages/**` | CodeQL (push+PR) + Trivy in web.yml | YES (paths allowlist matches) |
+| `bun.lock` | dependency-review (PR) + Trivy (every web.yml run) | YES (allowlisted) |
+| `infra/**` Go code | nothing today (CodeQL JS/TS-only) | NO CHANGE — gap exists, not new |
+| Tofu HCL `infra/iac/tofu/**` | nothing | NO CHANGE — out of CodeQL scope |
+| `.github/workflows/**` | nothing (actionlint local, not CI) | NO CHANGE — separate issue (SEC-2 below) |
+
+The audit IS the gate — don't land CI-5 without confirming each row
+above is acceptable. Add a SEC-1 ticket for Go code SAST coverage if
+desired (CodeQL `go` analyzer or staticcheck).
+
+### SEC-1: Go code has no SAST coverage
+**size:** M · **risk:** low
+
+Stage-3/4 orchestrator (`infra/deploy/cmd/iedora/`, `infra/iac/cmd/`,
+`internal/`) is ~3k LOC of Go that handles SSH, BWS tokens, postgres
+URLs, and `docker run`-shaped command-building. CodeQL today runs
+only the `javascript-typescript` analyzer; no Go scan.
+
+If/when this matters: add `go` to the codeql.yml language matrix and
+`security-extended` queries cover Go too. Bigger CI cost (~10 extra
+min/run); justified if the Go surface grows or starts handling
+untrusted input.
+
+### SEC-2: GitHub Actions workflows have no policy scan
+**size:** S · **risk:** low
+
+`actionlint` runs LOCALLY (used during this session) but isn't in CI.
+Workflows can drift into anti-patterns: missing `permissions:`
+declarations, untrusted `pull_request_target` inputs interpolated
+into shell, deprecated runners, supply-chain risks from unpinned
+actions (now using tag refs — see tech-debt note on CI elsewhere).
+
+Fix: add a workflow that runs `actionlint` + optionally
+`pinact`/`zizmor` on every PR + push that touches
+`.github/workflows/**`. ~5 min CI cost, blocks bad practice early.
+
 **(b) Per-product / per-package CIs include `bun.lock` + `package.json`
 in their paths.** Any dep update (e.g. bumping a dev dep at the
 workspace root) triggers EVERY product + package CI to re-run, even
