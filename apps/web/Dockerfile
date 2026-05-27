@@ -93,6 +93,29 @@ COPY --from=builder --chown=nextjs:nextjs /workspace/apps/web/public ./apps/web/
 # owned by the runtime user so the very first request doesn't EPERM.
 RUN mkdir -p ./apps/web/.next/cache && chown nextjs:nextjs ./apps/web/.next/cache
 
+# Stage-3 configurators (`bin/iedora app apply`) `docker run --rm` this
+# image and execute migrate.mjs scripts from packages/auth/scripts/ and
+# products/menu/scripts/. Node ESM resolution from those locations
+# walks up looking for `node_modules/drizzle-orm` etc. — but Next's
+# outputFileTracingIncludes laid down `drizzle-orm` + `postgres` at
+# `/app/apps/web/node_modules/`, which the migrate scripts never reach.
+#
+# Symlink the two packages into the migrate-script locations so
+# Node's resolution finds them via the realpath of `apps/web/`.
+# Drizzle's own internal `import 'postgres'` follows the realpath
+# (Node default is --preserve-symlinks=false) and finds it next to
+# drizzle in apps/web/node_modules.
+RUN mkdir -p ./packages/auth/node_modules ./products/menu/node_modules && \
+    ln -s /app/apps/web/node_modules/drizzle-orm ./packages/auth/node_modules/drizzle-orm && \
+    ln -s /app/apps/web/node_modules/postgres   ./packages/auth/node_modules/postgres && \
+    ln -s /app/apps/web/node_modules/drizzle-orm ./products/menu/node_modules/drizzle-orm && \
+    ln -s /app/apps/web/node_modules/postgres   ./products/menu/node_modules/postgres && \
+    chown -h nextjs:nextjs \
+        ./packages/auth/node_modules/drizzle-orm \
+        ./packages/auth/node_modules/postgres \
+        ./products/menu/node_modules/drizzle-orm \
+        ./products/menu/node_modules/postgres
+
 USER nextjs
 WORKDIR /app/apps/web
 EXPOSE 3000
