@@ -1,16 +1,29 @@
-# Stage 2 (IaC) — plain `tofu apply` against `infra/iac/tofu/`.
+# Stage 2 (IaC) — provisions / reconciles the SHARED infra estate.
+#
+# Two jobs in series:
+#
+#   1. build_pg_backup_image — builds + pushes
+#      `ghcr.io/eduvhc/infra-pg-backup:18` (one of the SHARED compose
+#      services). The Hetzner box's iedora.service refuses to start
+#      without this image in GHCR; folding the build into this
+#      workflow eliminates the Day-1 ordering footgun (a separate
+#      [infra-pg-backup] workflow that had to be dispatched first).
+#
+#   2. apply — `tofu apply` against `infra/iac/tofu/`. Provisions
+#      Hetzner VPS, CF R2 + DNS + Tunnel, the rendered docker-compose
+#      stack on the box.
 #
 # What this workflow OWNS:
 #   - Hetzner VPS, firewall, SSH key
 #   - Cloudflare R2 buckets, DNS records, API tokens
 #   - GitHub Actions config (via the github provider)
-#   - The rendered docker-compose stack on the box (delivered via cloud-
-#     init on first boot, then `terraform_data.iedora_sync` on day-2)
+#   - The rendered docker-compose stack on the box
+#   - `ghcr.io/eduvhc/infra-pg-backup:18` image
 #
 # What this workflow does NOT own:
-#   - Zitadel app config (org, project, OIDC app, action targets…) — that's
-#     `app-state.yml` (Stage 3).
-#   - Per-product containers — that's `deploy.yml` (Stage 4).
+#   - DB migrations + OO dashboards — `app-state.yml` (Stage 3).
+#   - Per-product containers (web image, deploy to box) — `web.yml`
+#     and `deploy.yml` (Stage 4).
 
 name: '[infra] Deploy'
 
@@ -25,6 +38,9 @@ on:
       - 'go.mod'
       - 'go.sum'
       - '.github/workflows/infra-deploy.yml'
+      # infra-pg-backup is part of the infra estate now (folded in).
+      # Paths that affect that image trigger this workflow too.
+      - '.github/actions/setup/**'
 
 # Never cancel mid-apply — partial applies leave the encrypted tfstate
 # half-written. Queue subsequent runs instead.
@@ -36,8 +52,76 @@ permissions:
   contents: read
 
 jobs:
+  # ── Stage 2.0: build the infra-pg-backup image ─────────────────────────────
+  # iedora.service won't start without this image in GHCR (compose
+  # `docker compose up -d` errors with "failed to resolve reference"
+  # if it's missing). Same arm64 runner + bin/iedora-env login as
+  # apps/web's build.
+  build_pg_backup_image:
+    name: Build infra-pg-backup image (arm64)
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Install bws CLI
+        env:
+          BWS_VERSION: '2.0.0'
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/bws.zip \
+            "https://github.com/bitwarden/sdk-sm/releases/download/bws-v${BWS_VERSION}/bws-aarch64-unknown-linux-gnu-${BWS_VERSION}.zip"
+          unzip -q /tmp/bws.zip -d /tmp/bws
+          sudo install -m 0755 /tmp/bws/bws /usr/local/bin/bws
+
+      - name: Log in to GHCR
+        env:
+          BWS_ACCESS_TOKEN: ${{ secrets.BWS_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          bin/iedora-env bash -c '
+            set -euo pipefail
+            [ -n "${IAC_BOOTSTRAP_GHCR_TOKEN:-}" ] || { echo "IAC_BOOTSTRAP_GHCR_TOKEN missing in BWS" >&2; exit 1; }
+            echo "$IAC_BOOTSTRAP_GHCR_TOKEN" | docker login ghcr.io -u eduvhc --password-stdin
+          '
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/iac/cmd/infra-pg-backup/Dockerfile
+          platforms: linux/arm64
+          tags: |
+            ghcr.io/eduvhc/infra-pg-backup:18
+            ghcr.io/eduvhc/infra-pg-backup:${{ github.sha }}
+          push: true
+          provenance: true
+          sbom: true
+          cache-from: type=gha,scope=infra-pg-backup-arm64
+          cache-to: type=gha,mode=max,scope=infra-pg-backup-arm64
+
+      - name: Attest SLSA build provenance
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-name: ghcr.io/eduvhc/infra-pg-backup
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+  # ── Stage 2.1: tofu apply ─────────────────────────────────────────────────
   apply:
     name: Tofu apply
+    needs: build_pg_backup_image
     runs-on: ubuntu-24.04
     timeout-minutes: 25
 
