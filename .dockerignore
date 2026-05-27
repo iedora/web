@@ -64,7 +64,7 @@ coverage/
 /bws-upsert
 /iedora
 /infra-pg-backup
-/local-stack
+# bin/dev-stack — bash script, no binary
 /menu-db-migrations
 /openobserve-dashboards
 /state-bucket-bootstrap

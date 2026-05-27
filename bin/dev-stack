@@ -1,0 +1,280 @@
+#!/bin/bash
+# dev-stack — local development stack orchestrator.
+#
+# Thin bash shim over docker compose. Boots postgres, adobe/s3mock,
+# openobserve, menu; runs core migrations; composes apps/web/.env.
+# Compatible with bash 3.2+ (macOS system bash).
+#
+# See docs/dev.md.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_DIR
+REPO_ROOT="$(dirname "${SCRIPT_DIR}")"
+readonly REPO_ROOT
+
+# ── constants ──────────────────────────────────────────────────────────
+
+readonly COMPOSE_FILE="${REPO_ROOT}/dev/docker-compose.yml"
+readonly ENV_FILE="${REPO_ROOT}/apps/web/.env"
+readonly ENV_LOCAL="${REPO_ROOT}/apps/web/.env.local"
+readonly COMPOSE_ENV="${REPO_ROOT}/dev/.env"
+
+# ── helpers ────────────────────────────────────────────────────────────
+
+# Usage: deps_of <service>
+# Outputs space-separated dependency names.
+deps_of() {
+  case "$1" in
+    postgres)    ;;
+    s3mock)      ;;
+    openobserve) printf '%s' "s3mock" ;;
+    menu)        printf '%s' "postgres s3mock openobserve" ;;
+    *)           return 1 ;;
+  esac
+}
+
+# Usage: service_known <name>
+# Returns 0 if name is a recognised service.
+service_known() {
+  case "$1" in
+    postgres|s3mock|openobserve|menu) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Usage: step <n> <label>
+step() { printf '[dev] [%s] %s\n' "$1" "$2"; }
+
+# Usage: err <message>
+err() { printf '[dev] ✗ %s\n' "$1" >&2; }
+
+# Usage: has_profile <name>
+# Returns 0 if name is in PROFILE_NAMES.
+has_profile() {
+  local name
+  for name in "${PROFILE_NAMES[@]}"; do
+    [[ "${name}" == "$1" ]] && return 0
+  done
+  return 1
+}
+
+# Usage: trim <string>
+# Strips leading/trailing whitespace via stdin→stdout.
+trim() { sed 's/^[[:space:]]*//;s/[[:space:]]*$//'; }
+
+# ── s3mock port (from dev/.env, default 9090) ──────────────────────────
+
+s3mock_port() {
+  local port=9090
+  if [[ -f "${COMPOSE_ENV}" ]]; then
+    port="$(sed -n 's/^S3MOCK_HTTP_PORT=//p' "${COMPOSE_ENV}" | head -1)"
+    [[ -z "${port}" ]] && port=9090
+  fi
+  printf '%s' "${port}"
+}
+
+# ── usage ──────────────────────────────────────────────────────────────
+
+usage() {
+  cat >&2 <<'EOF'
+Usage: bin/dev-stack [flags]
+
+  --only svc,...     Start only these services (+ deps):
+                       postgres, s3mock, openobserve, menu
+  --except svc,...   Start everything except these
+  --destroy          Tear down: docker compose down -v (preserves .env.local)
+  --reset-db name    Drop + recreate one database (menu|core)
+
+With no flags, boots the full stack + migrations + .env.
+EOF
+  exit 2
+}
+
+# ── --destroy ──────────────────────────────────────────────────────────
+
+cmd_destroy() {
+  step 1 "docker compose down -v --remove-orphans"
+  docker compose --profile '*' -f "${COMPOSE_FILE}" down -v --remove-orphans 2>/dev/null || true
+  printf '[dev] ✓ destroyed (volumes + containers removed)\n'
+  printf '[dev] → .env.local preserved — delete it manually if you want a fresh IEDORA_CORE_SECRET\n'
+}
+
+# ── --reset-db ─────────────────────────────────────────────────────────
+
+cmd_reset_db() {
+  local name="$1"
+  case "${name}" in
+    menu|core)
+      printf '[dev] reset-db: dropping + recreating %s\n' "${name}"
+      docker exec -i infra-postgres psql -U postgres -d postgres \
+        -c "DROP DATABASE IF EXISTS ${name};" >/dev/null 2>&1
+      docker exec -i infra-postgres psql -U postgres -d postgres \
+        -c "CREATE DATABASE ${name};" >/dev/null 2>&1
+      [[ "${name}" == "core" ]] && printf '[dev] ✓ re-run bin/dev-stack to re-apply auth migrations\n'
+      ;;
+    *) err "--reset-db: unknown db '${name}' (want menu|core)"; exit 1 ;;
+  esac
+}
+
+# ── profile resolution ─────────────────────────────────────────────────
+
+resolve_profiles() {
+  local only="${1:-}"
+  local except="${2:-}"
+  PROFILE_NAMES=()
+
+  if [[ -n "${only}" ]]; then
+    local old_ifs="${IFS}"; IFS=',' read -ra names <<< "${only}"; IFS="${old_ifs}"
+    local n d
+    for n in "${names[@]}"; do
+      n="$(printf '%s' "${n}" | trim)"
+      service_known "${n}" || { err "unknown service '${n}'"; exit 1; }
+      [[ " ${PROFILE_NAMES[*]} " != *" ${n} "* ]] && PROFILE_NAMES+=("${n}")
+      for d in $(deps_of "${n}"); do
+        [[ " ${PROFILE_NAMES[*]} " != *" ${d} "* ]] && PROFILE_NAMES+=("${d}")
+      done
+    done
+  elif [[ -n "${except}" ]]; then
+    local old_ifs="${IFS}"; IFS=',' read -ra skip <<< "${except}"; IFS="${old_ifs}"
+    local s x keep
+    for s in postgres s3mock openobserve menu; do
+      keep=1
+      for x in "${skip[@]}"; do
+        [[ "$(printf '%s' "${x}" | trim)" == "${s}" ]] && keep=0
+      done
+      if (( keep )); then PROFILE_NAMES+=("${s}"); fi
+    done
+  else
+    PROFILE_NAMES=(postgres s3mock openobserve menu)
+  fi
+}
+
+# ── docker compose helpers ─────────────────────────────────────────────
+
+compose_up() {
+  local profiles=("$@")
+  local args=()
+  for p in "${profiles[@]}"; do args+=(--profile "${p}"); done
+  docker compose "${args[@]}" -f "${COMPOSE_FILE}" up -d --wait
+}
+
+# ── compose .env ───────────────────────────────────────────────────────
+
+compose_env_file() {
+  local iedora_core_secret s3_endpoint s3_public_url otel_auth s3_port
+  s3_port="$(s3mock_port)"
+  s3_endpoint="http://infra-s3mock:${s3_port}"
+  s3_public_url="http://localhost:${s3_port}/iedora-assets"
+  otel_auth="$(printf 'dev@iedora.local:Password1!' | base64)"
+
+  iedora_core_secret="$(sed -n 's/^IEDORA_CORE_SECRET=//p' "${ENV_LOCAL}" 2>/dev/null | head -1 || true)"
+  if [[ -z "${iedora_core_secret}" ]]; then
+    iedora_core_secret="$(openssl rand -base64 48 | tr -d '\n')"
+  fi
+
+  cat > "${ENV_FILE}" <<EOF
+# AUTO-GENERATED by bin/dev-stack. Overrides in .env.local (gitignored).
+CORE_DATABASE_URL=postgres://postgres:Password1!@infra-postgres:5432/core
+DATABASE_URL=postgres://postgres:Password1!@infra-postgres:5432/menu
+GIT_SHA=dev
+HOST_NAME=localhost
+IEDORA_BOOTSTRAP_ADMIN_EMAILS=eduardoferdcarvalho@gmail.com
+IEDORA_CORE_BASE_URL=http://localhost:3000
+IEDORA_CORE_COOKIE_DOMAIN=localhost
+IEDORA_CORE_SECRET=${iedora_core_secret}
+IEDORA_CORE_TRUSTED_ORIGINS=http://localhost:3000
+MENU_PUBLIC_URL=http://localhost:3000
+NEXT_PUBLIC_CORE_URL=http://localhost:3000/core
+NEXT_TELEMETRY_DISABLED=1
+NODE_ENV=development
+OTEL_EXPORTER_OTLP_ENDPOINT=http://infra-openobserve:5080/api/default
+OTEL_EXPORTER_OTLP_HEADERS=Authorization=Basic%20${otel_auth}
+S3_ACCESS_KEY=test
+S3_BUCKET=iedora-assets
+S3_ENDPOINT=${s3_endpoint}
+S3_FORCE_PATH_STYLE=true
+S3_PUBLIC_URL=${s3_public_url}
+S3_REGION=us-east-1
+S3_SECRET_KEY=test
+EOF
+}
+
+# ── print summary ──────────────────────────────────────────────────────
+
+print_done() {
+  printf '\n[dev] ✓ local stack ready\n'
+  if has_profile menu; then
+    printf '  → menu     http://localhost:3000\n'
+  else
+    printf '  → menu     not in selection (HMR path: cd apps/web && bun run dev)\n'
+  fi
+  has_profile openobserve \
+    && printf '  → o2       http://localhost:5080  (dev@iedora.local / Password1!)\n'
+}
+
+# ── args ───────────────────────────────────────────────────────────────
+
+parse_args() {
+  ONLY='' EXCEPT='' DESTROY='' RESET_DB=''
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --only)    ONLY="$2"; shift 2 ;;
+      --except)  EXCEPT="$2"; shift 2 ;;
+      --destroy) DESTROY=1; shift ;;
+      --reset-db) RESET_DB="$2"; shift 2 ;;
+      -h|--help) usage ;;
+      *)         err "Unknown: $1"; usage ;;
+    esac
+  done
+  if [[ -n "${ONLY:-}${EXCEPT:-}" && -n "${ONLY:-}" && -n "${EXCEPT:-}" ]]; then
+    err "--only and --except are mutually exclusive"; exit 1
+  fi
+}
+
+# ── main ───────────────────────────────────────────────────────────────
+
+# GLOBAL: PROFILE_NAMES — resolved service list populated by main().
+declare -a PROFILE_NAMES
+
+main() {
+  parse_args "$@"
+
+  if [[ -n "${DESTROY:-}" ]]; then
+    cmd_destroy; exit 0
+  fi
+
+  if [[ -n "${RESET_DB:-}" ]]; then
+    cmd_reset_db "${RESET_DB}"; exit 0
+  fi
+
+  resolve_profiles "${ONLY:-}" "${EXCEPT:-}"
+  printf '[dev] selection: %s\n' "${PROFILE_NAMES[*]}"
+
+  # infra = everything except menu
+  local infra=() p
+  for p in "${PROFILE_NAMES[@]}"; do
+    [[ "${p}" != "menu" ]] && infra+=("${p}")
+  done
+
+  step 1 "docker compose up — infra services"
+  compose_up "${infra[@]}"
+
+  if has_profile postgres; then
+    step 2 "core migration — drizzle-kit migrate"
+    CORE_DATABASE_URL="postgresql://postgres:Password1!@localhost:5432/core" \
+      bun run --cwd "${REPO_ROOT}/packages/auth" db:migrate
+  fi
+
+  step 3 "compose apps/web/.env"
+  compose_env_file
+
+  if has_profile menu; then
+    step 4 "docker compose up — menu"
+    compose_up menu
+  fi
+
+  print_done
+}
+
+main "$@"

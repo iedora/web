@@ -49,7 +49,7 @@ services-references/
 /bws-upsert
 /iedora
 /infra-pg-backup
-/local-stack
+# bin/dev-stack — bash script, no binary
 /menu-db-migrations
 /openobserve-dashboards
 /state-bucket-bootstrap
@@ -63,17 +63,14 @@ npm-debug.log*
 yarn-debug.log*
 .pnpm-debug.log*
 
-# env files. `.env` is gitignored by default; `products/menu/.env` is
-# opted IN because it holds the canonical local-dev env shape (real
-# values get composed by the dev orchestrator). `.env.test` is also
-# tracked — single source for the E2E env every CI step + the
-# Playwright webServer reads.
+# env files. `.env` is gitignored — the dev orchestrator
+# (`bin/dev-stack`) composes it on every run. `.env.test` is tracked
+# — single source for the E2E env every CI step + the Playwright
+# webServer reads.
 .env
 .env.local
 .env.production
 .env.*.local
-products/*/infra/.env
-!products/menu/.env
 !.env.test
 
 # vercel

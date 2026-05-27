@@ -1,63 +1,34 @@
 # iedora
 
-Bun-workspaces monorepo with one Next.js product serving two hostnames,
-plus three shared packages.
+Monorepo — one Next.js container serving three hostnames through
+Host-based rewrites.
 
-- **Menu** (`menu.iedora.com`) — SaaS for restaurants to build digital
-  menus by drag-and-drop. Public menu at `/r/<slug>`; admin dashboard
-  with reorderable categories, items, image uploads, themes,
-  multi-language overrides, plans, analytics.
-- **House** (`iedora.com`) — brand landing page. Lives in the same
-  Next.js app at `src/app/house/`; `src/proxy.ts` inspects Host and
-  rewrites apex requests internally. One image, one container, two
-  hostnames.
+- **Menu** (`menu.iedora.com`) — SaaS multi-tenant restaurant menu builder.
+- **Core** (`core.iedora.com`) — better-auth sign-in surface via `@iedora/auth`.
+- **House** (`iedora.com`) — brand landing.
 
-Identity is `@iedora/auth` — a shared workspace package wrapping
-[better-auth](https://better-auth.com) (email+password, organization,
-admin plugins) that runs IN-PROCESS in every product. See
-`packages/auth/README.md` for the consumer contract and
-`apps/web/src/features/auth/` for the menu-side wiring.
+Identity is `@iedora/auth` (better-auth in-process). `docs/dev.md` for local
+development. `docs/deploy/README.md` for the 4-stage pipeline.
 
-## Run it locally
+## Quick start
 
 ```bash
-bun install                                  # at the repo root
-go run ./dev/cmd/local-stack                 # boots postgres, localstack,
-                                             # openobserve
-bun run --cwd packages/auth db:migrate       # apply better-auth schema to core DB
-cd apps/web && bun run dev              # menu HMR (reads .env + .env.local)
+bun install                 # once
+./bin/dev-stack             # boots postgres, s3mock, openobserve, menu
+cd apps/web && bun run dev  # HMR on :3000
 ```
 
 ## Ship it
 
-```bash
-# Stage 2 — IaC (Hetzner + Cloudflare + the compose stack)
-bin/iedora-env tofu -chdir=infra/iac/tofu apply
-
-# Stage 3 — app-state configurators (migrations, dashboards)
-bin/iedora-env bin/iedora app apply
-
-# Stage 4 — deploy a product
-bin/iedora-env bin/iedora deploy menu
 ```
-
-`bin/iedora-env` is the one-line env-hydration helper — it pulls every
-BWS secret + exports the `TF_VAR_*` / `AWS_*` / `CLOUDFLARE_ACCOUNT_ID`
-aliases everything downstream expects. Same pattern as `op run --` or
-`doppler run --`. Required in your shell: `BWS_ACCESS_TOKEN`.
-
-See [`docs/deploy/README.md`](docs/deploy/README.md) for the architecture, the
-4-stage pipeline, and every operational runbook.
+bin/iedora-env tofu -chdir=infra/iac/tofu apply   # IaC
+bin/iedora-env bin/iedora app apply               # migrations
+bin/iedora-env bin/iedora deploy menu             # deploy
+```
 
 ## Docs
 
-- **[`AGENTS.md`](AGENTS.md)** — tech stack, hard rules, file layout, conventions (loaded by AI assistants too).
-- **[`docs/deploy/README.md`](docs/deploy/README.md)** — **the** infra + app-state + deploy doc. Day 0 / Day 1 / Day 2 lifecycle, stages, CI, failure modes, secret rotation.
-- **[`products/menu/tests/README.md`](products/menu/tests/README.md)** — Vitest + PGLite unit tests, Playwright e2e.
-- **[`infra/CLAUDE.md`](infra/CLAUDE.md)** § HCL style — LLM-safe HCL conventions.
-- **[`docs/vendors.md`](docs/vendors.md)** — every dependency with rationale.
-- **[`docs/SECURITY.md`](docs/SECURITY.md)** — security policy + vulnerability reporting.
-
-## License
-
-Not yet declared.
+- [AGENTS.md](AGENTS.md) — stack, rules, conventions, file layout
+- [docs/dev.md](docs/dev.md) — local development
+- [docs/deploy/README.md](docs/deploy/README.md) — infra + deploy
+- [docs/vendors.md](docs/vendors.md) — dependency rationale

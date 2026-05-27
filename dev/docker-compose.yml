@@ -2,12 +2,12 @@
 # compose.tf`) running against local Docker.
 #
 # Everything an operator needs to develop iedora locally: postgres,
-# localstack (S3 mock), openobserve, menu (Next.js). Identity is
+# adobe/s3mock (S3 mock), openobserve, menu (Next.js). Identity is
 # `@iedora/auth` (better-auth) running in-process inside the menu
 # container — no IdP container.
 #
-# See docs/deploy/README.md § Local stack for the operator surface. See
-# `dev/cmd/local-stack/` for the orchestrator.
+# See docs/dev.md. See
+# `bin/dev-stack` for the orchestrator.
 #
 # Selection is via compose profiles, one per service. The orchestrator
 # passes `--profile X` per selected service. Default (no flags) starts
@@ -23,7 +23,6 @@ networks:
 
 volumes:
   postgres_data:
-  localstack_data:
   openobserve_data:
 
 services:
@@ -56,25 +55,20 @@ services:
       driver: json-file
       options: { max-size: 10m }
 
-  # ── localstack (S3 mock for menu uploads) ────────────────────────────
-  localstack:
-    image: localstack/localstack:4
-    container_name: infra-localstack
-    profiles: [localstack]
+  # ── s3mock (S3 mock for menu uploads + OO cold tier) ──────────────────
+  s3mock:
+    image: adobe/s3mock:latest
+    container_name: infra-s3mock
+    profiles: [s3mock]
     networks:
       iedora:
-        aliases: [localstack, infra-localstack]
+        aliases: [s3mock, infra-s3mock]
     environment:
-      SERVICES: s3
-      DEFAULT_REGION: us-east-1
-      AWS_DEFAULT_REGION: us-east-1
-    volumes:
-      - localstack_data:/var/lib/localstack
-      - ./localstack-init.sh:/etc/localstack/init/ready.d/init.sh:ro
+      COM_ADOBE_TESTING_S3MOCK_STORE_INITIAL_BUCKETS: ${S3MOCK_INITIAL_BUCKETS}
     ports:
-      - "4566:4566"
+      - "${S3MOCK_HTTP_PORT}:${S3MOCK_HTTP_PORT}"
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:4566/_localstack/health"]
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:${S3MOCK_HTTP_PORT}/favicon.ico"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -88,7 +82,7 @@ services:
     container_name: infra-openobserve
     profiles: [openobserve]
     depends_on:
-      localstack:
+      s3mock:
         condition: service_healthy
     networks:
       iedora:
@@ -101,7 +95,7 @@ services:
       ZO_S3_REGION_NAME: us-east-1
       ZO_S3_BUCKET_NAME: iedora-data
       ZO_S3_BUCKET_PREFIX: o2
-      ZO_S3_SERVER_URL: http://infra-localstack:4566
+      ZO_S3_SERVER_URL: http://infra-s3mock:${S3MOCK_HTTP_PORT}
       ZO_S3_FEATURE_FORCE_PATH_STYLE: "true"
       ZO_S3_ACCESS_KEY: test
       ZO_S3_SECRET_KEY: test

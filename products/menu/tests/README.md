@@ -15,7 +15,7 @@ No "mock all the things and assert call shapes" tier in between. PGLite tests al
 | Location | Runner | Tier | Notes |
 |---|---|---|---|
 | `src/**/*.test.ts` | Vitest | unit | PGLite via `src/shared/testing/pglite.ts`; rate-limit also runs against PGLite (advisory locks + `READ COMMITTED`) |
-| `src/features/*/e2e/` | Playwright | slice e2e | Postgres 18 + adobe/s3mock as service containers in CI (LocalStack locally); one slice per folder |
+| `src/features/*/e2e/` | Playwright | slice e2e | Postgres 18 + adobe/s3mock as service containers (dev and CI); one slice per folder |
 | `tests/e2e/journeys/` | Playwright | cross-slice journeys | Same runtime — only files that span ≥2 slices live here |
 | `packages/iedora-observability/src/__tests__/*.test.ts` | Vitest | unit | No-op-in-tests contract, tenant attribute pins |
 | `packages/design-system/src/test/` | Vitest + jsdom | unit | Component primitives via Testing Library |
@@ -122,7 +122,7 @@ apps/web/
 > rebuilt against `@iedora/auth`; treat the snippets as historical
 > reference until the new harness lands.
 
-`tests/e2e/helpers/` is **zero-domain** (just the `server-only` stub today; future LocalStack/beacon helpers live under `src/shared/testing/`).
+`tests/e2e/helpers/` is **zero-domain** (just the `server-only` stub today; future s3mock/beacon helpers live under `src/shared/testing/`).
 
 ### The `testing/` contract (rule 15)
 
@@ -224,7 +224,7 @@ One workflow per workspace. Each `paths:`-filtered.
 - **Typecheck** — `bun run typecheck`. ~2 min.
 - **Lint** — `bun run lint`. ~2 min.
 - **Unit (Vitest)** — `bun run test`. Docker available so testcontainers can boot Redis. ~3 min.
-- **E2E (Playwright)** — `needs: [typecheck, lint, unit]`. Postgres 18 + adobe/s3mock as service containers (LocalStack `:latest` started requiring a paid licence in 2026 — adobe/s3mock is the open-source replacement). Shard matrix is parked at `1/1` today — bump to `[1/2, 2/2]` (or 4) when the suite grows past ~10 min. The infra (per-worker DB fork) is already in place.
+- **E2E (Playwright)** — `needs: [typecheck, lint, unit]`. Postgres 18 + adobe/s3mock as service containers. Shard matrix is parked at `1/1` today — bump to `[1/2, 2/2]` (or 4) when the suite grows past ~10 min. The infra (per-worker DB fork) is already in place.
 
 The composite action `.github/actions/setup` installs Bun + runs `bun install --frozen-lockfile`. Every job that needs deps is one line: `uses: ./.github/actions/setup`.
 
@@ -239,7 +239,7 @@ Iteration ladder, fastest first:
 1. **Local repro** — run the literal failing command:
    ```
    cd products/<workspace>
-   docker compose up -d        # only if Postgres / LocalStack needed
+   docker compose up -d        # only if Postgres / s3mock needed
    bun run <script>
    ```
    For flake hunting: `--repeat-each=N --workers=M` surfaces timing races faster than any CI run.
@@ -251,7 +251,7 @@ Iteration ladder, fastest first:
 
 3. **Draft PR on a feature branch** — final integration check before merge.
 
-Don't reach for `nektos/act` for test-logic failures — it can't reproduce the Postgres + LocalStack stack faithfully. Useful only for YAML / matrix / paths-filter shape checks.
+Don't reach for `nektos/act` for test-logic failures — it can't reproduce the Postgres + s3mock stack faithfully. Useful only for YAML / matrix / paths-filter shape checks.
 
 ## What we don't test (and why)
 
@@ -262,4 +262,4 @@ Don't reach for `nektos/act` for test-logic failures — it can't reproduce the 
 - **UI styling.** Visual review is a human step.
 - **Internal slice plumbing.** Test through the public API of the slice.
 
-See [`architecture.md`](architecture.md) for slice layout, [`AGENTS.md`](../AGENTS.md) for hard rules.
+See [products/menu/CLAUDE.md](../CLAUDE.md) for slice layout, [AGENTS.md](../../../AGENTS.md) for hard rules.

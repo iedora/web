@@ -1,6 +1,6 @@
 # `infra/` — every pipeline concern
 
-The platform that runs `menu.iedora.com` and `iedora.com`. Four pipeline stages plus a local-stack mirror, all under one roof.
+The platform that runs `menu.iedora.com` and `iedora.com`. Four pipeline stages plus a dev-stack mirror, all under one roof.
 
 Products and workspace packages live elsewhere (`/products/`, `/packages/`); everything pipeline-shaped lives here.
 
@@ -50,16 +50,13 @@ infra/
                              — Stage 2 is plain `tofu`.
 ```
 
-`infra/` holds ONLY the three pipeline-stage folders (iac, app-state, deploy). The local-stack mirror (`dev/`) and shared Go libs (`internal/`) live at the repo root.
+`infra/` holds ONLY the three pipeline-stage folders (iac, app-state, deploy). The dev-stack mirror (`dev/`) and shared Go libs (`internal/`) live at the repo root.
 
 Repo-root siblings of `infra/`:
 
 ```
 dev/                       Local stack — mirror of all 4 stages, against local Docker
-  docker-compose.yml         Postgres + OpenObserve + LocalStack
-  localstack-init.sh         Seeds LocalStack's R2 buckets on first boot
-  cmd/local-stack/           Driver: compose up → compose menu .env
-                             → start menu container.
+  docker-compose.yml         Postgres + OpenObserve + adobe/s3mock
 
 internal/                  Shared Go libs (Go's `internal/` visibility scopes
                            them to the whole module — every stage's cmd imports
@@ -104,7 +101,7 @@ bin/iedora-env tofu -chdir=infra/iac/tofu apply                   # Stage 2 appl
 bin/iedora-env tofu -chdir=infra/iac/tofu destroy                 # Stage 2 teardown
 bin/iedora-env bin/iedora app apply                               # Stage 3
 bin/iedora-env bin/iedora deploy menu                             # Stage 4 (menu)
-go run ./dev/cmd/local-stack                                  # Local dev stack
+./bin/dev-stack                                              # Local dev stack
 ```
 
 `bin/iedora-env` is the env-injection layer — a ~50-line shell helper that runs `bws secret list -o env`, derives `CLOUDFLARE_ACCOUNT_ID` via the CF API, and exports the `TF_VAR_*`/`AWS_*` aliases Tofu's backend + variables expect. Same shape as `op run --` (1Password) or `doppler run --`. Stage filtering was dropped (the old `with-secrets` wrapper); every consumer sees every BWS key.

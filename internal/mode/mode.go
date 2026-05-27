@@ -3,7 +3,7 @@
 // binary runs in exactly one of two modes.
 //
 //	mode.Local — operator's machine. Docker daemon on localhost,
-//	             LocalStack for S3, no BWS, freely destructible.
+//	             adobe/s3mock for S3, no BWS, freely destructible.
 //	mode.Live  — Hetzner + Cloudflare + GHCR. Real APIs, real DNS,
 //	             gated by the rest of the guardrails.
 //

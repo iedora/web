@@ -55,8 +55,8 @@ introduced.
 
 |             | local                                  | live                              |
 |-------------|----------------------------------------|-----------------------------------|
-| Where       | operator's machine (`go run ./dev/cmd/local-stack`) | Hetzner + Cloudflare + GHCR |
-| Targets     | Docker daemon on `localhost`; LocalStack for S3 | Public APIs, real DNS    |
+| Where       | operator's machine (`./bin/dev-stack`) | Hetzner + Cloudflare + GHCR |
+| Targets     | Docker daemon on `localhost`; adobe/s3mock for S3 | Public APIs, real DNS    |
 | Auth        | FirstInstance bootstrap; no BWS needed | BWS-stored, no defaults           |
 | Side effects| freely destructible                    | gated by the guardrails below     |
 
@@ -512,9 +512,9 @@ bin/iedora-env bin/iedora deploy menu                       # Menu.
 bin/iedora-env bin/iedora destroy menu                      # Tear down menu's stage-4 artifacts.
 
 # Local dev stack
-go run ./dev/cmd/local-stack                            # Boot.
-go run ./dev/cmd/local-stack --destroy                  # Wipe.
-go run ./dev/cmd/local-stack --reset-db menu            # Drop+recreate one DB.
+./bin/dev-stack                                 # Boot.
+./bin/dev-stack --destroy                       # Wipe.
+./bin/dev-stack --reset-db menu                 # Drop+recreate one DB.
 
 # Pre-merge runbook — manual chain, ~45-60 min on live.
 bin/iedora-env tofu -chdir=infra/iac/tofu destroy           # 1: tear down
@@ -553,35 +553,11 @@ State commit-back: both `infra-deploy.yml` and the per-product Tofu
 side of `deploy.yml` commit the encrypted `terraform.tfstate` back to
 `main` after a successful apply — git stays canonical.
 
-## Local stack (`go run ./dev/cmd/local-stack`)
+## Local stack (`./bin/dev-stack`)
 
-[`dev/docker-compose.yml`](../dev/docker-compose.yml)
-is the source of truth for the local stack shape: postgres,
-localstack (S3 mock), openobserve, menu.
-Each service is gated by a compose profile matching its name.
-
-[`dev/cmd/local-stack/`](../dev/cmd/local-stack/) is a thin Go shim that:
-
-1. Translates `--only`/`--except` into compose profile flags.
-2. `docker compose up -d --wait` for everything except menu.
-3. Composes `apps/web/.env` from local-stack statics +
-   a minted `IEDORA_CORE_SECRET` (persisted across runs).
-4. `docker compose up -d menu` — the menu container's `env_file:`
-   picks up the just-written `.env`.
-
-Auth tables in the `core` Postgres DB are applied via
-`bun run --cwd packages/auth db:migrate` (run by the operator after
-first boot, or by the menu container's startup script).
-
-Menu runs as a container by default (same image as prod). For HMR,
-opt out via `go run ./dev/cmd/local-stack --except menu` and `cd apps/web && bun
-run dev` — the orchestrator drops the in-container env values and
-writes `<please_fill>` placeholders into `.env.local` for the
-operator to point at remote URLs.
-
-`go run ./dev/cmd/local-stack --only menu` brings up menu's deps (postgres, localstack,
-openobserve) too via the dep closure in the orchestrator.
-`go run ./dev/cmd/local-stack --reset-db -- <name>` drops + recreates one database.
+Boots postgres, adobe/s3mock, openobserve, and menu on your machine.
+See **[docs/dev.md](dev.md)** for the full guide — services, flags,
+environment files (`.env` vs `.env.local`), HMR workflow, and lifecycle.
 
 ## Day 2 — Ongoing operations
 
@@ -797,8 +773,8 @@ infra/                                   Stage 2 — IaC for the shared estate
     postgres/                              init.sql — CREATE DATABASE menu / core on first boot
 
 dev/                                     Local stack (mirror of Stages 2-4)
-  docker-compose.yml, localstack-init.sh   the stack itself
-  cmd/local-stack/                         Driver: compose up → menu .env
+  docker-compose.yml                        the stack itself
+  bin/                                      Shim entry points — see docs/dev.md
 ```
 
 ## Scaling notes — multi-machine, multi-agent

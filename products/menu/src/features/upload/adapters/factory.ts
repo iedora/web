@@ -19,13 +19,16 @@ function getInstance(): { storage: S3Storage; bucket: string } {
   bucket = readEnv('S3_BUCKET')
   const accessKey = readEnv('S3_ACCESS_KEY')
   const secretKey = readEnv('S3_SECRET_KEY')
-  // LocalStack (CI, dev when docker-compose is up) needs path-style addressing.
-  // R2 + AWS S3 use virtual-host style — the SDK's default. Auto-detect via
-  // endpoint URL so neither side has to be configured explicitly.
-  const forcePathStyle = /localhost|127\.0\.0\.1|localstack/i.test(endpoint)
+  // S3-compatible mocks (s3mock in dev, s3mock in CI) and localhost
+  // require path-style addressing. R2 + AWS S3 use virtual-host style —
+  // the SDK's default. S3_FORCE_PATH_STYLE gives control per environment
+  // without guessing from the endpoint URL.
+  const forcePathStyle =
+    process.env.S3_FORCE_PATH_STYLE === 'true' ||
+    /localhost|127\.0\.0\.1/i.test(endpoint)
   // Public URL: with R2 + custom domain (S3_PUBLIC_URL set), serve direct
-  // from the Cloudflare edge. With LocalStack, derive a path-style URL from
-  // the endpoint + bucket.
+  // from the Cloudflare edge. Otherwise derive a path-style URL from the
+  // endpoint + bucket.
   const publicBaseUrl =
     process.env.S3_PUBLIC_URL ?? `${endpoint.replace(/\/$/, '')}/${bucket}`
 

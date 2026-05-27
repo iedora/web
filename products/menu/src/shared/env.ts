@@ -53,15 +53,18 @@ const serverSchema = z.object({
   // run in tight loops. Never enable in production.
   DISABLE_RATE_LIMIT: z.enum(['true', 'false']).optional(),
 
-  // Object storage (S3 / MinIO / LocalStack / R2) -----------------------
+  // Object storage (S3 / R2 / s3mock) ---------------------------------
   S3_ENDPOINT: z.url(),
   S3_REGION: z.string().min(1),
   S3_ACCESS_KEY: z.string().min(1),
   S3_SECRET_KEY: z.string().min(1),
   S3_BUCKET: z.string().min(1),
   // Optional CDN override. When unset, features/upload derives a path-style
-  // URL from S3_ENDPOINT + S3_BUCKET (MinIO/LocalStack default).
+  // URL from S3_ENDPOINT + S3_BUCKET.
   S3_PUBLIC_URL: z.url().optional(),
+  // Set to 'true' for S3-compatible mocks that require path-style
+  // addressing (s3mock, LocalStack). Leave unset for R2 / AWS S3.
+  S3_FORCE_PATH_STYLE: z.enum(['true', 'false']).optional(),
 })
 
 type ServerEnv = z.infer<typeof serverSchema>

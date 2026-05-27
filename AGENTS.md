@@ -7,7 +7,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 # Iedora monorepo — project conventions
 
 > Bun-workspaces monorepo. One Next.js product (`apps/web/`)
-> serving both `menu.iedora.com` (menu app) and `iedora.com` (house
+> serving `menu.iedora.com` (menu app), `core.iedora.com` (auth/sign-in), and `iedora.com` (house
 > landing) through a Host-based rewrite in `src/proxy.ts`, plus
 > workspace packages (`packages/auth/`, `packages/design-system/`,
 > `packages/iedora-observability/`). `bun install` runs ONCE at the repo
@@ -19,7 +19,8 @@ This version has breaking changes — APIs, conventions, and file structure may 
 ## What this is
 
 - **Menu** (menu.iedora.com — `apps/web/`) — SaaS multi-tenant restaurant menu builder. Each tenant is an organization that owns one or more `restaurant` rows. Admins build menus via drag-and-drop; the public menu renders from the same data.
-- **House** (iedora.com — `apps/web/src/app/house/`) — brand landing page. Lives inside the menu Next.js app; `src/proxy.ts` inspects Host and rewrites apex requests under `/house/*` internally. One container, one image, two hostnames.
+- **Core** (core.iedora.com — `apps/web/`) — better-auth sign-in surface. Served by the same Next.js process; `src/proxy.ts` routes `/core/*` paths. Backed by the `core` Postgres database via `@iedora/auth`.
+- **House** (iedora.com — `apps/web/src/app/house/`) — brand landing page. Lives inside the same Next.js app; `src/proxy.ts` inspects Host and rewrites apex requests under `/house/*` internally. One container, one image, three hostnames.
 
 **Identity is `@iedora/auth`.** A shared workspace package (`packages/auth/`) wrapping [better-auth](https://better-auth.com) — email+password, organization plugin (for tenants), admin plugin (for the cross-tenant `iedora-admin` role). The auth instance runs IN-PROCESS inside every product; there is no separate IdP service. Sessions are owned by better-auth (`core.session` table) and the `better-auth.session_token` cookie is scoped on `.iedora.com` so a login on any iedora surface is readable on every other. Backed by a dedicated `core` Postgres database (better-auth tables live in the `core` schema, same instance as `menu`). See `packages/auth/README.md` for the consumer contract and `apps/web/src/features/auth/README.md` for the menu-side wiring + the role/scope taxonomy.
 
@@ -43,7 +44,8 @@ Cross-product rules live in [`docs/agents/cross-product-rules.md`](docs/agents/c
 
 Each product's CLAUDE.md is auto-loaded under its subtree.
 
-- **[apps/web/CLAUDE.md](apps/web/CLAUDE.md)** — 16 rules: tenant scoping, schema source-of-truth, auth in DAL (not layouts), `proxy.ts` (not middleware — and now also handles Host-based rewrite for iedora.com → `/house/*`), money in cents, dnd-kit position columns, registry pattern for templates/languages/plans, public-menu cache by tag, beacon view tracking, vertical slice boundaries, co-located E2E + testing surface per slice, **redirects via `publicUrl()`**.
+- **[products/menu/CLAUDE.md](products/menu/CLAUDE.md)** — 17 rules: tenant scoping, schema source-of-truth, auth in DAL (not layouts), `proxy.ts` (not middleware — and now also handles Host-based rewrite for iedora.com → `/house/*`), money in cents, dnd-kit position columns, registry pattern for templates/languages/plans, public-menu cache by tag, beacon view tracking, vertical slice boundaries, co-located E2E + testing surface per slice, **redirects via `publicUrl()`**.
+- **[apps/web/CLAUDE.md](apps/web/CLAUDE.md)** — 5 rules: routes vs slices boundary, proxy.ts host dispatch, shared chrome (DashboardPage), no tsconfig path aliasing, one image serves all hosts.
 - **House** (iedora.com) lives at `apps/web/src/app/house/` — no separate CLAUDE.md; same cross-product rules apply.
 
 ## Slice pattern
@@ -66,6 +68,7 @@ iedora/                                  repo root
   bin/                                   Shim entry points — `go run` / `bash` wrappers operators invoke
     iedora-env                              Env-hydration helper (BWS → TF_VAR_*/AWS_*/CLOUDFLARE_ACCOUNT_ID)
     iedora                                  Stage 3 + Stage 4 orchestrator (app apply, deploy <prod>, doctor)
+    dev-stack                               Local dev stack driver: compose up → menu .env
     state-bucket-bootstrap                  Stage -1 — provisions R2 bucket + token for Tofu's s3 backend
     bws-sync                                Batched Tofu BWS write/delete (single sequential pass)
                                             (menu-db-migrations + openobserve-dashboards run
@@ -95,9 +98,7 @@ iedora/                                  repo root
   dev/                                   Local stack (mirror of all 4 stages, local Docker).
                                          Top-level peer of infra/ because it's not a stage —
                                          it's the offline twin used for local dev.
-    docker-compose.yml                     Postgres + OpenObserve + LocalStack
-    localstack-init.sh                     Seeds LocalStack's R2 buckets on first boot
-    cmd/local-stack/                       Driver: compose up → menu .env
+    docker-compose.yml                     Postgres + OpenObserve + adobe/s3mock
 
   internal/                              Shared Go libs (bws, cloudflare, mode, r2, ssh,
                                          testfakes, tlsprobe). Top-level so Go's `internal/`
@@ -110,13 +111,17 @@ iedora/                                  repo root
     design-system/                       editorial CSS + React primitives (paper/ink/cinnabar)
     iedora-observability/                one-line OTel wiring (traces + metrics)
 
-  products/
-    menu/                                Next.js 16 — serves BOTH menu.iedora.com and iedora.com
+  apps/
+    web/                                  Next.js 16 — serves menu.iedora.com, core.iedora.com,
+                                          and iedora.com
       src/proxy.ts                         Host-based rewrite: iedora.com/* → /house/*
       src/app/house/                       Brand landing for iedora.com
+
+  products/
+    menu/                                Workspace package — slices, schema, i18n, templates
 ```
 
-Menu's container is NOT in the compose stack rendered by `infra/iac/tofu/compose.tf` — only the shared services (postgres, cloudflared, openobserve, backups) live there. Menu's lifecycle (pull/run on every deploy) is owned by Stage 4 via [`infra/deploy/cmd/iedora/runtime_docker.go`](infra/deploy/cmd/iedora/runtime_docker.go); a Cloudflare Tunnel routes both `menu.iedora.com` and `iedora.com` (apex + www) to the same docker network alias so one container serves both sites.
+Menu's container is NOT in the compose stack rendered by `infra/iac/tofu/compose.tf` — only the shared services (postgres, cloudflared, openobserve, backups) live there. Menu's lifecycle (pull/run on every deploy) is owned by Stage 4 via [`infra/deploy/cmd/iedora/runtime_docker.go`](infra/deploy/cmd/iedora/runtime_docker.go); a Cloudflare Tunnel routes `menu.iedora.com`, `core.iedora.com`, and `iedora.com` (apex + www) to the same docker network alias so one container serves all three sites.
 
 ## Commands
 
@@ -127,7 +132,7 @@ Menu's container is NOT in the compose stack rendered by `infra/iac/tofu/compose
 
 ### Per-product
 
-- **Menu** — see [apps/web/CLAUDE.md](apps/web/CLAUDE.md) § Commands.
+- **Menu** — see [products/menu/CLAUDE.md](products/menu/CLAUDE.md) § Commands.
 - **Packages** — `bun run test` / `test:watch` (Vitest; no DB for `@iedora/observability`, jsdom for `@iedora/design-system`); `bun run typecheck`.
 
 ### Deploy
@@ -144,7 +149,7 @@ Stage 4: Deploy            bin/iedora-env bin/iedora deploy <product>
 - **Stage 2** — plain Tofu. `init` / `plan` / `apply` / `destroy` against `infra/iac/tofu/`. The Tofu graph renders a docker-compose document (`compose.tf`) + Cloudflare Tunnel config (`tunnel.tf`); cloud-init drops them on first boot, `terraform_data.iedora_sync` pushes day-2 changes via one SSH session. `rclone` is required on the operator's machine — destroy-time hooks (`destroy-hooks.tf`) purge R2 buckets before the API DELETE.
 - **Stage 3** — `bin/iedora app apply` runs every configurator in `configurators.go` sequentially: **core-db-migrations** (better-auth schema in the `core` DB) → **menu-db-migrations** → **openobserve-dashboards**. Both migration configurators piggyback on the menu image (which has @iedora/auth as a workspace dep, so `packages/auth/{drizzle,scripts/migrate.mjs}` ship inside the standalone bundle).
 - **Stage 4** — `bin/iedora deploy <product>` (or `destroy <product>`). Dispatches through the productRuntime registry (`products.go`).
-- **Local dev** — `go run ./dev/cmd/local-stack` boots the local-twin stack. `--destroy` wipes it; `--reset-db <service>` drops + recreates one database.
+- **Local dev** — `./bin/dev-stack` boots the local-twin stack. See [docs/dev.md](docs/dev.md) for the full guide.
 - **Preflight** — `bin/iedora-env bin/iedora doctor` (PATH, BWS auth, bootstrap secrets).
 - Day-2 ops (logs / psql / backup / restore / rotate / wipe) are raw SSH against the Hetzner box.
 

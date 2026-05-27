@@ -388,7 +388,7 @@ export function classifyError(err: unknown): ParseMenuErrorCode {
  * Fetches the just-uploaded image from our S3 bucket and hands the model
  * raw bytes. Provider-agnostic — every adapter calls this before the AI
  * request. We deliberately avoid passing the URL: in dev the bucket lives
- * on `localhost:4566` (LocalStack) which the AI provider can't reach, and
+ * on `localhost` (S3 mock) which the AI provider can't reach, and
  * in prod the public URL would force a provider → R2 round-trip slower
  * than a same-region server-side fetch + inline bytes.
  */

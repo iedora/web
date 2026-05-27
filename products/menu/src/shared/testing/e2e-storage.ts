@@ -7,7 +7,7 @@ import {
 } from '@aws-sdk/client-s3'
 
 /**
- * Zero-domain S3 helpers against the LocalStack endpoint Playwright's
+ * Zero-domain S3 helpers against the S3-mock endpoint Playwright's
  * webServer starts. Knows only the bucket and credentials; has no
  * knowledge of asset-target conventions (`r/{restaurantId}/...`) or who
  * may upload what — that belongs in `@/features/upload/testing`.
@@ -17,7 +17,7 @@ import {
  * delete (fixture setup).
  */
 
-const ENDPOINT = process.env.S3_ENDPOINT ?? 'http://localhost:4566'
+const ENDPOINT = process.env.S3_ENDPOINT ?? 'http://localhost:9090'
 const REGION = process.env.S3_REGION ?? 'us-east-1'
 const ACCESS_KEY = process.env.S3_ACCESS_KEY ?? 'test'
 const SECRET_KEY = process.env.S3_SECRET_KEY ?? 'test'
