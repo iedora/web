@@ -15,16 +15,16 @@ on:
       - 'products/menu/**'
       - 'packages/eslint-config/**'
       - '.github/workflows/product-menu.yml'
-      - '.github/actions/**'
-      - '.github/scripts/**'
+      - '.github/actions/setup/**'
+      - '.github/scripts/wait-s3mock.sh'
   pull_request:
     branches: [main]
     paths:
       - 'products/menu/**'
       - 'packages/eslint-config/**'
       - '.github/workflows/product-menu.yml'
-      - '.github/actions/**'
-      - '.github/scripts/**'
+      - '.github/actions/setup/**'
+      - '.github/scripts/wait-s3mock.sh'
   workflow_dispatch:
 
 concurrency:
@@ -110,7 +110,7 @@ jobs:
       - uses: ./.github/actions/setup
 
       - name: Wait for S3Mock + create bucket
-        run: bash .github/scripts/wait-s3mock.sh
+        run: bash ${GITHUB_WORKSPACE}/.github/scripts/wait-s3mock.sh
 
       - name: Apply DB migrations
         run: bun run db:migrate:test

@@ -15,7 +15,7 @@ on:
       - 'packages/db/**'
       - 'packages/eslint-config/**'
       - '.github/workflows/product-imopush.yml'
-      - '.github/actions/**'
+      - '.github/actions/setup/**'
   pull_request:
     branches: [main]
     paths:
@@ -23,7 +23,7 @@ on:
       - 'packages/db/**'
       - 'packages/eslint-config/**'
       - '.github/workflows/product-imopush.yml'
-      - '.github/actions/**'
+      - '.github/actions/setup/**'
   workflow_dispatch:
 
 concurrency:

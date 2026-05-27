@@ -12,14 +12,14 @@ on:
       - 'packages/design-system/**'
       - 'packages/eslint-config/**'
       - '.github/workflows/design-system.yml'
-      - '.github/actions/**'
+      - '.github/actions/setup/**'
   pull_request:
     branches: [main]
     paths:
       - 'packages/design-system/**'
       - 'packages/eslint-config/**'
       - '.github/workflows/design-system.yml'
-      - '.github/actions/**'
+      - '.github/actions/setup/**'
   # `gh workflow run design-system.yml --ref <branch>` — manual re-trigger.
   workflow_dispatch:
 

@@ -13,14 +13,14 @@ on:
       - 'packages/auth/**'
       - 'packages/eslint-config/**'
       - '.github/workflows/auth.yml'
-      - '.github/actions/**'
+      - '.github/actions/setup/**'
   pull_request:
     branches: [main]
     paths:
       - 'packages/auth/**'
       - 'packages/eslint-config/**'
       - '.github/workflows/auth.yml'
-      - '.github/actions/**'
+      - '.github/actions/setup/**'
   workflow_dispatch:
 
 concurrency:
