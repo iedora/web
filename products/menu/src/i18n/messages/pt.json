@@ -758,7 +758,7 @@
       "heatingIndividual": "Individual",
       "heatingCentral": "Central",
       "heatingNone": "Sem aquecimento",
-      "yearBuilt": "Construído em {year}",
+      "yearBuilt": "Ano de construção",
       "delete": "Eliminar",
       "deleteTitle": "Eliminar propriedade",
       "deleteDescription": "Esta ação irá remover a propriedade de todas as plataformas onde foi publicada.",

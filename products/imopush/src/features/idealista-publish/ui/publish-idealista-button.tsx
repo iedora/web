@@ -13,7 +13,7 @@ type Props = {
 }
 
 export function PublishIdealistaButton({ reference, retry }: Props) {
-  const t = useTranslations('IdealistaPublish')
+  const t = useTranslations('Imopush.IdealistaPublish')
   const [isPending, startTransition] = useTransition()
   const toast = useToast()
 

@@ -100,6 +100,15 @@ var products = []product{
 				// tofu output name → container env var name
 				"menu_database_url":    "MENU_DATABASE_URL",
 				"core_database_url":    "CORE_DATABASE_URL",
+				// imopush_database_url is declared but the Tofu module
+				// hasn't emitted it yet (imopush isn't Stage-4 deployable
+				// — no per-product container, no DNS, no tunnel ingress).
+				// Listing the mapping here means: the moment the Tofu
+				// output lands, the web container picks it up without
+				// another code change. Until then, the imopush surface
+				// routes on apps/web are unreachable from prod (no host
+				// rewrite + no DB env), which is the intended state.
+				"imopush_database_url": "IMOPUSH_DATABASE_URL",
 				"assets_s3_endpoint":   "S3_ENDPOINT",
 				"assets_s3_public_url": "S3_PUBLIC_URL",
 				"assets_s3_bucket":     "S3_BUCKET",
