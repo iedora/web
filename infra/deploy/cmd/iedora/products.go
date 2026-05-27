@@ -100,15 +100,19 @@ var products = []product{
 				// tofu output name → container env var name
 				"menu_database_url":    "MENU_DATABASE_URL",
 				"core_database_url":    "CORE_DATABASE_URL",
-				// imopush_database_url is declared but the Tofu module
-				// hasn't emitted it yet (imopush isn't Stage-4 deployable
-				// — no per-product container, no DNS, no tunnel ingress).
-				// Listing the mapping here means: the moment the Tofu
-				// output lands, the web container picks it up without
-				// another code change. Until then, the imopush surface
-				// routes on apps/web are unreachable from prod (no host
-				// rewrite + no DB env), which is the intended state.
-				"imopush_database_url": "IMOPUSH_DATABASE_URL",
+				// IMOPUSH_DATABASE_URL is intentionally NOT mapped here
+				// yet. Stage 4 (this runtime) iterates this map eagerly
+				// and crashes the deploy if any output is missing —
+				// adding the entry pre-emptively breaks `bin/iedora
+				// deploy web` until the Tofu module emits the matching
+				// output (which requires the imopush product to be
+				// Stage-4-deployable: a postgres database, DNS, tunnel
+				// ingress). When that lands, add a single line:
+				//   "imopush_database_url": "IMOPUSH_DATABASE_URL",
+				// and the web container picks it up. Until then, the
+				// imopush surface routes on apps/web are unreachable
+				// from prod (no host rewrite, no DB env), which is the
+				// intended state.
 				"assets_s3_endpoint":   "S3_ENDPOINT",
 				"assets_s3_public_url": "S3_PUBLIC_URL",
 				"assets_s3_bucket":     "S3_BUCKET",
