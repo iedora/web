@@ -29,7 +29,7 @@
   },
   "peerDependencies": {
     "next": "^16.2.6",
-    "react": "^19.0.0"
+    "react": "^19.0.6"
   },
   "devDependencies": {
     "@iedora/eslint-config": "workspace:*",
