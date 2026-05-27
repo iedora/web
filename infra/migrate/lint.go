@@ -1,4 +1,4 @@
-package menudbmigrations
+package migrate
 
 import (
 	"fmt"
@@ -206,7 +206,7 @@ func FormatViolations(violations []LintViolation) error {
 // Live: violations are a hard fail. Local: violations are logged to
 // stderr but don't block the run (operator iterating on a destructive
 // migration shouldn't need to commit + annotate every loop).
-func gateMigrations(dir string, runMode mode.Mode) error {
+func GateMigrations(dir string, runMode mode.Mode) error {
 	violations, err := LintMigrations(dir)
 	if err != nil {
 		return err

@@ -1,4 +1,4 @@
-package menudbmigrations
+package migrate
 
 import (
 	"os"
@@ -162,14 +162,14 @@ func TestGateMigrations(t *testing.T) {
 	}
 	mustWrite("0001_drop.sql", `DROP TABLE "menu"."a" CASCADE;`)
 
-	if err := gateMigrations(dir, mode.Live); err == nil {
-		t.Fatal("gateMigrations(live) = nil, want error")
+	if err := GateMigrations(dir, mode.Live); err == nil {
+		t.Fatal("GateMigrations(live) = nil, want error")
 	} else if !strings.Contains(err.Error(), "Rule 3") {
 		t.Errorf("error does not name the rule: %v", err)
 	}
 
-	if err := gateMigrations(dir, mode.Local); err != nil {
-		t.Errorf("gateMigrations(local) = %v, want nil (local warns only)", err)
+	if err := GateMigrations(dir, mode.Local); err != nil {
+		t.Errorf("GateMigrations(local) = %v, want nil (local warns only)", err)
 	}
 }
 

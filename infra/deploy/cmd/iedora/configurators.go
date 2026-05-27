@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	coredbmigrations "github.com/eduvhc/iedora/infra/app-state/core-db-migrations"
+	imopushdbmigrations "github.com/eduvhc/iedora/infra/app-state/imopush-db-migrations"
 	menudbmigrations "github.com/eduvhc/iedora/infra/app-state/menu-db-migrations"
 	openobservedashboards "github.com/eduvhc/iedora/infra/app-state/openobserve-dashboards"
 )
@@ -54,13 +55,20 @@ var appConfigurators = []appConfigurator{
 		run:  coredbmigrations.Run,
 	},
 	{
-		// drizzle-kit migrate against the `menu` postgres database
-		// (postgres database name, owned by the menu slice of the web
-		// product). SSHes to the box and `docker run`s migrate.mjs
-		// from the web image at IMAGE_SHA.
+		// Drizzle migrations against the `menu` Postgres database.
+		// SSHes to the box and `docker run`s the dedicated migrate
+		// image (ghcr.io/<owner>/migrate:latest).
 		// See infra/app-state/menu-db-migrations/.
 		name: "menu-db-migrations",
 		run:  menudbmigrations.Run,
+	},
+	{
+		// Drizzle migrations against the `imopush` Postgres database.
+		// Currently a no-op (no tofu output `imopush_database_url`,
+		// no Hetzner deployable) — flips on when the Stage 4 path
+		// for imopush lands. See infra/app-state/imopush-db-migrations/.
+		name: "imopush-db-migrations",
+		run:  imopushdbmigrations.Run,
 	},
 	{
 		// 3 OpenObserve dashboards (business / technical / correlation)
