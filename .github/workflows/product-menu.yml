@@ -11,20 +11,17 @@
 name: '[product:menu] CI'
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'products/menu/**'
-      - 'packages/eslint-config/**'
-      - '.github/workflows/product-menu.yml'
-      - '.github/actions/setup/**'
+  # Quality gate — PR + merge queue only. Main is PR-only protected, so
+  # a push:main run would just duplicate the PR run that already passed.
   pull_request:
+    types: [opened, synchronize, reopened]
     branches: [main]
     paths:
       - 'products/menu/**'
       - 'packages/eslint-config/**'
       - '.github/workflows/product-menu.yml'
       - '.github/actions/setup/**'
+  merge_group:
   workflow_dispatch:
 
 concurrency:

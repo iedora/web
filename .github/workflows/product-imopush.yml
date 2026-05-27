@@ -8,15 +8,10 @@
 name: '[product:imopush] CI'
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'products/imopush/**'
-      - 'packages/db/**'
-      - 'packages/eslint-config/**'
-      - '.github/workflows/product-imopush.yml'
-      - '.github/actions/setup/**'
+  # Quality gate — PR + merge queue only. Main is PR-only protected, so
+  # a push:main run would just duplicate the PR run that already passed.
   pull_request:
+    types: [opened, synchronize, reopened]
     branches: [main]
     paths:
       - 'products/imopush/**'
@@ -24,6 +19,7 @@ on:
       - 'packages/eslint-config/**'
       - '.github/workflows/product-imopush.yml'
       - '.github/actions/setup/**'
+  merge_group:
   workflow_dispatch:
 
 concurrency:

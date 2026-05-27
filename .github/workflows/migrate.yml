@@ -17,6 +17,10 @@ name: '[infra] DB migrator image'
 
 on:
   workflow_dispatch: {}
+  # push:main retained — this workflow produces a Docker artefact
+  # (ghcr.io/eduvhc/migrate:<sha>) consumed by deploys. PR runs build
+  # the image but tag it with the PR head SHA; main is what gets the
+  # `:latest` tag promoted.
   push:
     branches: [main]
     paths:
@@ -30,6 +34,7 @@ on:
       - '.github/workflows/migrate.yml'
       - '.github/actions/**'
   pull_request:
+    types: [opened, synchronize, reopened]
     branches: [main]
     paths:
       - 'packages/auth/drizzle/**'
@@ -41,6 +46,7 @@ on:
       - 'package.json'
       - '.github/workflows/migrate.yml'
       - '.github/actions/**'
+  merge_group:
 
 concurrency:
   group: migrate-${{ github.ref }}

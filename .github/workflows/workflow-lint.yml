@@ -8,6 +8,8 @@
 name: '[security] Workflow policy'
 
 on:
+  # push:main kept as a safety net — admin overrides could land workflow
+  # changes without a PR. Cheap (~30s) so the duplicate cost is fine.
   push:
     branches: [main]
     paths:
@@ -15,11 +17,13 @@ on:
       - '.github/actions/**'
       - '.github/scripts/**'
   pull_request:
+    types: [opened, synchronize, reopened]
     branches: [main]
     paths:
       - '.github/workflows/**'
       - '.github/actions/**'
       - '.github/scripts/**'
+  merge_group:
 
 permissions:
   contents: read

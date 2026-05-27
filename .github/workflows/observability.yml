@@ -7,20 +7,17 @@
 name: '[package:observability] CI'
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'packages/iedora-observability/**'
-      - 'packages/eslint-config/**'
-      - '.github/workflows/observability.yml'
-      - '.github/actions/setup/**'
+  # Quality gate — PR + merge queue only. Main is PR-only protected, so
+  # a push:main run would just duplicate the PR run that already passed.
   pull_request:
+    types: [opened, synchronize, reopened]
     branches: [main]
     paths:
       - 'packages/iedora-observability/**'
       - 'packages/eslint-config/**'
       - '.github/workflows/observability.yml'
       - '.github/actions/setup/**'
+  merge_group:
   # `gh workflow run observability.yml --ref <branch>` — manual re-trigger.
   workflow_dispatch:
 

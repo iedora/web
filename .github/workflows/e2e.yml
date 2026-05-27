@@ -14,22 +14,26 @@
 name: '[e2e] CI'
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'apps/web/**'
-      - 'products/**'
-      - 'packages/**'
-      - '.github/workflows/e2e.yml'
-      - '.github/actions/setup/**'
+  # Quality gate — runs only on PRs (main is PR-only protected) and on
+  # the merge queue's transient ref. Paths cover the runtime: the shell,
+  # every product, every workspace package the shell loads at request
+  # time. `packages/eslint-config` is lint-only and intentionally omitted.
   pull_request:
+    types: [opened, synchronize, reopened]
     branches: [main]
     paths:
       - 'apps/web/**'
       - 'products/**'
-      - 'packages/**'
+      - 'packages/auth/**'
+      - 'packages/brand/**'
+      - 'packages/db/**'
+      - 'packages/design-system/**'
+      - 'packages/iedora-observability/**'
+      - 'packages/product-core/**'
+      - 'bun.lock'
       - '.github/workflows/e2e.yml'
       - '.github/actions/setup/**'
+  merge_group:
   workflow_dispatch:
 
 concurrency:

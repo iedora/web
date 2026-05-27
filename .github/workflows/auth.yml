@@ -7,20 +7,17 @@
 name: '[package:auth] CI'
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'packages/auth/**'
-      - 'packages/eslint-config/**'
-      - '.github/workflows/auth.yml'
-      - '.github/actions/setup/**'
+  # Quality gate — PR + merge queue only. Main is PR-only protected, so
+  # a push:main run would just duplicate the PR run that already passed.
   pull_request:
+    types: [opened, synchronize, reopened]
     branches: [main]
     paths:
       - 'packages/auth/**'
       - 'packages/eslint-config/**'
       - '.github/workflows/auth.yml'
       - '.github/actions/setup/**'
+  merge_group:
   workflow_dispatch:
 
 concurrency:

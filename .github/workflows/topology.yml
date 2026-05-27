@@ -18,20 +18,17 @@
 name: '[infra] Topology drift'
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'infra/deploy/cmd/iedora/**'
-      - 'infra/iac/tofu/topology.auto.tfvars.json'
-      - 'apps/web/src/generated/surfaces.ts'
-      - '.github/workflows/topology.yml'
+  # Quality gate — PR + merge queue only. Main is PR-only protected, so
+  # a push:main run would just duplicate the PR run that already passed.
   pull_request:
+    types: [opened, synchronize, reopened]
     branches: [main]
     paths:
       - 'infra/deploy/cmd/iedora/**'
       - 'infra/iac/tofu/topology.auto.tfvars.json'
       - 'apps/web/src/generated/surfaces.ts'
       - '.github/workflows/topology.yml'
+  merge_group:
 
 permissions:
   contents: read
@@ -43,7 +40,7 @@ jobs:
     timeout-minutes: 3
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
