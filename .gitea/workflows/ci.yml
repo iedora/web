@@ -253,6 +253,33 @@ jobs:
           chmod 600 ~/.ssh/ci_ed25519
           ssh-keyscan -H 192.168.50.53 >> ~/.ssh/known_hosts 2>/dev/null
 
+      - name: Pre-create Kamal builder with insecure LAN registry config
+        # Kamal cria o buildx builder remoto sem passar
+        # `--buildkitd-config`, e o buildkit container ignora o
+        # `insecure-registries` do daemon.json — precisa do seu próprio
+        # `buildkitd.toml`. Kamal não expõe esta config (issue #937).
+        # Pré-criamos o builder com o nome canónico que o Kamal espera
+        # — quando `kamal deploy` corre, vê builder existente e reusa.
+        shell: bash
+        run: |
+          set -e
+          cat > /tmp/buildkitd.toml <<EOF
+          [registry."192.168.50.53:3030"]
+            http = true
+            insecure = true
+          EOF
+
+          # Naming convention do Kamal: ssh://user@host → builder name
+          # `kamal-remote-<scheme>---<user>-<host>` (dots → dashes).
+          BUILDER=kamal-remote-ssh---root-192-168-50-53
+          docker buildx rm "$BUILDER" 2>/dev/null || true
+          docker buildx create \
+            --name "$BUILDER" \
+            --driver docker-container \
+            --buildkitd-config /tmp/buildkitd.toml \
+            ssh://root@192.168.50.53
+          docker buildx inspect "$BUILDER" --bootstrap | head -10
+
       - name: Release stale Kamal lock
         # Idempotent. Se um deploy anterior foi cancelado/crashou, o
         # lock fica no host e bloqueia o próximo. `|| true` cobre o
