@@ -1,0 +1,234 @@
+# Gitea — Git + OCI registry + Actions, com Caddy como subservice
+# (TLS termination para git.iedora.com via CF DNS-01).
+#
+# Endpoints:
+#   Web UI / API:           http://<host>:3030  (interno) ou
+#                           https://git.iedora.com (via Caddy:4443 + CF tunnel)
+#   OCI registry endpoint:  https://git.iedora.com:4443  (LAN com Caddy)
+#                           https://git.iedora.com       (público via CF)
+#   Git SSH:                ssh://git@<host>:3022/<owner>/<repo>.git
+#
+# First-boot Gitea setup: aceder via web, criar admin via wizard.
+# Para INSTALL_LOCK=true depois:
+#   docker exec gitea gitea admin user create --admin ...
+
+name: home-infra-gitea
+
+networks:
+  homelab-core:
+    external: true
+    name: homelab-core
+
+configs:
+  # Conteúdo inline (não `file:`). DOCKER_HOST=ssh:// com `file:` tenta
+  # bind-mount o caminho local no daemon remoto e falha. Mantém-se a
+  # source-of-truth como `./runner-config.yaml` para review/edição —
+  # actualizar ambos quando mudar.
+  gitea-runner-config:
+    content: |
+      log:
+        level: info
+
+      runner:
+        file: /data/.runner
+        capacity: 3
+        fetch_timeout: 5s
+        fetch_interval: 2s
+        timeout: 1h
+        shutdown_timeout: 30s
+        insecure: false
+
+      cache:
+        enabled: true
+        dir: /data/cache
+        host: ""
+        port: 0
+
+      container:
+        privileged: false
+        options: "--cpus=2 --memory=3g"
+        valid_volumes:
+          - /var/cache/buildx
+          - /var/cache/bun
+          - /var/cache/audit-tools
+          - /data/cache
+          - /root/.ssh/ci_ed25519
+
+      host: {}
+
+volumes:
+  gitea_data:
+  gitea_config:
+  gitea_runner_data:
+  # Volume efémero partilhado entre `gitea-runner-init` (escreve) e
+  # `gitea-runner` (lê). Mantém o token de registo fora do BWS — é um
+  # detalhe interno do compose, não atravessa boundary alguma.
+  gitea_runner_token:
+  # Caddy persistência (certs LE + ACME state). Sem isto, cada restart
+  # do container re-acquire o cert (e bate no rate limit).
+  caddy_data:
+  caddy_config:
+
+services:
+  # ── Gitea: Git + OCI registry + Actions ──────────────────────────────
+  gitea:
+    image: gitea/gitea:1.26.2-rootless
+    container_name: gitea
+    restart: unless-stopped
+    networks:
+      homelab-core:
+        aliases: [gitea]
+    ports:
+      - "3030:3000"
+      - "3022:2222"
+    volumes:
+      - gitea_data:/var/lib/gitea
+      - gitea_config:/etc/gitea
+    environment:
+      GITEA__security__INSTALL_LOCK: "true"
+      GITEA__database__DB_TYPE: sqlite3
+      GITEA__database__PATH: /var/lib/gitea/data/gitea.db
+      GITEA__server__DOMAIN: ${GITEA_DOMAIN}
+      GITEA__server__HTTP_PORT: "3000"
+      GITEA__server__SSH_PORT: "3022"
+      GITEA__server__SSH_DOMAIN: ${GITEA_DOMAIN}
+      GITEA__server__ROOT_URL: "https://git.iedora.com/"
+      GITEA__service__DISABLE_REGISTRATION: "true"
+      GITEA__service__REQUIRE_SIGNIN_VIEW: "false"
+      GITEA__service__ENABLE_BASIC_AUTHENTICATION: "true"
+      GITEA__actions__ENABLED: "true"
+    healthcheck:
+      # `service_healthy` no init container abaixo depende disto.
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/healthz >/dev/null || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 30s
+    logging: { driver: json-file, options: { max-size: 10m } }
+
+  # ── Caddy: TLS termination para git.iedora.com (subservice do gitea) ─
+  # Porto host 4443 (não :443) porque kamal-proxy ocupa :443. Builder
+  # usa `git.iedora.com:4443` + /etc/hosts override no Beelink
+  # (127.0.0.1 git.iedora.com).
+  caddy:
+    build:
+      context: ./caddy
+    container_name: caddy
+    restart: unless-stopped
+    networks:
+      homelab-core:
+        aliases: [caddy]
+    ports:
+      - "4443:443"
+    environment:
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN}
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    logging: { driver: json-file, options: { max-size: 10m } }
+
+  # ── Gitea admin user bootstrap ───────────────────────────────────────
+  # One-shot: cria o admin user a partir das env vars. Idempotente:
+  # `gitea admin user create` retorna erro se user já existe — descartamos
+  # esse erro específico via grep.
+  gitea-admin-init:
+    image: gitea/gitea:1.26.2-rootless
+    container_name: gitea-admin-init
+    depends_on:
+      gitea:
+        condition: service_healthy
+    networks:
+      homelab-core:
+    environment:
+      GITEA_ADMIN_USERNAME: ${GITEA_ADMIN_USERNAME}
+      GITEA_ADMIN_PASSWORD: ${GITEA_ADMIN_PASSWORD}
+      GITEA_ADMIN_EMAIL: ${GITEA_ADMIN_EMAIL}
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        OUT=$$(gitea admin user create \
+          --admin \
+          --username "$$GITEA_ADMIN_USERNAME" \
+          --password "$$GITEA_ADMIN_PASSWORD" \
+          --email "$$GITEA_ADMIN_EMAIL" \
+          --must-change-password=false 2>&1) || true
+        if echo "$$OUT" | grep -q "already exists"; then
+          echo "✓ admin user $$GITEA_ADMIN_USERNAME já existe"
+        elif echo "$$OUT" | grep -q "successfully created"; then
+          echo "→ admin user $$GITEA_ADMIN_USERNAME criado"
+        else
+          echo "$$OUT"
+          [ -n "$$OUT" ] || echo "✓ admin user $$GITEA_ADMIN_USERNAME (sem output, assume OK)"
+        fi
+    volumes:
+      - gitea_data:/var/lib/gitea
+      - gitea_config:/etc/gitea
+    restart: "no"
+    logging: { driver: json-file, options: { max-size: 10m } }
+
+  # ── Gitea runner registration token bootstrap ────────────────────────
+  # One-shot: corre `gitea actions generate-runner-token` e escreve
+  # para um volume partilhado. O runner lê via
+  # GITEA_RUNNER_REGISTRATION_TOKEN_FILE. Em re-runs o runner ignora o
+  # token novo (já tem .runner persistido), portanto é idempotente.
+  gitea-runner-init:
+    image: curlimages/curl:8.10.1
+    container_name: gitea-runner-init
+    # Depende do admin-init para garantir que admin user existe (precisamos
+    # de Basic auth para chamar /api/v1/admin/actions/runners/registration-token).
+    depends_on:
+      gitea-admin-init:
+        condition: service_completed_successfully
+    networks:
+      homelab-core:
+    # curlimages/curl corre como UID 100 por default; volume /token é
+    # criado root:root pelo daemon. Corremos como root para escrever lá.
+    user: "0"
+    environment:
+      GITEA_ADMIN_USERNAME: ${GITEA_ADMIN_USERNAME}
+      GITEA_ADMIN_PASSWORD: ${GITEA_ADMIN_PASSWORD}
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        set -e
+        TOKEN=$$(curl -fsS -X POST -u "$$GITEA_ADMIN_USERNAME:$$GITEA_ADMIN_PASSWORD" \
+          "http://gitea:3000/api/v1/admin/actions/runners/registration-token" \
+          | sed -E 's/.*"token":"([^"]+)".*/\1/')
+        if [ -z "$$TOKEN" ]; then echo "failed to obtain runner token" >&2; exit 1; fi
+        printf '%s' "$$TOKEN" > /token/runner-token
+        echo "✓ runner registration token obtido (len=$${#TOKEN})"
+    volumes:
+      - gitea_runner_token:/token
+    restart: "no"
+    logging: { driver: json-file, options: { max-size: 10m } }
+
+  # ── Gitea Actions runner (act_runner) ────────────────────────────────
+  # Self-registers via GITEA_RUNNER_REGISTRATION_TOKEN_FILE (token
+  # escrito pelo `gitea-runner-init` num volume partilhado), persiste
+  # config em gitea_runner_data; restarts subsequentes reusam-na.
+  # Labels mapeados a Docker images (Gitea convention).
+  gitea-runner:
+    image: gitea/act_runner:latest
+    container_name: gitea-runner
+    restart: unless-stopped
+    depends_on:
+      gitea-runner-init:
+        condition: service_completed_successfully
+    networks:
+      homelab-core:
+        aliases: [gitea-runner]
+    environment:
+      GITEA_INSTANCE_URL: "http://${GITEA_DOMAIN}:3030"
+      GITEA_RUNNER_REGISTRATION_TOKEN_FILE: /token/runner-token
+      GITEA_RUNNER_NAME: beelink-runner
+      GITEA_RUNNER_LABELS: "ubuntu-latest:docker://node:24-bookworm,bun-debian:docker://oven/bun:1.3-debian"
+      CONFIG_FILE: /config/config.yaml
+    configs:
+      - source: gitea-runner-config
+        target: /config/config.yaml
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - gitea_runner_data:/data
+      - gitea_runner_token:/token:ro
+      - /var/cache/buildx:/var/cache/buildx
+    logging: { driver: json-file, options: { max-size: 10m } }

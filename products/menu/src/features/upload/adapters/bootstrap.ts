@@ -31,7 +31,7 @@ function publicReadPolicy(bucket: string): string {
 // caller pays the network cost; the rest see `bootstrapped === true` and skip.
 //
 // Skip entirely for Cloudflare R2: bucket + CORS + public-access custom
-// domain are all declaratively managed by infra/iac/tofu/. PutBucketPolicy is
+// domain are all declaratively managed (via infra-bootstrap). PutBucketPolicy is
 // also unsupported on R2 (public access is via the custom-domain binding,
 // not a bucket policy), so trying to apply this would error.
 export async function ensureBucket(storage: S3Storage, bucket: string): Promise<void> {

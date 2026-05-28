@@ -74,5 +74,5 @@ convention).
 
 ## CI
 
-`.github/workflows/product-imopush.yml` — typecheck + lint + vitest
-(same shape as `product-menu.yml`).
+`.gitea/workflows/ci.yml` — single job: typecheck + lint + test for all
+workspaces (imopush included).

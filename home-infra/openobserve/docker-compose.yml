@@ -1,0 +1,38 @@
+# OpenObserve — log/trace/metric aggregation. Standalone (sem deps),
+# rede partilhada `homelab-core` para vizinhos (iedora-web → otel
+# collector → openobserve).
+#
+# UI:       http://<host>:5080
+# OTLP HTTP: http://<host>:5080/api/default
+# OTLP gRPC: http://<host>:5081
+
+name: home-infra-openobserve
+
+networks:
+  homelab-core:
+    external: true
+    name: homelab-core
+
+volumes:
+  openobserve_data:
+
+services:
+  openobserve:
+    image: public.ecr.aws/zinclabs/openobserve:v0.90.3
+    container_name: openobserve
+    restart: unless-stopped
+    networks:
+      homelab-core:
+        aliases: [openobserve]
+    environment:
+      ZO_DATA_DIR: /data
+      ZO_HTTP_PORT: "5080"
+      ZO_GRPC_PORT: "5081"
+      ZO_ROOT_USER_EMAIL: ${ZO_ROOT_USER_EMAIL}
+      ZO_ROOT_USER_PASSWORD: ${OPENOBSERVE_ADMIN_PASSWORD}
+    volumes:
+      - openobserve_data:/data
+    ports:
+      - "5080:5080"
+      - "5081:5081"
+    logging: { driver: json-file, options: { max-size: 10m } }

@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint --cache --cache-location node_modules/.cache/.eslintcache",
-    "typecheck": "tsc --build",
+    "typecheck": "tsgo --build",
     "test": "echo 'unit tests live in products/ and packages/'",
     "build:test": "bun --env-file=.env.test next build",
     "test:e2e": "bun --env-file=.env.test playwright test",

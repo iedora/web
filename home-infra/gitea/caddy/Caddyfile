@@ -1,0 +1,17 @@
+# TLS termination para hostnames internos do homelab via Cloudflare
+# DNS-01 challenge (bypassa o CF proxy — LE issue via API token sem
+# challenge HTTP-01 público).
+#
+# Subservice do gitea: serve o registry OCI em https://git.iedora.com.
+# Outros hosts podem ser adicionados aqui (replicar o bloco).
+
+{
+	email eduardoferdcarvalho@gmail.com
+}
+
+git.iedora.com {
+	tls {
+		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+	}
+	reverse_proxy gitea:3000
+}

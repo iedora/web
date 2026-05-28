@@ -1,0 +1,23 @@
+# Connector do tunnel `iedora-public` (traffic anónimo).
+# Vive na `homelab-core` para chegar a kamal-proxy via host gateway.
+# Lifecycle independente do Kamal — boot via bin.sh.
+
+name: iedora-public-cloudflared
+
+networks:
+  homelab-core:
+    external: true
+    name: homelab-core
+
+services:
+  cloudflared:
+    image: cloudflare/cloudflared:2025.10.0
+    container_name: iedora-public-cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${IEDORA_TUNNEL_TOKEN}
+    networks: [homelab-core]
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    logging: { driver: json-file, options: { max-size: 10m } }

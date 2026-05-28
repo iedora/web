@@ -121,72 +121,7 @@
 }
 .landing-root .nav-cta:hover { background: var(--ink); color: var(--paper); }
 
-/* language switcher — flags only, hairline between, ink-08 on active.
-   Has two children: `.lang-row` (full inline list, desktop default)
-   and `.lang-compact` (single trigger + popover, revealed on phone). */
-.landing-root .lang-switch {
-  display: inline-flex;
-  align-items: center;
-  position: relative;
-}
-.landing-root .lang-row {
-  display: inline-flex;
-  align-items: center;
-  border: 1px solid var(--ink-14);
-}
-.landing-root .lang-compact { display: none; position: relative; }
-.landing-root .lang-btn {
-  appearance: none;
-  background: transparent;
-  border: 0;
-  border-right: 1px solid var(--ink-14);
-  padding: 6px 10px;
-  cursor: pointer;
-  color: var(--ink-55);
-  transition: background-color var(--d-2) var(--ease), color var(--d-2) var(--ease);
-}
-.landing-root .lang-row .lang-btn:last-child { border-right: 0; }
-.landing-root .lang-btn .flag {
-  font-size: 14px;
-  line-height: 1;
-  filter: saturate(0.85);
-  opacity: 0.7;
-  transition: filter var(--d-2) var(--ease), opacity var(--d-2) var(--ease);
-}
-.landing-root .lang-btn:hover .flag { opacity: 1; filter: saturate(1); }
-.landing-root .lang-btn.active { background: var(--ink-04); color: var(--ink); }
-.landing-root .lang-btn.active .flag { opacity: 1; filter: saturate(1); }
-
-.landing-root .lang-trigger {
-  border: 1px solid var(--ink-14);
-  border-right: 1px solid var(--ink-14);
-}
-.landing-root .lang-pop {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  display: inline-flex;
-  background: var(--paper);
-  border: 1px solid var(--ink-14);
-  z-index: 5;
-  opacity: 0;
-  transform: translateY(-4px);
-  animation: landing-pop-in var(--d-3) var(--ease-open) forwards;
-}
-.landing-root .lang-pop .lang-btn { border-right: 1px solid var(--ink-14); }
-.landing-root .lang-pop .lang-btn:last-child { border-right: 0; }
-
-@keyframes landing-pop-in {
-  to { opacity: 1; transform: translateY(0); }
-}
-
-/* Lang switcher swaps to a single-flag trigger on phone. The wider
-   inline row stays available everywhere else — every feature on PC is
-   reachable on mobile, just compacted. */
-@media (max-width: 520px) {
-  .landing-root .lang-row { display: none; }
-  .landing-root .lang-compact { display: inline-flex; }
-}
+/* Language switcher styles live in @iedora/design-system as `.ds-lang*`. */
 
 /* ── buttons ──────────────────────────────────────────────────── */
 

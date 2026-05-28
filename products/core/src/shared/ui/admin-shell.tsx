@@ -13,7 +13,7 @@ import {
 } from '@iedora/design-system'
 import { hasStaffScope } from '@iedora/auth/permissions'
 import { SCOPES } from '@iedora/auth/scopes'
-import { ActiveSidebarLinks, type ActiveSidebarItem } from './active-sidebar-links'
+import { ActiveSidebarLinks, type ActiveSidebarItem } from '@iedora/design-system'
 
 /**
  * Cross-tenant admin chrome. Two-column on lg+, drawer on mobile.

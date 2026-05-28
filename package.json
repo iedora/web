@@ -8,11 +8,20 @@
     "apps/*"
   ],
   "scripts": {
-    "typecheck": "bun run --workspaces typecheck",
-    "lint": "bun run --workspaces lint",
+    "dev": "bun run --cwd apps/web dev",
+    "dev:up": "docker compose --env-file dev/.env -f dev/docker-compose.yml up -d",
+    "dev:down": "docker compose --env-file dev/.env -f dev/docker-compose.yml down",
+    "dev:logs": "docker compose --env-file dev/.env -f dev/docker-compose.yml logs -f",
+    "dev:reset": "docker compose --env-file dev/.env -f dev/docker-compose.yml down -v",
+    "dev:migrate": "bun run --cwd packages/auth db:migrate && bun run --cwd products/menu db:migrate && bun run --cwd products/imopush db:migrate",
+    "setup:mac": "./scripts/setup-laptop-mac.sh",
+    "homelab:up": "./homelab-core-infra/up.sh",
+    "homelab:down": "docker compose -f homelab-core-infra/docker-compose.yml down",
+    "homelab:logs": "docker compose -f homelab-core-infra/docker-compose.yml logs -f",
+    "typecheck": "bun run scripts/run-parallel.mjs typecheck",
+    "lint": "bun run scripts/run-parallel.mjs lint",
     "test": "bun run --workspaces test",
-    "ci:check": "actionlint -color .github/workflows/*.yml && (command -v shellcheck >/dev/null && shellcheck --shell=bash .github/scripts/*.sh || true)",
-    "postinstall": "[ -n \"${CI:-}\" ] && exit 0; mkdir -p .git/hooks && cp scripts/git-hooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit && echo '✓ git hooks installed (actionlint + shellcheck)' || true"
+    "postinstall": "[ -n \"${CI:-}\" ] && exit 0; mkdir -p .git/hooks && cp scripts/git-hooks/pre-commit .git/hooks/pre-commit && cp scripts/git-hooks/commit-msg .git/hooks/commit-msg && chmod +x .git/hooks/pre-commit .git/hooks/commit-msg && echo '✓ git hooks installed (pre-commit: actionlint+shellcheck on .gitea/, commit-msg: conventional)' || true"
   },
   "catalog": {
     "drizzle-orm": "^0.45.2",
@@ -21,12 +30,19 @@
     "eslint": "^9.39.4",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.46.0",
-    "vitest": "^4.1.7",
+    "vitest": "5.0.0-beta.3",
     "next": "16.2.6",
     "next-intl": "^4.12.0",
     "react": "19.2.6",
     "react-dom": "19.2.6",
     "@types/react": "^19.2.15",
     "@types/react-dom": "^19.2.3"
+  },
+  "devDependencies": {
+    "@typescript/native-preview": "^7.0.0-dev.20260527.2"
+  },
+  "overrides": {
+    "esbuild": "^0.25.12",
+    "postcss": "^8.5.14"
   }
 }

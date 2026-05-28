@@ -1,34 +1,19 @@
 import type { Metadata } from 'next'
-import { Wordmark } from '@iedora/design-system'
+import LandingPage from './_components/landing/landing-page'
 
 /**
  * imopush.iedora.com — the imopush product surface. `proxy.ts` rewrites
  * the `imopush.iedora.com` host into `/imopush/*` so the user-visible
- * URL stays clean. Scaffold landing page until the first slice lands.
+ * URL stays clean. Today the surface is the coming-soon landing; the
+ * first feature slice will land at a sub-route.
  */
 
 export const metadata: Metadata = {
-  title: 'imopush',
-  description: 'TBD — a new iedora product in the making.',
+  title: 'imopush — one listing, every portal',
+  description:
+    'Publish your property once on imopush and it lands on Idealista, Custojusto, OLX and Imovirtual automatically.',
 }
 
-export default function ImopushLanding() {
-  return (
-    <main className="ds-shell" id="top">
-      <header className="ds-hero" data-test-id="imopush-hero">
-        <span className="ds-eyebrow">
-          <span className="ds-eyebrow__idx">/ 02</span>
-          <span>
-            <Wordmark variant="inline" />
-          </span>
-        </span>
-        <h1 className="ds-hero__h ds-hero__h--dot">
-          <em>imopush</em> — coming soon.
-        </h1>
-        <p className="ds-hero__tagline">
-          Scaffold only. First slice lands in a follow-up commit.
-        </p>
-      </header>
-    </main>
-  )
+export default function ImopushSurface() {
+  return <LandingPage />
 }

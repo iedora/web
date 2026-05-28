@@ -14,6 +14,11 @@
 // but speaks the same vocabulary and ships from this package.
 
 export { Wordmark } from "./components/wordmark";
+export {
+  LangSwitcher,
+  type LangOption,
+  type LangSwitcherProps,
+} from "./components/lang-switcher";
 export { KeyMark } from "./components/key-mark";
 export { MetaStrip } from "./components/meta-strip";
 export { Statement } from "./components/statement";
@@ -68,6 +73,11 @@ export {
   SidebarProvider,
   useSidebar,
 } from "./components/sidebar";
+export {
+  ActiveSidebarLinks,
+  type ActiveSidebarItem,
+  type ActiveSidebarLinksProps,
+} from "./components/active-sidebar-links";
 
 export { Button, type ButtonProps } from "./components/button";
 export { Badge } from "./components/badge";

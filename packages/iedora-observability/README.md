@@ -88,7 +88,7 @@ The counter is safe to create at module load even before
 | `service.name`                   | `opts.serviceName`                                  |
 | `service.version`                | `process.env.GIT_SHA` (CI passes on build)          |
 | `deployment.environment.name`    | `process.env.DEPLOYMENT_ENV` ?? `NODE_ENV`          |
-| `host.name`                      | `process.env.HOST_NAME` (Tofu injects per fleet.tf) |
+| `host.name`                      | `process.env.HOST_NAME`                             |
 
 These match the iedora fleet manifest one-to-one — see issue #8 for the
 manifest → resource-attribute derivation.

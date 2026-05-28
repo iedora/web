@@ -1,0 +1,44 @@
+# gitea/act_runner config. Mountado em /config/config.yaml no container
+# (env CONFIG_FILE), aplica-se na primeira boot. Sobrepõe-se aos defaults.
+#
+# Notes:
+#   - capacity > 1 paraleliza matrix jobs (CPU compartilhado com OO,
+#     Gitea, iedora-web na mesma Beelink — 3 é o equilibrio para um
+#     N100 8-core).
+#   - cache.dir vive no volume `gitea_runner_data` (persistente).
+#     actions/cache@v4 talks ao server interno via ACTIONS_CACHE_URL
+#     injectado automaticamente.
+#   - valid_volumes whitelist permite workflows montar /var/cache/buildx
+#     no host (buildx local cache pattern para Docker builds).
+
+log:
+  level: info
+
+runner:
+  file: /data/.runner
+  capacity: 3
+  fetch_timeout: 5s
+  fetch_interval: 2s
+  timeout: 1h
+  shutdown_timeout: 30s
+  insecure: false
+
+cache:
+  enabled: true
+  dir: /data/cache
+  host: ""        # auto-detected
+  port: 0         # auto-allocated
+
+container:
+  privileged: false
+  options: "--cpus=2 --memory=3g"
+  valid_volumes:
+    - /var/cache/buildx
+    - /var/cache/bun
+    - /var/cache/audit-tools
+    - /data/cache
+    # SSH key do host para o `deploy` job fazer rsync + ssh trigger ao
+    # próprio Beelink (runner está no mesmo box; sem fetch do BWS).
+    - /root/.ssh/ci_ed25519
+
+host: {}

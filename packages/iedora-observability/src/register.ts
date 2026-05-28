@@ -222,7 +222,7 @@ export type RegisterOptions = {
  *   service.name               = opts.serviceName
  *   service.version            = $GIT_SHA (CI passes on container build)
  *   deployment.environment     = $DEPLOYMENT_ENV ?? NODE_ENV
- *   host.name                  = $HOST_NAME (Tofu injects per fleet.tf)
+ *   host.name                  = $HOST_NAME
  *
  * Three signals get wired in one call:
  *

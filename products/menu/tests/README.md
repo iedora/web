@@ -210,24 +210,19 @@ bun run test:e2e:debug      # PWDEBUG=1
 One workflow per workspace. Each `paths:`-filtered. See [`docs/testing/e2e-architecture.md`](../../../docs/testing/e2e-architecture.md) for the cross-product E2E design and the shared composite action.
 
 ```
-.github/
-  actions/
-    setup/action.yml             composite: Bun + bun install --frozen-lockfile
-    e2e-run/action.yml           shared Playwright harness (services, migrate, build, specs)
+.gitea/
   workflows/
-    product-menu.yml             menu's full pipeline
-    design-system.yml            @iedora/design-system
-    observability.yml            @iedora/observability
+    ci.yml                       3 jobs: ci + audit + deploy (gated)
 ```
 
-**`product-menu.yml` jobs** (parallel except e2e):
+**`ci.yml` jobs**:
 
-- **Typecheck** — `bun run typecheck`. ~2 min.
-- **Lint** — `bun run lint`. ~2 min.
-- **Unit (Vitest)** — `bun run test`. ~3 min.
-- **E2E (Playwright)** — `needs: [typecheck, lint, unit]`. Declares Postgres 18 + adobe/s3mock as service containers, then delegates everything else to `.github/actions/e2e-run` (composite action). Shard matrix is parked at `1/1` — bump to `[1/2, 2/2]` when the suite grows past ~10 min. Per-worker DB isolation is already wired.
+- **`ci`** (sequential in one container): typecheck + lint + test (all workspaces). ~7 min.
+- **`audit`** (paralelo a `ci`): gitleaks + hadolint + osv-scanner.
+- **`deploy`** (push a main, `needs: [ci, audit]`): `kamal deploy -d production`.
 
-Every job that needs deps is one line: `uses: ./.github/actions/setup`.
+E2E is not yet in Gitea Actions (requires Postgres + s3mock as service
+containers). Run locally via `bun run test:e2e`.
 
 Branch protection is deliberately off — solo, AI-driven; CI is the signal.
 
@@ -245,10 +240,8 @@ Iteration ladder, fastest first:
    ```
    For flake hunting: `--repeat-each=N --workers=M` surfaces timing races faster than any CI run.
 
-2. **`gh workflow run`** — re-trigger the real hosted runner without a new commit. Every workflow has `workflow_dispatch:` wired.
-   ```
-   gh workflow run menu.yml --ref <branch>
-   ```
+2. **Gitea Actions re-run** — re-trigger the workflow from the Gitea UI
+   (Actions → workflow → Re-run). Every workflow has `workflow_dispatch:` wired.
 
 3. **Draft PR on a feature branch** — final integration check before merge.
 

@@ -22,9 +22,8 @@
  *   1. Append the id to `PRODUCTS`.
  *   2. Add a `case` branch to `productUrl` (TypeScript exhaustiveness
  *      catches the missing branch).
- *   3. The new env var (`NEXT_PUBLIC_<ID>_URL`) is composed by
- *      `bin/dev-stack` (dev) and `infra/deploy/cmd/iedora/topology.go`
- *      (prod) — both feed off the surface registry on the Go side.
+ *   3. The new env var (`NEXT_PUBLIC_<ID>_URL`) is composed by the
+ *      local dev environments (dev) and Kamal/proxy configuration (prod).
  *
  * Pure — no `server-only`, no I/O, safe for client + server.
  */

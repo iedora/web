@@ -1,0 +1,104 @@
+# Deploy — workflow separado, accionado por changes específicas.
+#
+# Paths que accionam:
+#   - source (afecta a imagem)            **/*.{ts,tsx,js,mjs,cjs}, package.json, bun.lock
+#   - Dockerfile                          **/Dockerfile
+#   - Kamal config + secrets/hooks        config/**, .kamal/**
+#
+# Paths que NÃO accionam (audit/ci tratam):
+#   docs/**, *.md, AGENTS.md, .gitleaks-baseline.json, .gitignore,
+#   .gitea/workflows/**, .gitea/audit/**, home-infra/**,
+#   tsconfig*, vitest.config*, eslint.config* (são CI-only)
+#
+# Não há gating por ci/audit — workflow standalone, corre independente.
+# Razão: deploy iterations não devem esperar 5 min de tests cada vez.
+# Se o code estiver partido, o `kamal deploy` falha cedo (pre-deploy
+# hook) ou tarde (healthcheck) — protecção suficiente para um homelab
+# single-operator.
+
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**/*.ts'
+      - '**/*.tsx'
+      - '**/*.js'
+      - '**/*.mjs'
+      - '**/*.cjs'
+      - '**/package.json'
+      - 'bun.lock'
+      - '**/Dockerfile'
+      - 'config/**'
+      - '.kamal/**'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false   # mid-deploy abort = estado inconsistente
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────
+  # Dispara Kamal NO Beelink via SSH. Não há Kamal, buildx ou ruby a
+  # correr no CI runner — só `rsync` + `ssh`.
+  #
+  # Razão arquitetural: o gitea-runner corre fisicamente no Beelink, e
+  # o build/push do Kamal entre runner-container e buildkit-container
+  # ignora o insecure-registries do daemon.json (basecamp/kamal#937).
+  # Em vez de layeran workarounds, corremos Kamal no host directamente
+  # — usa o default `docker` buildx driver (= daemon do host) que
+  # respeita o daemon.json.
+  #
+  # Setup do Beelink (Ruby + Kamal gem + /opt/iedora) é 1x via
+  # `./home-infra/scripts/bootstrap.sh` (+ my-services/iedora/scripts/bootstrap.sh).
+  #
+  # `kamal deploy` no Beelink:
+  #   - build local (docker driver, amd64 nativo do Beelink)
+  #   - push 192.168.50.53:3030 = localhost-to-localhost (insecure OK)
+  #   - .kamal/hooks/pre-deploy aplica migrations
+  #   - blue-green swap; healthcheck fail → versão antiga continua
+  # ─────────────────────────────────────────────────────────────────
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container:
+      # SSH key bind-mounted directamente do host (runner vive no
+      # Beelink). Apenas ssh-trigger ao Kamal — source vem do git
+      # pull no Beelink (sem rsync gigante a cada deploy).
+      image: debian:bookworm-slim
+      volumes:
+        - /root/.ssh/ci_ed25519:/root/.ssh/ci_ed25519:ro
+    steps:
+      - name: Trigger Kamal on Beelink (git fetch + deploy)
+        # Sem checkout/rsync: o Beelink faz git fetch + checkout do
+        # commit SHA (auth via /root/.netrc para git.iedora.com,
+        # gerado pelo `up.sh --bootstrap-ci`). Source de verdade
+        # vive lá; CI só dispara.
+        shell: bash
+        env:
+          BWS_ACCESS_TOKEN: ${{ secrets.BWS_ACCESS_TOKEN }}
+          KAMAL_REGISTRY_PASSWORD: ${{ secrets.KAMAL_REGISTRY_PASSWORD }}
+        run: |
+          set -e
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends openssh-client ca-certificates
+
+          SSH_OPTS=(-i /root/.ssh/ci_ed25519 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/tmp/known_hosts)
+
+          # shellcheck disable=SC2087  # intentional: env vars expanded
+          # client-side, send resolved values to SSH.
+          ssh "${SSH_OPTS[@]}" root@192.168.50.53 bash <<EOF
+          set -e
+          cd /opt/iedora
+          git fetch origin
+          git checkout '$GITHUB_SHA'
+          export BWS_ACCESS_TOKEN='$BWS_ACCESS_TOKEN'
+          export KAMAL_REGISTRY_PASSWORD='$KAMAL_REGISTRY_PASSWORD'
+          kamal lock release -d production || true
+          # 'kamal setup' em vez de 'kamal deploy' — setup eh idempotente
+          # e GARANTE que accessories (postgres) estao up antes do app.
+          # Plain 'kamal deploy' nao boota accessories (ver
+          # service-references/kamal/lib/kamal/cli/main.rb).
+          kamal setup -d production
+          EOF

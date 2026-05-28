@@ -45,7 +45,7 @@ Repo-level conventions: [`../../AGENTS.md`](../../AGENTS.md).
    without touching this file.
 
 5. **One image, three hosts.** The Docker image published as
-   `ghcr.io/eduvhc/web` serves `menu.iedora.com`, `core.iedora.com`,
+   `git.iedora.com/eduvhc/web` serves `menu.iedora.com`, `core.iedora.com`,
    and `iedora.com` from the same node process. Adding a new host =
    new entry in `proxy.ts` + new sub-route under `src/app/<host>/`
    + new workspace dep in `package.json` + new entry in
@@ -99,7 +99,6 @@ Real tests live with the products: `bun run --cwd products/menu test` /
 
 ## Deployable artefact
 
-CI workflow `[apps:web] CI` builds + pushes `ghcr.io/eduvhc/web:<sha>`
-(arm64). Stage 4 (`bin/iedora-env bin/iedora deploy web`) SSHes to the
-Hetzner box, hot-swaps the `infra-web` container. See
-[`../../docs/deploy/README.md`](../../docs/deploy/README.md).
+Job `deploy` em `.gitea/workflows/ci.yml` (gated por `needs: [ci,
+audit]`) builds + pushes `git.iedora.com/eduvhc/web:<sha>` via `kamal
+deploy`. See [`../../docs/deploy/README.md`](../../docs/deploy/README.md).

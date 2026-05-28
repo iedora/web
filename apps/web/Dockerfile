@@ -3,13 +3,12 @@
 # workspaces monorepo. The shell hosts every logical product (menu,
 # core, house) via host-based rewrites in src/proxy.ts.
 #
-# Build context is the REPO ROOT. The image is built + pushed to GHCR by
-# `.github/workflows/web.yml`; the running container (`infra-web`) is
-# managed by Stage 4 of the deploy pipeline
-# (`infra/deploy/cmd/iedora/runtime_docker.go`). Bun installs the
-# workspace deps; Node executes the build (Bun + next build is unstable
-# per AGENTS.md); final image runs server.js on Node over Next's
-# standalone output.
+# Build context is the REPO ROOT. The image is built + pushed to the
+# Gitea OCI registry by `.gitea/workflows/deploy.yml`; the running
+# container is managed by Kamal (zero-downtime hot-swap). Bun installs
+# the workspace deps; Node executes the build (Bun + next build is
+# unstable per AGENTS.md); final image runs server.js on Node over
+# Next's standalone output.
 #
 # All three stages are glibc (Debian) — no musl→glibc handoff between
 # install/build/runtime keeps native-module prebuilts (postgres-js, sharp,
@@ -43,15 +42,13 @@ COPY --link apps/web/package.json apps/web/package.json
 
 # BuildKit cache mount keeps the Bun global cache warm across rebuilds on
 # the same builder host. The cache layer never ships in the image, so it
-# is registry-agnostic (works on GHCR, Docker Hub, ECR — all the same).
+# is registry-agnostic (works on any OCI-compatible registry).
 RUN --mount=type=cache,target=/root/.bun/install/cache,sharing=locked \
     bun install --frozen-lockfile --ignore-scripts
 
 # Migration bundle is no longer built here. DOCKER-2 split it into a
-# dedicated `ghcr.io/eduvhc/migrate` image (infra/migrate/Dockerfile +
-# .github/workflows/migrate.yml) so schema migrations land without
-# forcing a Next rebuild. Stage-3 configurators run that image, not
-# this one.
+# dedicated migrate image so schema migrations land without forcing a
+# Next rebuild. Stage-3 configurators run that image, not this one.
 
 # ── Stage 2: build ────────────────────────────────────────────────────────────
 FROM node:${NODE_VERSION} AS builder
@@ -76,7 +73,7 @@ ENV NODE_ENV=production
 
 # SKIP_ENV_VALIDATION=1 returns a build-time stub Proxy from src/shared/env.ts
 # so Next can collect page data without real env. Runtime env is injected
-# by the repo-root Tofu container resource (TF-minted OIDC + session secrets).
+# by the runtime container environment (OIDC + session secrets).
 ENV SKIP_ENV_VALIDATION=1
 
 # Version skew protection — embedded as deploymentId in next.config.ts.
@@ -95,7 +92,7 @@ ENV DEPLOYMENT_VERSION=${DEPLOYMENT_VERSION}
 #
 # Prod CI: no .env present → productUrl()'s `??` fallback returns the
 # canonical `https://<id>.iedora.com` URL.
-# Dev: bin/dev-stack writes the localhost values → bundle ships them.
+# Dev: Local environment writes the localhost values → bundle ships them.
 RUN --mount=type=cache,target=/workspace/apps/web/.next/cache,sharing=locked \
     node --run build
 
@@ -133,14 +130,34 @@ COPY --from=builder --chown=nextjs:nextjs /workspace/apps/web/.next/standalone .
 COPY --from=builder --chown=nextjs:nextjs /workspace/apps/web/.next/static ./apps/web/.next/static
 COPY --from=builder --chown=nextjs:nextjs /workspace/apps/web/public ./apps/web/public
 
+# Drizzle migrations — fora do Next bundle. Cada workspace traz o seu
+# migrate.mjs (thin wrapper) + drizzle/ SQL. O helper canónico vive em
+# @iedora/db (packages/db/src/migrate.mjs), partilhado por todos.
+# Wrappers usam import relativo para o helper (sem dependência de
+# node_modules entre workspaces).
+COPY --from=builder --chown=nextjs:nextjs /workspace/packages/db/src/migrate.mjs ./packages/db/src/migrate.mjs
+COPY --from=builder --chown=nextjs:nextjs /workspace/packages/auth/drizzle     ./packages/auth/drizzle
+COPY --from=builder --chown=nextjs:nextjs /workspace/packages/auth/migrate.mjs ./packages/auth/migrate.mjs
+COPY --from=builder --chown=nextjs:nextjs /workspace/products/menu/drizzle     ./products/menu/drizzle
+COPY --from=builder --chown=nextjs:nextjs /workspace/products/menu/migrate.mjs ./products/menu/migrate.mjs
+COPY --from=builder --chown=nextjs:nextjs /workspace/products/imopush/drizzle     ./products/imopush/drizzle
+COPY --from=builder --chown=nextjs:nextjs /workspace/products/imopush/migrate.mjs ./products/imopush/migrate.mjs
+
+# Drizzle + postgres devem ser bundled via outputFileTracingIncludes em
+# next.config.ts. Empiricamente nft falha (silently skips conditional
+# exports), pacotes não acabam em standalone/node_modules. npm install
+# fresh aqui como fallback robusto. ~20MB extra, deploys "just work".
+RUN cd /app && npm install --omit=dev --no-package-lock --no-fund --no-audit \
+    drizzle-orm@0.45.2 postgres@3.4.9 2>&1 | tail -3 && \
+    chown -R nextjs:nextjs /app/node_modules /app/package*.json 2>/dev/null || true
+
 # Next writes prerender + optimized-image caches under .next/cache at first
 # request. The standalone copy doesn't create that path; pre-create it
 # owned by the runtime user so the very first request doesn't EPERM.
 RUN mkdir -p ./apps/web/.next/cache && chown nextjs:nextjs ./apps/web/.next/cache
 
-# Migrations no longer ship in this image. See infra/migrate/Dockerfile
-# (and DOCKER-2 in docs/tech-debt.md) — Stage 3 runs the dedicated
-# `ghcr.io/eduvhc/migrate` image instead.
+# Migrations no longer ship in this image. See DOCKER-2 in
+# docs/tech-debt.md — Stage 3 runs the dedicated migrate image instead.
 
 USER nextjs
 WORKDIR /app/apps/web
@@ -153,9 +170,11 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD node -e "fetch('http://127.0.0.1:3000/up').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
-# Links the GHCR package to its source repo automatically. Must match the
-# actual repo (`<GHCR_USER>/iedora`) or fine-grained PATs can't push here —
-# package-to-repo association is the linking key.
-LABEL org.opencontainers.image.source="https://github.com/eduvhc/iedora"
+# Links the image to its source repo on Gitea.
+LABEL org.opencontainers.image.source="https://git.iedora.com/eduvhc/iedora"
+
+# Kamal verifica este label antes de aceitar a imagem (evita correr
+# imagens de outros services no mesmo host).
+LABEL service="iedora-web"
 
 CMD ["node", "server.js"]

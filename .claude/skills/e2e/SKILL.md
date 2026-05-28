@@ -1,6 +1,6 @@
 ---
 name: e2e
-description: Use to run the unified Playwright E2E suite (apps/web). Brings up Postgres + S3Mock via ./bin/dev-stack, applies migrations for every product schema, builds apps/web, then runs `bun run test:e2e`. Use after UI/auth/data-layer changes when typecheck alone isn't enough.
+description: Use to run the unified Playwright E2E suite (apps/web). Brings up Postgres + S3Mock via bun run dev:up, applies migrations for every product schema, builds apps/web, then runs `bun run test:e2e`. Use after UI/auth/data-layer changes when typecheck alone isn't enough.
 ---
 
 # e2e
@@ -11,7 +11,7 @@ Each product is a Playwright `project` (`menu`, `core`, `imopush`). Locally you 
 
 ## Flow
 
-1. **Infra up:** `./bin/dev-stack` (Postgres + S3Mock + observability). Wait until everything is healthy.
+1. **Infra up:** `bun run dev:up` (Postgres + S3Mock + observability). Wait until everything is healthy.
 2. **Apply migrations for every product schema:** from `apps/web/`, run `bun run db:migrate:test`. This applies the core (better-auth) schema AND every product's Drizzle schema in one go.
 3. **Run the suite:** from `apps/web/`, run `bun run test:e2e`. Interactive: `bun run test:e2e:ui` or `bun run test:e2e:debug` (sets `PWDEBUG=1`). Playwright's `webServer` does the production build automatically locally — no separate `bun run dev`.
 4. **Scope to a project:** `bun run test:e2e -- --project=menu` (or `--project=core`, `--project=imopush`).

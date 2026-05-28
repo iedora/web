@@ -1,0 +1,22 @@
+# Connector do tunnel `homelab-admin` (gitea + OpenObserve público,
+# sign-in nativo da app; Authentik SSO planeado).
+# Vive na `homelab-core` para resolver gitea/openobserve por Docker DNS.
+# Lifecycle independente do Kamal — boot via bin.sh.
+
+name: homelab-admin-cloudflared
+
+networks:
+  homelab-core:
+    external: true
+    name: homelab-core
+
+services:
+  cloudflared:
+    image: cloudflare/cloudflared:2025.10.0
+    container_name: homelab-admin-cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${HOMELAB_ADMIN_TUNNEL_TOKEN}
+    networks: [homelab-core]
+    logging: { driver: json-file, options: { max-size: 10m } }

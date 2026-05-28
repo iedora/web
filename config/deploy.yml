@@ -1,0 +1,133 @@
+# Kamal base config — shared across destinations.
+# Destination-specific (servers, etc.) em `deploy.<destination>.yml`.
+# Correr sempre com `-d <destination>` (e.g. `kamal deploy -d production`).
+#
+# Coexiste com o `infra-web` actual; kamal-proxy publica em host:3001
+# para cloudflared ser apontado para lá quando estiver validado.
+
+service: iedora-web
+
+image: eduvhc/web
+
+ssh:
+  user: root
+  keys:
+    - ~/.ssh/ci_ed25519
+
+# Gitea OCI registry via Caddy local TLS termination.
+#
+# Caddy (home-infra/gitea/caddy) escuta em :4443 do host com cert
+# Let's Encrypt válido para git.iedora.com (DNS-01 via CF API token).
+# /etc/hosts no Beelink resolve `git.iedora.com → 127.0.0.1` para o
+# builder/docker daemon ir directo a Caddy local (sem CF round-trip).
+#
+# Image refs: `git.iedora.com:4443/eduvhc/web:<sha>` — visíveis no
+# Gitea UI. Tráfego externo (browser, git push) continua via CF
+# tunnel normal.
+registry:
+  server: git.iedora.com:4443
+  username: eduvhc
+  password:
+    - KAMAL_REGISTRY_PASSWORD
+
+builder:
+  # `driver: docker` força o uso do default buildx (= BuildKit interno
+  # do Docker daemon, NÃO um docker-container separado). Kamal salta o
+  # `docker buildx create` (ver lib/kamal/commands/builder/local.rb:3 —
+  # `return if docker_driver?`).
+  #
+  # O daemon do Beelink respeita o `/etc/hosts` override (127.0.0.1
+  # git.iedora.com) — push HTTPS via Caddy local sem buildkit-config
+  # hacks nem pre-create de builder no workflow.
+  #
+  # Restrições do docker driver (lib/kamal/configuration/builder.rb
+  # valid?): sem `remote:`, sem `cache:`, single arch só. Tudo OK para
+  # o nosso setup.
+  arch: amd64
+  driver: docker
+  context: .
+  dockerfile: apps/web/Dockerfile
+
+accessories:
+  postgres:
+    image: postgres:17
+    roles:
+      - web
+    env:
+      clear:
+        POSTGRES_USER: postgres
+        POSTGRES_DB: postgres
+      secret:
+        - POSTGRES_PASSWORD
+    files:
+      - config/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    directories:
+      - data:/var/lib/postgresql/data
+
+  # cloudflared NÃO é Kamal accessory — corre como compose standalone em
+  # home-infra/my-services/iedora/cloudflared/ (tunnel iedora-public) e
+  # home-infra/cloudflared/ (tunnel homelab-admin, expõe gitea + OO).
+  # Lifecycle separado do app; multi-host via bin.sh em cada host.
+
+  # OTel collector — scrape kamal-proxy Prometheus em :9090 + push
+  # OTLP HTTP para OpenObserve. Spans da app (via instrumentation.ts)
+  # + proxy metrics convergem no mesmo backend.
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.153.0
+    roles: [web]
+    cmd: --config=/etc/otelcol-contrib/config.yaml
+    env:
+      secret:
+        - OTEL_AUTH_HEADER
+    files:
+      - config/otel-collector.yaml:/etc/otelcol-contrib/config.yaml
+    options:
+      add-host: host.docker.internal:host-gateway
+
+env:
+  clear:
+    CORE_BASE_URL: https://core.iedora.com
+    CORE_COOKIE_DOMAIN: .iedora.com
+    CORE_TRUSTED_ORIGINS: https://iedora.com,https://menu.iedora.com,https://core.iedora.com
+    NEXT_PUBLIC_CORE_URL: https://core.iedora.com
+    NEXT_PUBLIC_MENU_URL: https://menu.iedora.com
+    NEXT_PUBLIC_IMOPUSH_URL: https://imopush.iedora.com
+    IEDORA_BOOTSTRAP_ADMIN_EMAILS: eduardoferdcarvalho@gmail.com
+    LOG_LEVEL: info
+    # OpenObserve corre em home-infra/openobserve (rede separada). App
+    # chega lá via host.docker.internal — habilitado em options.add-host.
+    # OTel: app envia para o collector (mesma rede kamal, resolução
+    # por hostname). Collector adiciona auth de OO no egress. App
+    # fica sem qualquer secret OTel — single source of truth para
+    # auth no collector.
+    OTEL_EXPORTER_OTLP_ENDPOINT: http://iedora-web-otel-collector:4318
+    # OO admin email — não é secret (email é PII, não auth). O password
+    # sim, fica em BWS e é composto em OTEL_EXPORTER_OTLP_HEADERS.
+    OPENOBSERVE_ADMIN_EMAIL: eduardoferdcarvalho@gmail.com
+    # R2 backend para uploads do menu (logos, banners, QR stickers).
+    # Endpoint + region + bucket são deriváveis da conta CF; só as
+    # access keys são secret.
+    S3_ENDPOINT: https://2716bf6ee8be2880904e70f19050d2ef.r2.cloudflarestorage.com
+    S3_REGION: auto
+    S3_BUCKET: iedora-assets
+  secret:
+    - CORE_DATABASE_URL
+    - MENU_DATABASE_URL
+    - IMOPUSH_DATABASE_URL
+    - CORE_SECRET
+    - S3_ACCESS_KEY
+    - S3_SECRET_KEY
+    # Descomenta quando a key existir em BWS:
+    # - DEEPSEEK_API_KEY
+
+proxy:
+  app_port: 3000
+  healthcheck:
+    path: /up
+    interval: 5
+  run:
+    http_port: 3001
+    # Prometheus-format metrics endpoint, scraped por OTel collector
+    # (futuro) para enviar a OpenObserve. Bind interno apenas (não
+    # exposto pelo CF tunnel). kamal-proxy >=0.9.1 obrigatório.
+    metrics_port: 9090

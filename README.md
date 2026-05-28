@@ -1,34 +1,32 @@
 # iedora
 
-Monorepo — one Next.js container serving three hostnames through
-Host-based rewrites.
+Monorepo — um container Next.js que serve três hostnames via
+host-based rewrites.
 
-- **Menu** (`menu.iedora.com`) — SaaS multi-tenant restaurant menu builder.
-- **Core** (`core.iedora.com`) — better-auth sign-in surface via `@iedora/auth`.
-- **House** (`iedora.com`) — brand landing.
+- **Menu** (`menu.iedora.com`) — SaaS multi-tenant restaurant menu builder
+- **Core** (`core.iedora.com`) — better-auth sign-in via `@iedora/auth`
+- **House** (`iedora.com`) — brand landing
 
-Identity is `@iedora/auth` (better-auth in-process). `docs/dev.md` for local
-development. `docs/deploy/README.md` for the 4-stage pipeline.
+Deploy: **Kamal** + **`home-infra/`**. Ver `home-infra/README.md` e `docs/deploy/`.
 
 ## Quick start
 
 ```bash
-bun install                 # once
-./bin/dev-stack             # boots postgres, s3mock, openobserve, menu
-cd apps/web && bun run dev  # HMR on :3000
+bun install
+bun run dev:up           # postgres + s3mock (Docker)
+bun run dev:migrate      # schema nas DBs locais
+bun run dev              # Next.js HMR em :3000
 ```
 
 ## Ship it
 
-```
-bin/iedora-env tofu -chdir=infra/iac/tofu apply   # IaC
-bin/iedora-env bin/iedora app apply               # migrations
-bin/iedora-env bin/iedora deploy menu             # deploy
+```bash
+kamal setup -d production          # primeira vez
+kamal deploy -d production         # deploys seguintes
 ```
 
 ## Docs
 
-- [AGENTS.md](AGENTS.md) — stack, rules, conventions, file layout
-- [docs/dev.md](docs/dev.md) — local development
+- [AGENTS.md](AGENTS.md) — stack, rules, conventions
+- [docs/dev.md](docs/dev.md) — dev local
 - [docs/deploy/README.md](docs/deploy/README.md) — infra + deploy
-- [docs/vendors.md](docs/vendors.md) — dependency rationale
