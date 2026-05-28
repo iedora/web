@@ -32,7 +32,7 @@ command -v git >/dev/null || { echo "✗ git não instalado"; exit 1; }
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SHA="$(cd "$REPO_ROOT" && git rev-parse HEAD)"
 
-echo "→ ssh root@$HOST kamal deploy --version $SHA -d production"
+echo "→ ssh root@$HOST: checkout $SHA + kamal deploy"
 ssh -i "$SSH_KEY" "root@$HOST" bash <<EOF
 set -e
 cd /opt/iedora
@@ -41,5 +41,6 @@ git checkout '$SHA'
 export BWS_ACCESS_TOKEN='$BWS_ACCESS_TOKEN'
 export KAMAL_REGISTRY_PASSWORD='$KAMAL_REGISTRY_PASSWORD'
 kamal lock release -d production || true
-kamal deploy --version '$SHA' -d production
+# Sem --version: Kamal lê HEAD do /opt/iedora após o checkout.
+kamal deploy -d production
 EOF

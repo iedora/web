@@ -96,5 +96,8 @@ jobs:
           export BWS_ACCESS_TOKEN='$BWS_ACCESS_TOKEN'
           export KAMAL_REGISTRY_PASSWORD='$KAMAL_REGISTRY_PASSWORD'
           kamal lock release -d production || true
-          kamal deploy --version '$GITHUB_SHA' -d production
+          # Sem --version: Kamal lê HEAD após o checkout (ver
+          # configuration.rb:452 git_version). Daemon BuildKit cacheia
+          # layers nativamente — cache block não é preciso.
+          kamal deploy -d production
           EOF
