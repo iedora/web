@@ -18,9 +18,9 @@
     "homelab:up": "./homelab-core-infra/up.sh",
     "homelab:down": "docker compose -f homelab-core-infra/docker-compose.yml down",
     "homelab:logs": "docker compose -f homelab-core-infra/docker-compose.yml logs -f",
-    "typecheck": "bun run --workspaces typecheck",
-    "lint": "bun run --workspaces lint",
-    "test": "bun run --workspaces test",
+    "typecheck": "bun run scripts/run-parallel.mjs typecheck",
+    "lint": "bun run scripts/run-parallel.mjs lint",
+    "test": "bun run scripts/run-parallel.mjs test",
     "postinstall": "[ -n \"${CI:-}\" ] && exit 0; mkdir -p .git/hooks && cp scripts/git-hooks/pre-commit .git/hooks/pre-commit && cp scripts/git-hooks/commit-msg .git/hooks/commit-msg && chmod +x .git/hooks/pre-commit .git/hooks/commit-msg && echo '✓ git hooks installed (pre-commit: actionlint+shellcheck on .gitea/, commit-msg: conventional)' || true"
   },
   "catalog": {
@@ -37,5 +37,8 @@
     "react-dom": "19.2.6",
     "@types/react": "^19.2.15",
     "@types/react-dom": "^19.2.3"
+  },
+  "devDependencies": {
+    "@typescript/native-preview": "^7.0.0-dev.20260527.2"
   }
 }

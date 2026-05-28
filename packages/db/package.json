@@ -10,7 +10,7 @@
     "./migrate": "./src/migrate.mjs"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsgo --noEmit",
     "lint": "eslint src --cache --cache-location node_modules/.cache/.eslintcache",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest --passWithNoTests"
