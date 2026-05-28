@@ -102,17 +102,41 @@ if [ -n "$HOST" ]; then
   ssh "$SSH_TARGET" REGISTRY_LAN="$REGISTRY_LAN" KAMAL_VERSION="$KAMAL_VERSION" BWS_VERSION="$BWS_VERSION" bash <<'REMOTE'
 set -euo pipefail
 
-# 1. Docker daemon — insecure-registries
+# 1. Docker daemon — insecure-registries (para docker pull/push direct)
 DAEMON=/etc/docker/daemon.json
 [ -f "$DAEMON" ] || echo '{}' > "$DAEMON"
+DOCKER_NEEDS_RESTART=0
 if ! jq -e --arg r "$REGISTRY_LAN" '(."insecure-registries" // []) | index($r)' "$DAEMON" >/dev/null; then
   jq --arg r "$REGISTRY_LAN" '."insecure-registries" = ((."insecure-registries" // []) + [$r] | unique)' "$DAEMON" > "${DAEMON}.new"
   mv "${DAEMON}.new" "$DAEMON"
-  echo "  + daemon.json: insecure-registries += $REGISTRY_LAN — systemctl restart docker"
-  systemctl restart docker
-  sleep 3
+  echo "  + daemon.json: insecure-registries += $REGISTRY_LAN"
+  DOCKER_NEEDS_RESTART=1
 else
   echo "  ✓ daemon.json já contém $REGISTRY_LAN"
+fi
+
+# 1.5. BuildKit interno do daemon — config separada do daemon.json
+#      (`docker buildx build --push` usa buildkit, que tem o seu próprio
+#      registry config em /etc/buildkit/buildkitd.toml, NÃO lê o
+#      daemon.json mesmo com docker driver default).
+BK=/etc/buildkit/buildkitd.toml
+mkdir -p "$(dirname "$BK")"
+if ! grep -qF "registry.\"$REGISTRY_LAN\"" "$BK" 2>/dev/null; then
+  cat > "$BK" <<EOF
+[registry."$REGISTRY_LAN"]
+  http = true
+  insecure = true
+EOF
+  echo "  + buildkitd.toml: registry $REGISTRY_LAN (http+insecure)"
+  DOCKER_NEEDS_RESTART=1
+else
+  echo "  ✓ buildkitd.toml já contém $REGISTRY_LAN"
+fi
+
+if [ "$DOCKER_NEEDS_RESTART" = "1" ]; then
+  echo "  → systemctl restart docker"
+  systemctl restart docker
+  sleep 3
 fi
 
 # 2. Ruby + build toolchain (necessário para o gem ed25519 compilar)
