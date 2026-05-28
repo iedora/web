@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Badge, Nav, NavActions, NavBrand, PageProgress, Wordmark } from "@iedora/design-system";
+import { Badge, LangSwitcher, type LangOption, Nav, NavActions, NavBrand, PageProgress, Wordmark } from "@iedora/design-system";
 import { BRAND_NAME, BRAND_URL, CONTACT_EMAIL, PRODUCTS, productUrl } from '@iedora/brand';
 import { signInUrl, signUpUrl } from '@iedora/product-core/url';
 import "./landing.css";
@@ -45,12 +45,12 @@ type Copy = {
   phone: { eyebrow: string; live: string };
 };
 
-const LANGS: { code: LangCode; label: string; name: string; flag: string }[] = [
+const LANGS: readonly (LangOption & { code: LangCode; label: string })[] = [
   { code: "en", label: "EN", name: "English", flag: "🇬🇧" },
   { code: "pt", label: "PT", name: "Português", flag: "🇵🇹" },
   { code: "es", label: "ES", name: "Español", flag: "🇪🇸" },
   { code: "fr", label: "FR", name: "Français", flag: "🇫🇷" },
-];
+] as const;
 
 const COPY: Record<LangCode, Copy> = {
   en: {
@@ -260,82 +260,6 @@ const DEMO_MENUS: Record<LangCode, DemoMenu> = {
   },
 };
 
-// ── Lang switcher (flag-only — same control on every viewport) ─────────────
-
-function LangSwitcher({ lang, setLang }: { lang: LangCode; setLang: (l: LangCode) => void }) {
-  const [open, setOpen] = React.useState(false);
-  const rootRef = React.useRef<HTMLDivElement>(null);
-  const current = LANGS.find((l) => l.code === lang) ?? LANGS[0]!;
-
-  React.useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
-
-  return (
-    <div className="lang-switch" role="group" aria-label="Language" ref={rootRef}>
-      {/* inline row — tablet+ */}
-      <div className="lang-row">
-        {LANGS.map((l) => (
-          <button
-            key={l.code}
-            type="button"
-            className={"lang-btn" + (lang === l.code ? " active" : "")}
-            onClick={() => setLang(l.code)}
-            title={l.name}
-            aria-label={l.name}
-            aria-pressed={lang === l.code}
-            data-test-id={`landing-lang-${l.code}`}
-          >
-            <span className="flag" aria-hidden="true">{l.flag}</span>
-          </button>
-        ))}
-      </div>
-      {/* compact — phone only via CSS */}
-      <div className="lang-compact">
-        <button
-          type="button"
-          className="lang-btn lang-trigger"
-          onClick={() => setOpen((o) => !o)}
-          aria-haspopup="true"
-          aria-expanded={open}
-          aria-label={current.name}
-          data-test-id="landing-lang-trigger"
-        >
-          <span className="flag" aria-hidden="true">{current.flag}</span>
-        </button>
-        {open && (
-          <div className="lang-pop" role="menu">
-            {LANGS.filter((l) => l.code !== lang).map((l) => (
-              <button
-                key={l.code}
-                type="button"
-                role="menuitem"
-                className="lang-btn"
-                onClick={() => { setLang(l.code); setOpen(false); }}
-                title={l.name}
-                aria-label={l.name}
-                data-test-id={`landing-lang-${l.code}`}
-              >
-                <span className="flag" aria-hidden="true">{l.flag}</span>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 // ── Nav: brand + lang + log in + get started. No anchor links. ─────────────
 
 function LandingNav({ c, lang, setLang }: { c: Copy; lang: LangCode; setLang: (l: LangCode) => void }) {
@@ -351,7 +275,12 @@ function LandingNav({ c, lang, setLang }: { c: Copy; lang: LangCode; setLang: (l
         </Link>
       </NavBrand>
       <NavActions>
-        <LangSwitcher lang={lang} setLang={setLang} />
+        <LangSwitcher
+          langs={LANGS}
+          value={lang}
+          onChange={(code) => setLang(code as LangCode)}
+          testIdPrefix="landing-lang"
+        />
         <Link
           href={SIGN_IN_HREF}
           className="nav-link"

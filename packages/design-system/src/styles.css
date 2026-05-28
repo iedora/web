@@ -2670,3 +2670,68 @@ body.ds-loaded .ds-hero--in .ds-hero__trust   { opacity: 1; transform: translate
     gap: 16px;
   }
 }
+
+/* ─────────────────────────────────────────────────────────────
+ * Lang switcher — flag-only chip row, hairline between buttons,
+ * collapses to a single trigger + popover under 520px. Used by
+ * any editorial surface that needs an inline locale picker.
+ * ───────────────────────────────────────────────────────────── */
+
+.ds-lang {
+  display: inline-flex;
+  align-items: center;
+  position: relative;
+}
+.ds-lang__row {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--ink-14);
+}
+.ds-lang__compact { display: none; position: relative; }
+.ds-lang__btn {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-right: 1px solid var(--ink-14);
+  padding: 6px 10px;
+  cursor: pointer;
+  color: var(--ink-55);
+  font-family: inherit;
+  transition: background-color var(--d-2) var(--ease), color var(--d-2) var(--ease);
+}
+.ds-lang__row .ds-lang__btn:last-child { border-right: 0; }
+.ds-lang__flag {
+  font-size: 14px;
+  line-height: 1;
+  filter: saturate(0.85);
+  opacity: 0.7;
+  transition: filter var(--d-2) var(--ease), opacity var(--d-2) var(--ease);
+}
+.ds-lang__btn:hover .ds-lang__flag { opacity: 1; filter: saturate(1); }
+.ds-lang__btn--active { background: var(--ink-04); color: var(--ink); }
+.ds-lang__btn--active .ds-lang__flag { opacity: 1; filter: saturate(1); }
+
+.ds-lang__trigger { border: 1px solid var(--ink-14); }
+.ds-lang__pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  display: inline-flex;
+  background: var(--paper);
+  border: 1px solid var(--ink-14);
+  z-index: 5;
+  opacity: 0;
+  transform: translateY(-4px);
+  animation: ds-lang-pop-in var(--d-3) var(--ease-open) forwards;
+}
+.ds-lang__pop .ds-lang__btn { border-right: 1px solid var(--ink-14); }
+.ds-lang__pop .ds-lang__btn:last-child { border-right: 0; }
+
+@keyframes ds-lang-pop-in {
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 520px) {
+  .ds-lang__row { display: none; }
+  .ds-lang__compact { display: inline-flex; }
+}

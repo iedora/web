@@ -14,6 +14,11 @@
 // but speaks the same vocabulary and ships from this package.
 
 export { Wordmark } from "./components/wordmark";
+export {
+  LangSwitcher,
+  type LangOption,
+  type LangSwitcherProps,
+} from "./components/lang-switcher";
 export { KeyMark } from "./components/key-mark";
 export { MetaStrip } from "./components/meta-strip";
 export { Statement } from "./components/statement";
