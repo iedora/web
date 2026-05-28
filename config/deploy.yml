@@ -14,8 +14,14 @@ ssh:
   keys:
     - ~/.ssh/ci_ed25519
 
+# Registry LAN-direct (não passa por CF tunnel). Mesmo host que o
+# Gitea (192.168.50.53:3030) → push do builder remoto fica
+# localhost-to-localhost, evita o limite de 100MB de upload do CF
+# free e o round-trip Beelink→edge→Beelink. Setup do
+# `insecure-registries` + `buildkitd.toml` é declarativo em
+# `homelab-core-infra/up.sh` (corre a cada `up.sh --host`).
 registry:
-  server: git.iedora.com
+  server: 192.168.50.53:3030
   username: eduvhc
   password:
     - KAMAL_REGISTRY_PASSWORD
