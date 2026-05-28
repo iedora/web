@@ -99,6 +99,11 @@ jobs:
             -e "ssh ${SSH_OPTS[*]}" \
             ./ root@192.168.50.53:/opt/iedora/
 
+          # Kamal usa git para determinar a versão (commit hash) por
+          # default; como excluímos `.git` do rsync (payload mais
+          # pequeno), passamos `--version` explicitamente com o SHA
+          # do commit que o CI checkouted.
+          #
           # shellcheck disable=SC2087  # intentional: env vars expanded
           # client-side, send resolved values to SSH (server doesn't have them).
           ssh "${SSH_OPTS[@]}" root@192.168.50.53 bash <<EOF
@@ -107,5 +112,5 @@ jobs:
           export BWS_ACCESS_TOKEN='$BWS_ACCESS_TOKEN'
           export KAMAL_REGISTRY_PASSWORD='$KAMAL_REGISTRY_PASSWORD'
           kamal lock release -d production || true
-          kamal deploy -d production
+          kamal deploy --version '$GITHUB_SHA' -d production
           EOF

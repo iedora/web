@@ -34,13 +34,14 @@ PROJECT_ID=$(bws project list -o json | jq -r '.[0].id')
 [ -n "$PROJECT_ID" ] && [ "$PROJECT_ID" != "null" ] || { echo "✗ BWS project ID vazio"; exit 1; }
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+VERSION="$(cd "$REPO_ROOT" && git rev-parse HEAD)"
 
 echo "→ rsync $REPO_ROOT/ → root@$HOST:/opt/iedora/"
 rsync -azP --delete --exclude='.git' --exclude='node_modules' \
   -e "ssh -i $SSH_KEY" \
   "$REPO_ROOT/" "root@$HOST:/opt/iedora/"
 
-echo "→ ssh root@$HOST kamal deploy -d production"
+echo "→ ssh root@$HOST kamal deploy --version $VERSION -d production"
 ssh -i "$SSH_KEY" "root@$HOST" bash <<EOF
 set -e
 cd /opt/iedora
@@ -48,5 +49,5 @@ export BWS_ACCESS_TOKEN='$BWS_ACCESS_TOKEN'
 export KAMAL_REGISTRY_PASSWORD='$KAMAL_REGISTRY_PASSWORD'
 export KAMAL_BWS_PROJECT_ID='$PROJECT_ID'
 kamal lock release -d production || true
-kamal deploy -d production
+kamal deploy --version '$VERSION' -d production
 EOF
