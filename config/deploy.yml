@@ -14,14 +14,23 @@ ssh:
   keys:
     - ~/.ssh/ci_ed25519
 
-# Registry LAN-direct. Mesmo host que o Gitea (192.168.50.53:3030).
-# Como o Kamal corre no Beelink (ver `builder:` abaixo), o push é
-# localhost-to-localhost via docker daemon — sem CF tunnel, sem
-# limite de 100MB, sem TLS. Setup do `insecure-registries` em
-# /etc/docker/daemon.json é idempotent via `up.sh --host`.
+# Kamal Local Registry (feature nativa 2.8+). `server` começa com
+# `localhost` → Kamal spawna automaticamente um container
+# `registry:2` no host de build/deploy (Beelink). Localhost endpoints
+# são auto-trusted (sem TLS, sem insecure-registries config). Image
+# refs ficam `localhost:5000/eduvhc/web:<sha>` — só visíveis no
+# Docker daemon do Beelink, não no Gitea UI.
+#
+# Trade-off vs Gitea registry: perdes histórico no UI, mas eliminas
+# todos os workarounds de TLS/buildkit. Para single-host setup é o
+# pattern idiomático Kamal.
+#
+# `username`/`password` são arbitrários — Kamal cria htpasswd interno
+# para o registry. Reusamos `KAMAL_REGISTRY_PASSWORD` (Actions secret
+# já publicada).
 registry:
-  server: 192.168.50.53:3030
-  username: eduvhc
+  server: localhost:5000
+  username: kamal
   password:
     - KAMAL_REGISTRY_PASSWORD
 
