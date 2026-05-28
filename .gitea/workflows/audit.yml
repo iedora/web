@@ -58,6 +58,9 @@ jobs:
         # Idempotente: cada tool só descarrega se versão actual no cache
         # diferir da pinned. Cache persiste entre runs via bind-mount,
         # típico re-run salta os 3 curls (~10s saved).
+        # `shell: bash` porque o `local` + `function` style precisa de
+        # bash (act_runner default é `sh -e` em Linux).
+        shell: bash
         run: |
           set -euo pipefail
           mkdir -p /opt/audit-bin
@@ -70,13 +73,26 @@ jobs:
             [ "$have" != "$want" ]
           }
 
+          # oven/bun:1.3-debian não tem curl. Instalamos só se algum
+          # tool precisar de download (cache miss). Cold start: ~3-5s
+          # para curl + ca-certificates. Re-runs típicos (cache hot):
+          # zero — apt nem é invocado.
+          install_curl_if_needed() {
+            command -v curl >/dev/null && return 0
+            echo "→ installing curl + ca-certificates"
+            apt-get update -qq >/dev/null
+            apt-get install -y --no-install-recommends -qq curl ca-certificates >/dev/null
+          }
+
           if need gitleaks version "$GITLEAKS_VERSION"; then
+            install_curl_if_needed
             echo "→ download gitleaks $GITLEAKS_VERSION"
             curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
               | tar -xz -C /opt/audit-bin gitleaks
           fi
 
           if need hadolint --version "$HADOLINT_VERSION"; then
+            install_curl_if_needed
             echo "→ download hadolint $HADOLINT_VERSION"
             curl -fsSL -o /opt/audit-bin/hadolint \
               "https://github.com/hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/hadolint-linux-x86_64"
@@ -84,6 +100,7 @@ jobs:
           fi
 
           if need osv-scanner --version "$OSV_VERSION"; then
+            install_curl_if_needed
             echo "→ download osv-scanner $OSV_VERSION"
             curl -fsSL -o /opt/audit-bin/osv-scanner \
               "https://github.com/google/osv-scanner/releases/download/v${OSV_VERSION}/osv-scanner_linux_amd64"
