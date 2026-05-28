@@ -1,0 +1,163 @@
+# Gitea — Git + OCI registry + Actions, com Caddy como subservice
+# (TLS termination para git.iedora.com via CF DNS-01).
+#
+# Endpoints:
+#   Web UI / API:           http://<host>:3030  (interno) ou
+#                           https://git.iedora.com (via Caddy:4443 + CF tunnel)
+#   OCI registry endpoint:  https://git.iedora.com:4443  (LAN com Caddy)
+#                           https://git.iedora.com       (público via CF)
+#   Git SSH:                ssh://git@<host>:3022/<owner>/<repo>.git
+#
+# First-boot Gitea setup: aceder via web, criar admin via wizard.
+# Para INSTALL_LOCK=true depois:
+#   docker exec gitea gitea admin user create --admin ...
+
+name: home-infra-gitea
+
+networks:
+  homelab-core:
+    external: true
+    name: homelab-core
+
+configs:
+  # Nativo do Compose — materializa o file no container sem bind mount.
+  # Com DOCKER_HOST=ssh:// o file é enviado em-band, dispensando scp.
+  gitea-runner-config:
+    file: ./runner-config.yaml
+
+volumes:
+  # Externos para preservar dados da config anterior (homelab-core-infra).
+  # Em hosts novos, comentar `external: true` para criar de raiz.
+  gitea_data:
+    external: true
+    name: homelab-core-infra_gitea_data
+  gitea_config:
+    external: true
+    name: homelab-core-infra_gitea_config
+  gitea_runner_data:
+    external: true
+    name: homelab-core-infra_gitea_runner_data
+  # Volume efémero partilhado entre `gitea-runner-init` (escreve) e
+  # `gitea-runner` (lê). Mantém o token de registo fora do BWS — é um
+  # detalhe interno do compose, não atravessa boundary alguma.
+  gitea_runner_token:
+    external: true
+    name: homelab-core-infra_gitea_runner_token
+  # Caddy persistência (certs LE + ACME state). Sem isto, cada restart
+  # do container re-acquire o cert (e bate no rate limit).
+  caddy_data:
+    external: true
+    name: homelab-core-infra_caddy_data
+  caddy_config:
+    external: true
+    name: homelab-core-infra_caddy_config
+
+services:
+  # ── Gitea: Git + OCI registry + Actions ──────────────────────────────
+  gitea:
+    image: gitea/gitea:1.26.2-rootless
+    container_name: gitea
+    restart: unless-stopped
+    networks:
+      homelab-core:
+        aliases: [gitea]
+    ports:
+      - "3030:3000"
+      - "3022:2222"
+    volumes:
+      - gitea_data:/var/lib/gitea
+      - gitea_config:/etc/gitea
+    environment:
+      GITEA__security__INSTALL_LOCK: "true"
+      GITEA__database__DB_TYPE: sqlite3
+      GITEA__database__PATH: /var/lib/gitea/data/gitea.db
+      GITEA__server__DOMAIN: 192.168.50.53
+      GITEA__server__HTTP_PORT: "3000"
+      GITEA__server__SSH_PORT: "3022"
+      GITEA__server__SSH_DOMAIN: 192.168.50.53
+      GITEA__server__ROOT_URL: "https://git.iedora.com/"
+      GITEA__service__DISABLE_REGISTRATION: "true"
+      GITEA__service__REQUIRE_SIGNIN_VIEW: "false"
+      GITEA__service__ENABLE_BASIC_AUTHENTICATION: "true"
+      GITEA__actions__ENABLED: "true"
+    healthcheck:
+      # `service_healthy` no init container abaixo depende disto.
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/healthz >/dev/null || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 30s
+    logging: { driver: json-file, options: { max-size: 10m } }
+
+  # ── Caddy: TLS termination para git.iedora.com (subservice do gitea) ─
+  # Porto host 4443 (não :443) porque kamal-proxy ocupa :443. Builder
+  # usa `git.iedora.com:4443` + /etc/hosts override no Beelink
+  # (127.0.0.1 git.iedora.com).
+  caddy:
+    build:
+      context: ./caddy
+    container_name: caddy
+    restart: unless-stopped
+    networks:
+      homelab-core:
+        aliases: [caddy]
+    ports:
+      - "4443:443"
+    environment:
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN}
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    logging: { driver: json-file, options: { max-size: 10m } }
+
+  # ── Gitea runner registration token bootstrap ────────────────────────
+  # One-shot: corre `gitea actions generate-runner-token` e escreve
+  # para um volume partilhado. O runner lê via
+  # GITEA_RUNNER_REGISTRATION_TOKEN_FILE. Em re-runs o runner ignora o
+  # token novo (já tem .runner persistido), portanto é idempotente.
+  gitea-runner-init:
+    image: gitea/gitea:1.26.2-rootless
+    container_name: gitea-runner-init
+    depends_on:
+      gitea:
+        condition: service_healthy
+    networks:
+      homelab-core:
+    entrypoint: ["sh", "-c", "gitea actions generate-runner-token > /token/runner-token"]
+    volumes:
+      - gitea_config:/etc/gitea:ro
+      - gitea_data:/var/lib/gitea
+      - gitea_runner_token:/token
+    restart: "no"
+    logging: { driver: json-file, options: { max-size: 10m } }
+
+  # ── Gitea Actions runner (act_runner) ────────────────────────────────
+  # Self-registers via GITEA_RUNNER_REGISTRATION_TOKEN_FILE (token
+  # escrito pelo `gitea-runner-init` num volume partilhado), persiste
+  # config em gitea_runner_data; restarts subsequentes reusam-na.
+  # Labels mapeados a Docker images (Gitea convention).
+  gitea-runner:
+    image: gitea/act_runner:latest
+    container_name: gitea-runner
+    restart: unless-stopped
+    depends_on:
+      gitea-runner-init:
+        condition: service_completed_successfully
+    networks:
+      homelab-core:
+        aliases: [gitea-runner]
+    environment:
+      GITEA_INSTANCE_URL: "http://192.168.50.53:3030"
+      GITEA_RUNNER_REGISTRATION_TOKEN_FILE: /token/runner-token
+      GITEA_RUNNER_NAME: beelink-runner
+      GITEA_RUNNER_LABELS: "ubuntu-latest:docker://node:24-bookworm,bun-debian:docker://oven/bun:1.3-debian"
+      CONFIG_FILE: /config/config.yaml
+    configs:
+      - source: gitea-runner-config
+        target: /config/config.yaml
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - gitea_runner_data:/data
+      - gitea_runner_token:/token:ro
+      - /var/cache/buildx:/var/cache/buildx
+    logging: { driver: json-file, options: { max-size: 10m } }
