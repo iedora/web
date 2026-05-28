@@ -1,23 +1,26 @@
 # CI
 
-CI corre em **Gitea Actions** (não GitHub Actions). Workflows em
-`.gitea/workflows/`.
+CI corre em **Gitea Actions** (não GitHub Actions). Workflow único em
+`.gitea/workflows/ci.yml` — 3 jobs.
 
-## Workflows
+## Pipeline (`ci.yml`)
 
-| Workflow | Ficheiro | O que faz |
-|----------|----------|-----------|
-| `CI` | `.gitea/workflows/ci.yml` | Typecheck + lint + test (todos os workspaces num job) |
-| `Deploy` | `.gitea/workflows/deploy.yml` | `kamal deploy` para produção (build remoto + blue-green) |
+| Job | Triggers | O que faz |
+|-----|----------|-----------|
+| `ci` | PR + push main + dispatch | Typecheck + lint + test (todos os workspaces) |
+| `audit` | PR + push main + dispatch + cron | gitleaks + hadolint + osv-scanner |
+| `deploy` | push main + dispatch (`needs: [ci, audit]`) | `kamal deploy -d production` |
 
-## CI flow
+## Flow
 
-1. **Pull request / push a main** → `ci.yml` corre typecheck + lint + test.
-2. **Push a main** → `deploy.yml` corre `kamal deploy -d production`:
+1. **Pull request** → `ci` + `audit` correm em paralelo. `deploy` skip.
+2. **Push a main** → `ci` + `audit` em paralelo; se ambos verdes,
+   `deploy` corre `kamal deploy -d production`:
    - Build da imagem no remote builder (Beelink, amd64 nativo)
    - Push para Gitea OCI registry (`git.iedora.com/eduvhc/web`)
    - Pre-deploy hook corre migrations
-   - Blue-green swap zero-downtime
+   - Blue-green swap zero-downtime (só se healthcheck passar)
+3. **Cron weekly** → só `audit` corre (refresca CVE database).
 
 ## Nota
 

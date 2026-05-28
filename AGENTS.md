@@ -130,10 +130,10 @@ docker exec -it iedora-web-postgres psql -U postgres
 
 ## CI
 
-Gitea Actions workflows under `.gitea/workflows/` — quality gates on
-PR/push, build+deploy on main. See `.gitea/workflows/ci.yml` (typecheck
-+ lint + test) and `.gitea/workflows/deploy.yml` (Kamal deploy via
-remote SSH builder).
+Gitea Actions workflow único em `.gitea/workflows/ci.yml` com 3 jobs:
+`ci` (typecheck + lint + test), `audit` (gitleaks + hadolint + osv),
+`deploy` (Kamal deploy via remote SSH builder, gated por `needs: [ci,
+audit]` em push a main).
 
 ## Where to look when unsure
 

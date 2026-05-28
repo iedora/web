@@ -1,7 +1,8 @@
-# CI — 2 jobs paralelos num só workflow para UI mostrar tudo numa view:
+# Pipeline — 3 jobs no mesmo workflow para gating natural e UI única:
 #
-#   ci     → correctness  (typecheck/lint/test)
-#   audit  → security     (gitleaks/hadolint/osv-scanner)
+#   ci      → correctness  (typecheck/lint/test)         [PR + push main + dispatch]
+#   audit   → security     (gitleaks/hadolint/osv)       [PR + push main + dispatch + cron]
+#   deploy  → kamal deploy (gated: needs [ci, audit])    [push main + dispatch]
 #
 # Steps inline (não composite actions) para o Gitea Actions mostrar
 # cada step individualmente — bug #31397 ofusca steps dentro de
@@ -9,11 +10,13 @@
 # .gitea/audit/install-tools.sh), invocado por path absoluto. Mantém
 # o workflow legível + bash testável isoladamente via shellcheck.
 #
-# Concurrency group cancela runs antigos no mesmo branch quando há
-# push novo. Cron weekly só corre o `audit` (skip ci via `if:`) —
-# CVE database refresca-se sem push.
+# Concurrency por-job (em vez de workflow-level): ci/audit cancelam
+# runs antigos no mesmo branch para feedback rápido; deploy nunca
+# cancela (mid-deploy abort = estado inconsistente). Cron weekly só
+# corre `audit` (skip ci via `if:`, deploy gated por `needs` + `if:`)
+# — CVE database refresca-se sem push.
 
-name: CI
+name: Pipeline
 
 on:
   pull_request:
@@ -22,10 +25,6 @@ on:
   workflow_dispatch:
   schedule:
     - cron: '0 6 * * 1'  # Segunda 06:00 UTC — pesca CVEs novas
-
-concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
 
 jobs:
   # ─────────────────────────────────────────────────────────────────
@@ -36,6 +35,9 @@ jobs:
   # ─────────────────────────────────────────────────────────────────
   ci:
     if: github.event_name != 'schedule'
+    concurrency:
+      group: ci-${{ github.ref }}
+      cancel-in-progress: true
     runs-on: bun-debian
     timeout-minutes: 15
     container:
@@ -63,6 +65,9 @@ jobs:
   # install via .gitea/audit/install-tools.sh).
   # ─────────────────────────────────────────────────────────────────
   audit:
+    concurrency:
+      group: audit-${{ github.ref }}
+      cancel-in-progress: true
     runs-on: bun-debian
     timeout-minutes: 10
     container:
@@ -105,3 +110,116 @@ jobs:
         # cada CVE encontrada. Se houver findings novos, aparecem no PR
         # como comments inline no lockfile.
         run: /opt/audit-bin/osv-scanner --lockfile=bun.lock --format gh-annotations
+
+  # ─────────────────────────────────────────────────────────────────
+  # Deploy gate: kamal deploy para produção. Só corre se ci+audit OK.
+  #
+  # Flow:
+  #   1. actions/checkout
+  #   2. apt deps (ruby + ruby-dev + build-essential para gem ed25519
+  #      compilar a extensão nativa) + docker.io + jq/python3/unzip
+  #   3. gem install kamal -v 2.11.0
+  #   4. BWS CLI + bootstrap SSH key via BWS_ACCESS_TOKEN (única Gitea
+  #      secret — restantes credenciais vivem em BWS)
+  #   5. kamal deploy -d production:
+  #        - builds amd64 nativamente na Beelink (remote builder)
+  #        - push para Gitea OCI registry
+  #        - .kamal/hooks/pre-deploy aplica migrations
+  #        - blue-green swap só se hook + healthcheck passarem
+  #
+  # Build cache (`kamal deploy` remote builder) é gerido pelo buildkit
+  # da Beelink. Não usa actions/cache aqui — o build acontece via
+  # docker buildx --builder remote, fora do job container. O container
+  # kamal-remote-ssh--... preserva cache em volumes Docker entre runs.
+  # ─────────────────────────────────────────────────────────────────
+  deploy:
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
+    needs: [ci, audit]
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false   # mid-deploy abort would leave inconsistent state
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: System deps (docker-cli, ruby+dev, build-essential, jq, python3, curl, unzip)
+        shell: bash
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends \
+            ca-certificates curl unzip jq python3 \
+            ruby ruby-dev build-essential \
+            docker.io
+
+      - name: Install Kamal 2.11
+        shell: bash
+        run: gem install --no-document kamal -v 2.11.0
+
+      - name: Install BWS CLI
+        shell: bash
+        run: |
+          BWS_VER="${BWS_VER:-0.5.0}"
+          curl -fsSL "https://github.com/bitwarden/sdk-sm/releases/download/bws-v${BWS_VER}/bws-x86_64-unknown-linux-gnu-${BWS_VER}.zip" -o /tmp/bws.zip
+          unzip -q /tmp/bws.zip -d /tmp/bws
+          install -m 0755 /tmp/bws/bws /usr/local/bin/bws
+
+      - name: Bootstrap SSH from BWS
+        shell: bash
+        env:
+          BWS_ACCESS_TOKEN: ${{ secrets.BWS_ACCESS_TOKEN }}
+        run: |
+          PROJECT_ID=$(bws project list -o json | jq -r '.[0].id')
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          bws secret list "$PROJECT_ID" -o json \
+            | python3 -c 'import sys,json; [print(s["value"]) for s in json.loads(sys.stdin.read(), strict=False) if s["key"]=="HOMELAB_SSH_PRIVATE_KEY"]' \
+            > ~/.ssh/ci_ed25519
+          chmod 600 ~/.ssh/ci_ed25519
+          ssh-keyscan -H 192.168.50.53 >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Release stale Kamal lock
+        # Idempotent. Se um deploy anterior foi cancelado/crashou, o
+        # lock fica no host e bloqueia o próximo. `|| true` cobre o
+        # caso comum "não há lock para libertar".
+        shell: bash
+        env:
+          BWS_ACCESS_TOKEN: ${{ secrets.BWS_ACCESS_TOKEN }}
+        run: kamal lock release -d production || true
+
+      - name: Kamal deploy
+        id: deploy
+        shell: bash
+        env:
+          BWS_ACCESS_TOKEN: ${{ secrets.BWS_ACCESS_TOKEN }}
+        run: kamal deploy -d production
+
+      - name: Auto-rollback on failed deploy
+        # Disparado quando healthcheck do kamal-proxy não passa em N
+        # tentativas e o kamal deploy retorna non-zero. Reverte para a
+        # imagem anterior — atómico, ~5s. Smoke test (step seguinte)
+        # fica skipped porque corre só em success.
+        if: failure() && steps.deploy.outcome == 'failure'
+        shell: bash
+        env:
+          BWS_ACCESS_TOKEN: ${{ secrets.BWS_ACCESS_TOKEN }}
+        run: kamal rollback -d production
+
+      - name: Post-deploy smoke test (público via Cloudflare)
+        # Healthcheck do kamal-proxy é interno (Beelink LAN). Este
+        # curl valida que o Cloudflare Tunnel também está OK. Se
+        # falhar com kamal deploy verde, problema é tunnel/DNS, não
+        # app — não vale rollback. CI fica red para alertar operador.
+        if: steps.deploy.outcome == 'success'
+        shell: bash
+        run: |
+          URL="${SMOKE_URL:-https://iedora.com/up}"
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            if curl -fsS --max-time 5 "$URL" >/dev/null; then
+              echo "✓ ($i) $URL"
+              exit 0
+            fi
+            echo "… ($i/10) $URL"
+            sleep 3
+          done
+          echo "::error::smoke test falhou após 10 tentativas em $URL"
+          exit 1

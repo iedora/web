@@ -173,10 +173,12 @@ ssh -t root@$HOST docker exec iedora-web node /app/products/menu/scripts/migrate
 
 ## CI
 
-Push a main dispara `.gitea/workflows/deploy.yml`:
-1. Typecheck + lint + test (via `ci.yml`, que corre em PR/push)
-2. `kamal deploy -d production` — build remoto + push para Gitea OCI
-   registry + blue-green swap.
+Push a main dispara `.gitea/workflows/ci.yml`:
+1. Jobs `ci` (typecheck + lint + test) e `audit` (gitleaks + hadolint
+   + osv) correm em paralelo.
+2. Job `deploy` (`needs: [ci, audit]`) corre `kamal deploy -d
+   production` — build remoto + push para Gitea OCI registry +
+   blue-green swap.
 
 Ver `docs/ci/README.md`.
 

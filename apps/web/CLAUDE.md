@@ -99,5 +99,6 @@ Real tests live with the products: `bun run --cwd products/menu test` /
 
 ## Deployable artefact
 
-Gitea Actions workflow `deploy.yml` builds + pushes `git.iedora.com/eduvhc/web:<sha>`
-via `kamal deploy`. See [`../../docs/deploy/README.md`](../../docs/deploy/README.md).
+Job `deploy` em `.gitea/workflows/ci.yml` (gated por `needs: [ci,
+audit]`) builds + pushes `git.iedora.com/eduvhc/web:<sha>` via `kamal
+deploy`. See [`../../docs/deploy/README.md`](../../docs/deploy/README.md).

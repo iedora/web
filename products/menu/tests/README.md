@@ -212,15 +212,14 @@ One workflow per workspace. Each `paths:`-filtered. See [`docs/testing/e2e-archi
 ```
 .gitea/
   workflows/
-    ci.yml                       single job: typecheck + lint + test (all workspaces)
-    deploy.yml                   kamal deploy on main
+    ci.yml                       3 jobs: ci + audit + deploy (gated)
 ```
 
-**`ci.yml` jobs** (sequential in one container):
+**`ci.yml` jobs**:
 
-- **Typecheck** — `bun run typecheck`. ~2 min.
-- **Lint** — `bun run lint`. ~2 min.
-- **Unit (Vitest)** — `bun run test`. ~3 min.
+- **`ci`** (sequential in one container): typecheck + lint + test (all workspaces). ~7 min.
+- **`audit`** (paralelo a `ci`): gitleaks + hadolint + osv-scanner.
+- **`deploy`** (push a main, `needs: [ci, audit]`): `kamal deploy -d production`.
 
 E2E is not yet in Gitea Actions (requires Postgres + s3mock as service
 containers). Run locally via `bun run test:e2e`.
