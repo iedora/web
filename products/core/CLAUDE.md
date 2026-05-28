@@ -48,7 +48,8 @@ Auth SDK contract: [`../../packages/auth/README.md`](../../packages/auth/README.
 - `bun run test` — vitest with `--passWithNoTests` (no test files yet).
 - `bun run test:e2e` / `:ui` / `:debug` — Playwright suite (planned — harness not yet built). See [`docs/testing/e2e-architecture.md`](../../docs/testing/e2e-architecture.md).
 
-CI: `[product:core] CI` at `.github/workflows/product-core.yml`.
+CI: Gitea Actions — single `ci.yml` workflow typechecks + lints + tests
+all workspaces (see `.gitea/workflows/ci.yml`).
 
 ## Testing
 

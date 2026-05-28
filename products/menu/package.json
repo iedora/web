@@ -47,7 +47,7 @@
     "./shared/url": "./src/shared/url.ts"
   },
   "scripts": {
-    "typecheck": "tsc --build && tsc -p tsconfig.tests.json --noEmit",
+    "typecheck": "tsgo --build && tsgo -p tsconfig.tests.json --noEmit",
     "lint": "eslint --cache --cache-location node_modules/.cache/.eslintcache",
     "test": "vitest run",
     "test:watch": "vitest",

@@ -18,7 +18,7 @@ if ! command -v actionlint &>/dev/null; then
 fi
 
 # ── Step 2: only run when CI files changed ──
-changed=$(git diff --cached --name-only --diff-filter=ACM | grep -E '^\.github/(workflows|actions|scripts)/' || true)
+changed=$(git diff --cached --name-only --diff-filter=ACM | grep -E '^\.gitea/(workflows|actions)/' || true)
 if [ -z "$changed" ]; then
   exit 0
 fi
@@ -26,22 +26,15 @@ fi
 echo "pre-commit: linting CI files..."
 echo "$changed" | while read -r f; do echo "  $f"; done
 
-# ── Step 3: actionlint ALL workflow files (same as CI) ──
+# ── Step 3: actionlint ALL workflow files ──
+# -config-file explícito: actionlint auto-detecta project root via
+# .github/workflows/ que não temos (estamos em .gitea/), por isso o
+# config co-habita com os workflows: .gitea/actionlint.yaml.
 echo ""
-if ! actionlint -color .github/workflows/*.yml; then
+if ! actionlint -config-file .gitea/actionlint.yaml -color .gitea/workflows/*.yml; then
   echo ""
   echo "pre-commit: actionlint failed. Fix the issues above and try again."
-  echo "  Run manually: bun run ci:check"
   exit 1
-fi
-
-# ── Step 4: shellcheck ALL CI scripts (if available) ──
-if command -v shellcheck &>/dev/null && ls .github/scripts/*.sh &>/dev/null; then
-  if ! shellcheck --shell=bash .github/scripts/*.sh; then
-    echo ""
-    echo "pre-commit: shellcheck failed. Fix the issues above and try again."
-    exit 1
-  fi
 fi
 
 echo ""

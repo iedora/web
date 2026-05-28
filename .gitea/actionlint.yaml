@@ -1,0 +1,15 @@
+# actionlint config — whitelista labels custom do self-hosted runner.
+# actionlint tem hard-coded as labels conhecidas do GitHub; labels do
+# act_runner (em homelab-core-infra/docker-compose.yml,
+# GITEA_RUNNER_LABELS) têm de ser declaradas aqui.
+#
+# Pre-commit hook usa -config-file .gitea/actionlint.yaml explícito (a
+# heurística default procura .github/workflows/ — não temos, migrámos
+# tudo para .gitea/).
+#
+# Convenção: cada label aqui mapeia 1:1 para um docker image em
+# GITEA_RUNNER_LABELS. Manter sync se adicionarmos runners.
+
+self-hosted-runner:
+  labels:
+    - bun-debian

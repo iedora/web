@@ -1,0 +1,73 @@
+# OpenTelemetry Collector — bridge kamal-proxy Prometheus metrics → OpenObserve OTLP.
+#
+# Recebe: scrape de http://kamal-proxy:9090/metrics (Prometheus format)
+# Envia:  OTLP HTTP para http://host.docker.internal:5080/api/default/v1/metrics
+# Auth:   ${env:OTEL_AUTH_HEADER} (Basic base64(email:password) — composed
+#         em .kamal/secrets.production a partir das mesmas creds OO que
+#         a app usa para spans).
+#
+# Reside no Kamal accessory `otel-collector` na rede `kamal` (mesma que
+# kamal-proxy → resolve por hostname). add-host:host.docker.internal:host-gateway
+# permite chegar a OO que vive em homelab-core network (diferente).
+
+receivers:
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: kamal-proxy
+          scrape_interval: 30s
+          metrics_path: /metrics
+          static_configs:
+            - targets: ['kamal-proxy:9090']
+              labels:
+                source: kamal-proxy
+                service: iedora-web
+
+  # OTLP receiver — app envia traces/logs/metrics aqui em vez de
+  # directamente a OO. Centraliza auth no collector (egress side),
+  # app fica sem qualquer secret OTel-related.
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+      grpc:
+        endpoint: 0.0.0.0:4317
+
+processors:
+  batch:
+    timeout: 5s
+    send_batch_size: 100
+
+exporters:
+  # HTTP/protobuf para OO (porta 5080, /api/{org}/v1/{signal}). gRPC
+  # tinha sido a primeira escolha (spec-recommended) mas OO 0.90 tem
+  # auth flaky em gRPC (`No valid auth token` mesmo com Authorization
+  # + organization headers correctos). HTTP funciona à primeira; em
+  # LAN o overhead extra é negligenciável.
+  otlp_http:
+    endpoint: http://host.docker.internal:5080/api/default
+    headers:
+      Authorization: ${env:OTEL_AUTH_HEADER}
+    compression: gzip
+    timeout: 10s
+
+service:
+  pipelines:
+    # Metrics: from kamal-proxy scrape + app OTLP
+    metrics:
+      receivers: [prometheus, otlp]
+      processors: [batch]
+      exporters: [otlp_http]
+    # Traces: only from app (app instrumentation.ts → collector)
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp_http]
+    # Logs: app pino bridge via @opentelemetry/instrumentation-pino
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp_http]
+  telemetry:
+    logs:
+      level: info

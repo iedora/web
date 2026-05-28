@@ -1,18 +1,13 @@
-# Local stack — mirror of the prod compose document (`infra/iac/tofu/
-# compose.tf`) running against local Docker.
+# Iedora-specific dev infra — Postgres + s3mock.
+# Next.js corre no host (não no Docker) via `bun run dev`.
 #
-# Everything an operator needs to develop iedora locally: postgres,
-# adobe/s3mock (S3 mock), openobserve, menu (Next.js). Identity is
-# `@iedora/auth` (better-auth) running in-process inside the menu
-# container — no IdP container.
+# OpenObserve vive em `homelab-core-infra/docker-compose.yml` (shared,
+# vai mudar para repo dedicado), não aqui.
 #
-# See docs/dev.md. See
-# `bin/dev-stack` for the orchestrator.
-#
-# Selection is via compose profiles, one per service. The orchestrator
-# passes `--profile X` per selected service. Default (no flags) starts
-# everything. `--except <list>` drops profiles. `--only <list>` keeps
-# only those profiles (+ their depends_on closure).
+# Boot:     bun run dev:up
+# Logs:     bun run dev:logs
+# Reset:    bun run dev:reset   (apaga volumes — perde dados locais)
+# Stop:     bun run dev:down
 
 name: iedora-local
 
@@ -23,17 +18,11 @@ networks:
 
 volumes:
   postgres_data:
-  openobserve_data:
 
 services:
-
-  # ── postgres ─────────────────────────────────────────────────────────
-  # Same image as prod (postgres:18.4-alpine). init.sql is the canonical
-  # one shared with prod — creates the `menu` and `core` databases.
   postgres:
     image: postgres:18.4-alpine
     container_name: infra-postgres
-    profiles: [postgres]
     networks:
       iedora:
         aliases: [postgres, infra-postgres]
@@ -43,7 +32,7 @@ services:
       POSTGRES_DB: postgres
     volumes:
       - postgres_data:/var/lib/postgresql
-      - ../infra/iac/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ../config/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     ports:
       - "5432:5432"
     healthcheck:
@@ -51,15 +40,11 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
-    logging:
-      driver: json-file
-      options: { max-size: 10m }
+    logging: { driver: json-file, options: { max-size: 10m } }
 
-  # ── s3mock (S3 mock for menu uploads + OO cold tier) ──────────────────
   s3mock:
     image: adobe/s3mock:latest
     container_name: infra-s3mock
-    profiles: [s3mock]
     networks:
       iedora:
         aliases: [s3mock, infra-s3mock]
@@ -72,68 +57,5 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
-    logging:
-      driver: json-file
-      options: { max-size: 10m }
+    logging: { driver: json-file, options: { max-size: 10m } }
 
-  # ── openobserve (observability) ──────────────────────────────────────
-  openobserve:
-    image: public.ecr.aws/zinclabs/openobserve:v0.90.0
-    container_name: infra-openobserve
-    profiles: [openobserve]
-    depends_on:
-      s3mock:
-        condition: service_healthy
-    networks:
-      iedora:
-        aliases: [openobserve, infra-openobserve]
-    environment:
-      ZO_DATA_DIR: /data
-      ZO_HTTP_PORT: "5080"
-      ZO_GRPC_PORT: "5081"
-      ZO_S3_PROVIDER: aws
-      ZO_S3_REGION_NAME: us-east-1
-      ZO_S3_BUCKET_NAME: iedora-data
-      ZO_S3_BUCKET_PREFIX: o2
-      ZO_S3_SERVER_URL: http://infra-s3mock:${S3MOCK_HTTP_PORT}
-      ZO_S3_FEATURE_FORCE_PATH_STYLE: "true"
-      ZO_S3_ACCESS_KEY: test
-      ZO_S3_SECRET_KEY: test
-      ZO_ROOT_USER_EMAIL: dev@iedora.local
-      ZO_ROOT_USER_PASSWORD: Password1!
-    volumes:
-      - openobserve_data:/data
-    ports:
-      - "5080:5080"
-    logging:
-      driver: json-file
-      options: { max-size: 10m }
-
-  # ── web (Next.js, built locally) ─────────────────────────────────────
-  # Env comes from `apps/web/.env` + optional `.env.local`. The
-  # dev orchestrator runs the @iedora/auth migrations against the `core`
-  # DB after postgres is healthy, then starts this container.
-  web:
-    image: iedora-web:local
-    build:
-      context: ..
-      dockerfile: apps/web/Dockerfile
-    container_name: infra-web
-    profiles: [web]
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      iedora:
-        aliases: [web, infra-web]
-    env_file:
-      - path: ../apps/web/.env
-        required: false
-      - path: ../apps/web/.env.local
-        required: false
-    ports:
-      - "3000:3000"
-    command: ["node", "server.js"]
-    logging:
-      driver: json-file
-      options: { max-size: 10m }

@@ -1,9 +1,8 @@
 # Security policy
 
 Iedora is a solo-maintained, closed-source SaaS — the source lives in a
-public repository so that supply-chain tooling (Renovate, CodeQL, OpenSSF
-Scorecard, Trivy, SLSA provenance) can operate transparently, but the
-product itself is not open-source.
+private Gitea repository (`git.iedora.com/eduvhc/iedora`). Supply-chain
+scanning is limited to what Gitea Actions workflows can run.
 
 ## Supported versions
 
@@ -15,9 +14,9 @@ branches; CD ships every green merge to production.
 **Please do not open a public issue or pull request for security
 vulnerabilities.**
 
-Use [GitHub's private security advisory flow](https://github.com/eduvhc/iedora/security/advisories/new)
-to report a finding. The advisory creates a private discussion thread
-visible only to the maintainer.
+Send an email to **eduardoferdcarvalho@gmail.com** with the subject
+`[iedora-security] <brief description>`. GPG encryption is available
+on request.
 
 What to include:
 - a short description of the impact (what an attacker can achieve)
@@ -37,7 +36,7 @@ In scope:
 - the in-process auth surface (`@iedora/auth`, better-auth, the
   `better-auth.session_token` cookie on `.iedora.com`, the `core`
   Postgres DB)
-- the CI/CD supply chain (GitHub Actions, Tofu deploy, GHCR image build)
+- the CI/CD supply chain (Gitea Actions, Kamal deploy, Gitea OCI registry)
 
 Out of scope:
 - denial-of-service findings that require flooding (the homelab is rate-

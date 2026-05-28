@@ -1,4 +1,4 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# See https://git-scm.com/docs/gitignore for more about ignoring files.
 
 # dependencies — bun workspaces resolve from the repo root, so the only
 # node_modules anywhere should be at the root (plus a symlink-style
@@ -72,6 +72,13 @@ yarn-debug.log*
 .env.production
 .env.*.local
 !.env.test
+
+# Kamal secrets — populated locally, never committed.
+# Covers `.kamal/secrets`, `.kamal/secrets-common`, `.kamal/secrets.<destination>`.
+/.kamal/secrets*
+
+# homelab-core-infra .env (provider-side secrets for shared infra).
+/homelab-core-infra/.env
 
 # vercel
 .vercel

@@ -1,0 +1,13 @@
+# Production overlay. Merged sobre config/deploy.yml.
+# Preenche <<<HETZNER_IPV4>>> com:
+#   tofu -chdir=infra/iac/tofu output -raw hetzner_ipv4
+
+servers:
+  web:
+    hosts:
+      - 192.168.50.53
+    # Habilita host.docker.internal dentro do container (Linux).
+    # Permite o iedora-web falar com o openobserve em homelab-core-infra
+    # (rede Docker separada, mas com port publicado no host).
+    options:
+      add-host: host.docker.internal:host-gateway

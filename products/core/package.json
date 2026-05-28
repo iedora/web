@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Core product — auth + admin guards + admin slices consumed by apps/web's core.iedora.com routes (sign-in/up/out + the iedora-staff admin surfaces: users, organizations, sessions). After Opt-B the Next.js routes themselves live in apps/web/src/app/core/; this package only exposes server-only guards and the admin vertical slices.",
+  "description": "Core product \u2014 auth + admin guards + admin slices consumed by apps/web's core.iedora.com routes (sign-in/up/out + the iedora-staff admin surfaces: users, organizations, sessions). After Opt-B the Next.js routes themselves live in apps/web/src/app/core/; this package only exposes server-only guards and the admin vertical slices.",
   "exports": {
     ".": "./src/index.ts",
     "./features/admin-users": "./src/features/admin-users/index.ts",
@@ -28,7 +28,7 @@
     "./shared/ui/active-sidebar-links": "./src/shared/ui/active-sidebar-links.tsx"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsgo --noEmit",
     "lint": "eslint src --cache --cache-location node_modules/.cache/.eslintcache",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest --passWithNoTests"

@@ -1,0 +1,107 @@
+# CI — 2 jobs paralelos num só workflow para UI mostrar tudo numa view:
+#
+#   ci     → correctness  (typecheck/lint/test)
+#   audit  → security     (gitleaks/hadolint/osv-scanner)
+#
+# Steps inline (não composite actions) para o Gitea Actions mostrar
+# cada step individualmente — bug #31397 ofusca steps dentro de
+# composite. Bash não-trivial vive em .gitea/<concern>/*.sh (ex.:
+# .gitea/audit/install-tools.sh), invocado por path absoluto. Mantém
+# o workflow legível + bash testável isoladamente via shellcheck.
+#
+# Concurrency group cancela runs antigos no mesmo branch quando há
+# push novo. Cron weekly só corre o `audit` (skip ci via `if:`) —
+# CVE database refresca-se sem push.
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: '0 6 * * 1'  # Segunda 06:00 UTC — pesca CVEs novas
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────
+  # Correctness gate: typecheck + lint + test em paralelo workspace.
+  # bun-debian label → oven/bun:1.3-debian (homelab-core-infra/
+  # gitea-runner-config.yaml: GITEA_RUNNER_LABELS).
+  # Bind-mount /var/cache/bun: bun install cache persiste entre runs.
+  # ─────────────────────────────────────────────────────────────────
+  ci:
+    if: github.event_name != 'schedule'
+    runs-on: bun-debian
+    timeout-minutes: 15
+    container:
+      image: oven/bun:1.3-debian
+      volumes:
+        - /var/cache/bun:/root/.bun/install/cache
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install workspace deps
+        run: bun install --frozen-lockfile
+
+      - name: typecheck (all workspaces, paralelo, tsgo)
+        run: bun run typecheck
+
+      - name: lint (all workspaces, paralelo, eslint)
+        run: bun run lint
+
+      - name: test (all workspaces, sequencial, vitest internamente paraleliza)
+        run: bun run test
+
+  # ─────────────────────────────────────────────────────────────────
+  # Security gate: 3 tools sobre o filesystem + lockfile + history.
+  # Binários cached em /var/cache/audit-tools (bind-mount, idempotent
+  # install via .gitea/audit/install-tools.sh).
+  # ─────────────────────────────────────────────────────────────────
+  audit:
+    runs-on: bun-debian
+    timeout-minutes: 10
+    container:
+      image: oven/bun:1.3-debian
+      volumes:
+        - /var/cache/audit-tools:/opt/audit-bin
+    env:
+      GITLEAKS_VERSION: 8.30.1
+      HADOLINT_VERSION: 2.14.0
+      OSV_VERSION: 2.3.8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # gitleaks varre commits — precisa do histórico completo.
+          fetch-depth: 0
+
+      - name: Restore or install audit binaries
+        # Script idempotent: cada tool só descarrega se diferente da
+        # versão pinned (env above). Cold start ~15s (apt + 3 binaries),
+        # steady-state ~1s. Bash extraído para shellcheck local.
+        shell: bash
+        run: .gitea/audit/install-tools.sh
+
+      - name: gitleaks (secret scan — full history, baseline-filtered)
+        # --baseline-path: ignora 23 findings históricos pre-adoção
+        # (test fixtures + .env + tfstate purged). Bloqueia só leaks
+        # NOVOS. Re-gerar: gitleaks detect --report-format json
+        # --report-path .gitleaks-baseline.json
+        run: /opt/audit-bin/gitleaks detect --baseline-path .gitleaks-baseline.json --redact --verbose --no-banner --exit-code 1
+
+      - name: hadolint (Dockerfile lint)
+        # Wrapper converte findings em workflow annotations
+        # (::warning::/::error::) que Gitea renderiza inline no PR.
+        # Threshold: só level=error quebra CI. Warnings actuais aparecem
+        # no PR para tracking (DL3008/DL3003/DL4006).
+        run: .gitea/audit/run-hadolint.sh apps/web/Dockerfile
+
+      - name: osv-scanner (lockfile CVEs)
+        # --format gh-annotations: native emission de annotations para
+        # cada CVE encontrada. Se houver findings novos, aparecem no PR
+        # como comments inline no lockfile.
+        run: /opt/audit-bin/osv-scanner --lockfile=bun.lock --format gh-annotations

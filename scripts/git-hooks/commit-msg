@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# commit-msg hook — enforce conventional-commits subject.
+# Installed by `bun install` (via root postinstall script).
+set -euo pipefail
+
+[ -n "${CI:-}" ] && exit 0
+
+# Allow merge/revert/fixup/squash commits and comment-only lines unchanged.
+first_line=$(grep -v '^#' "$1" | grep -v '^$' | head -n1)
+case "$first_line" in
+  "Merge "*|"Revert "*|"fixup! "*|"squash! "*) exit 0 ;;
+esac
+
+if ! grep -qE '^(feat|fix|perf|docs|refactor|test|chore|ci|build|style)(\([a-z0-9._-]+\))?!?: .{1,72}' <<<"$first_line"; then
+  cat >&2 <<'MSG'
+✗ commit message não-conventional.
+
+   Formato: <type>(<scope>)?!?: <subject>   (subject ≤ 72 chars)
+   Types  : feat fix perf docs refactor test chore ci build style
+
+   Exemplos:
+     fix(ci): vitest 5 beta workaround for Bun __esModule bug
+     feat(menu)!: drop legacy slug API
+     chore: bump deps
+
+MSG
+  exit 1
+fi

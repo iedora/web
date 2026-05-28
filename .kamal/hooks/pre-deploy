@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# .kamal/hooks/pre-deploy
+#
+# Corre drizzle migrations contra as 3 DBs (core, menu, imopush) ANTES
+# do traffic swap. Falha aqui aborta o deploy — o container antigo
+# continua a servir tráfego.
+#
+# Padrão canónico: `kamal app exec --primary --version=$KAMAL_VERSION`
+# arranca um container EFÉMERO a partir da imagem **nova** (com as
+# novas SQL files bundled), corre o script de migrações, sai. Só
+# depois o deploy real procede.
+#
+# Skip em rollbacks (já não há schema novo) e em destinations não-prod.
+set -euo pipefail
+
+[[ "${KAMAL_COMMAND:-}" == "rollback" ]] && exit 0
+[[ "${KAMAL_DESTINATION:-}" != "production" ]] && exit 0
+
+echo "[pre-deploy] migrating DBs against version $KAMAL_VERSION..."
+# Single ephemeral container, três migrations em cadeia. Wrap em `sh -c`
+# explícito — `kamal app exec` passa a string como `docker run image CMD`
+# sem auto-wrap, então `&&` precisa de shell que o entenda.
+# Falha de qualquer migração curto-circuita + aborta o deploy.
+kamal app exec --primary --version="$KAMAL_VERSION" \
+  --destination="$KAMAL_DESTINATION" \
+  'sh -c "node /app/packages/auth/migrate.mjs && node /app/products/menu/migrate.mjs && node /app/products/imopush/migrate.mjs"'
+echo "[pre-deploy] migrations ok."

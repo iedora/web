@@ -1,7 +1,0 @@
-#!/usr/bin/env bash
-# Shim for infra/iac/cmd/bws-sync — batched BWS upsert/delete.
-# See the Go file for env-var contract.
-set -euo pipefail
-DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(dirname "$DIR")"
-exec go run -C "$REPO_ROOT" ./infra/iac/cmd/bws-sync "$@"
