@@ -15,9 +15,14 @@ ssh:
     - ~/.ssh/ci_ed25519
 
 registry:
-  # Gitea OCI registry no mesmo Beelink (LAN, HTTP via insecure-registries
-  # config no daemon Docker). Push/pull em microsegundos vs GHCR's WAN.
-  server: 192.168.50.53:3030
+  # GHCR — Gitea registry tentado mas o buildkit container do remote
+  # builder não herda creds do host (~/.docker/config.json). 401
+  # Unauthorized em push. Resolver requer:
+  #   - mount de creds via docker buildx --secret, OU
+  #   - docker login dentro do buildkit container, OU
+  #   - registry-mirror config no buildkitd.toml
+  # Deferred para sessão dedicada. GHCR funciona out-of-box.
+  server: ghcr.io
   username: eduvhc
   password:
     - KAMAL_REGISTRY_PASSWORD
@@ -27,9 +32,7 @@ builder:
   remote: ssh://root@192.168.50.53
   context: .
   dockerfile: apps/web/Dockerfile
-  # Buildx registry cache — exporta todas as stages (deps + build +
-  # runtime) para uma imagem separada. Next build pull dessa tag,
-  # só rebuild do que mudou. Tipicamente 10min → 3-4min em warm builds.
+  # Cache image co-located com a imagem (GHCR private repo).
   cache:
     type: registry
     image: eduvhc/web-buildcache
@@ -70,9 +73,9 @@ accessories:
   cloudflared-replica:
     <<: *cloudflared
 
-  # OTel collector — scrape kamal-proxy Prometheus em :9090 + push OTLP
-  # para OpenObserve. Spans da app (via instrumentation.ts) +
-  # proxy metrics convergem no mesmo backend.
+  # OTel collector — scrape kamal-proxy Prometheus em :9090 + push
+  # OTLP HTTP para OpenObserve. Spans da app (via instrumentation.ts)
+  # + proxy metrics convergem no mesmo backend.
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.153.0
     roles: [web]
@@ -97,7 +100,11 @@ env:
     LOG_LEVEL: info
     # OpenObserve corre em homelab-core-infra (rede separada). App
     # chega lá via host.docker.internal — habilitado em options.add-host.
-    OTEL_EXPORTER_OTLP_ENDPOINT: http://host.docker.internal:5080/api/default
+    # OTel: app envia para o collector (mesma rede kamal, resolução
+    # por hostname). Collector adiciona auth de OO no egress. App
+    # fica sem qualquer secret OTel — single source of truth para
+    # auth no collector.
+    OTEL_EXPORTER_OTLP_ENDPOINT: http://iedora-web-otel-collector:4318
     # OO admin email — não é secret (email é PII, não auth). O password
     # sim, fica em BWS e é composto em OTEL_EXPORTER_OTLP_HEADERS.
     OPENOBSERVE_ADMIN_EMAIL: eduardoferdcarvalho@gmail.com
@@ -112,7 +119,6 @@ env:
     - MENU_DATABASE_URL
     - IMOPUSH_DATABASE_URL
     - CORE_SECRET
-    - OTEL_EXPORTER_OTLP_HEADERS
     - S3_ACCESS_KEY
     - S3_SECRET_KEY
     # Descomenta quando a key existir em BWS:

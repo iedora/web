@@ -23,13 +23,28 @@ receivers:
                 source: kamal-proxy
                 service: iedora-web
 
+  # OTLP receiver — app envia traces/logs/metrics aqui em vez de
+  # directamente a OO. Centraliza auth no collector (egress side),
+  # app fica sem qualquer secret OTel-related.
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+      grpc:
+        endpoint: 0.0.0.0:4317
+
 processors:
   batch:
     timeout: 5s
     send_batch_size: 100
 
 exporters:
-  otlphttp:
+  # HTTP/protobuf para OO (porta 5080, /api/{org}/v1/{signal}). gRPC
+  # tinha sido a primeira escolha (spec-recommended) mas OO 0.90 tem
+  # auth flaky em gRPC (`No valid auth token` mesmo com Authorization
+  # + organization headers correctos). HTTP funciona à primeira; em
+  # LAN o overhead extra é negligenciável.
+  otlp_http:
     endpoint: http://host.docker.internal:5080/api/default
     headers:
       Authorization: ${env:OTEL_AUTH_HEADER}
@@ -38,10 +53,21 @@ exporters:
 
 service:
   pipelines:
+    # Metrics: from kamal-proxy scrape + app OTLP
     metrics:
-      receivers: [prometheus]
+      receivers: [prometheus, otlp]
       processors: [batch]
-      exporters: [otlphttp]
+      exporters: [otlp_http]
+    # Traces: only from app (app instrumentation.ts → collector)
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp_http]
+    # Logs: app pino bridge via @opentelemetry/instrumentation-pino
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp_http]
   telemetry:
     logs:
       level: info

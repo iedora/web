@@ -1,7 +1,11 @@
-# Matrix CI — typecheck + lint + test per workspace.
-# Substitui 6 workflows quase-idênticos (.github/workflows/{auth,
-# design-system,observability,product-*}.yml) por um único job
-# parametrizado. Add a new workspace = uma linha na matrix.
+# Single-job CI — typecheck + lint + test em sequência num só container.
+# Matrix por workspace foi removida porque cada job pagava 1× container
+# startup + 1× bun install (~30s overhead/job × 9 jobs ≈ 5 min wasted).
+# Root scripts já iteram workspaces via `bun run --workspaces`.
+#
+# Trade-off aceite: status na UI vira 1 (pass/fail) em vez de 9.
+# Beneficio: full CI pass de ~10× mais rápido em cold cache,
+# 3-5× em warm.
 
 name: CI
 
@@ -16,32 +20,18 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  matrix:
-    name: ${{ matrix.workspace }}
+  ci:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    strategy:
-      fail-fast: false
-      matrix:
-        workspace:
-          - apps/web
-          - packages/auth
-          - packages/brand
-          - packages/db
-          - packages/design-system
-          - packages/iedora-observability
-          - products/core
-          - products/menu
-          - products/imopush
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: ./.gitea/actions/setup
-      - name: typecheck
-        run: bun run --cwd ${{ matrix.workspace }} typecheck
-        continue-on-error: false
-      - name: lint
-        run: bun run --cwd ${{ matrix.workspace }} lint
-        continue-on-error: false
-      - name: test
-        run: bun run --cwd ${{ matrix.workspace }} test
-        continue-on-error: false
+
+      - name: typecheck (all workspaces via tsc --build refs)
+        run: bun run typecheck
+
+      - name: lint (all workspaces in parallel)
+        run: bun run lint
+
+      - name: test (all workspaces)
+        run: bun run test
