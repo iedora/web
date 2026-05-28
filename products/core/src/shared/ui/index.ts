@@ -3,4 +3,4 @@ export { AdminShell } from './admin-shell'
 export {
   ActiveSidebarLinks,
   type ActiveSidebarItem,
-} from './active-sidebar-links'
+} from '@iedora/design-system'

@@ -1,6 +1,8 @@
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import {
+  ActiveSidebarLinks,
+  type ActiveSidebarItem,
   Sidebar,
   SidebarBrand,
   SidebarClose,
@@ -18,10 +20,6 @@ import { listRestaurantsWithCounts } from '@iedora/product-menu/features/dashboa
 import { getOrganizationPlan, planHas } from '@iedora/product-menu/features/plans'
 import { LogoutButton } from '@iedora/product-menu/features/dashboard-home/ui/logout-button'
 import { UserLocaleSwitcher } from '@iedora/product-menu/features/dashboard-home/ui/user-locale-switcher'
-import {
-  ActiveSidebarLinks,
-  type ActiveSidebarItem,
-} from '@iedora/product-menu/shared/ui/active-sidebar-links'
 
 export default async function DashboardLayout({
   children,
