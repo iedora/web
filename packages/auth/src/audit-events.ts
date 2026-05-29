@@ -34,6 +34,9 @@ export const CORE_AUDIT_EVENTS = {
   // ── Impersonation ────────────────────────────────────────────────
   USER_IMPERSONATED: 'user.impersonated',
   USER_IMPERSONATION_STOPPED: 'user.impersonation.stopped',
+
+  // ── Cross-product projection (`@iedora/core-tenancy`) ────────────────
+  TENANT_PRODUCT_STATE_PROJECTED: 'tenant.product.state-projected',
 } as const
 export type CoreAuditEvent =
   (typeof CORE_AUDIT_EVENTS)[keyof typeof CORE_AUDIT_EVENTS]

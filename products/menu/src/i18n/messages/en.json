@@ -508,6 +508,26 @@
             "colStatus": "Status",
             "colPeriod": "Renews",
             "willCancel": "Cancels at period end"
+          },
+          "products": {
+            "heading": "Products",
+            "empty": "No product activity recorded yet for this tenant.",
+            "label": {
+              "core": "Core",
+              "menu": "Menu",
+              "imopush": "Imopush"
+            },
+            "status": {
+              "pending": "Pending",
+              "in-progress": "In progress",
+              "completed": "Completed",
+              "skipped": "Skipped"
+            },
+            "col": {
+              "currentStep": "Current step",
+              "startedAt": "Started",
+              "completedAt": "Completed"
+            }
           }
         }
       },

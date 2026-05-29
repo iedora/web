@@ -23,6 +23,17 @@ export const BRAND_URL = `https://${BRAND_DOMAIN}`
 export const CONTACT_EMAIL = `hello@${BRAND_DOMAIN}`
 
 export { PRODUCTS, productUrl, type ProductId } from './products'
+export {
+  PRODUCT_ONBOARDING_STATUSES,
+  PRODUCT_ONBOARDING_STATUS_LIST,
+  PRODUCT_ONBOARDING_STEPS,
+  PRODUCT_ONBOARDING_STEP_LIST,
+  isProductOnboardingStatus,
+  type ProductOnboardingStatus,
+  type AnyOnboardingStepKey,
+  type OnboardingStepKeyFor,
+  type OnboardingStepValueFor,
+} from './product-onboarding'
 
 // ─── URL validators (no env, no I/O) ────────────────────────────────────
 

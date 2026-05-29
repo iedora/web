@@ -15,6 +15,7 @@
         "@iedora/auth": "workspace:*",
         "@iedora/billing": "workspace:*",
         "@iedora/brand": "workspace:*",
+        "@iedora/core-tenancy": "workspace:*",
         "@iedora/design-system": "workspace:*",
         "@iedora/observability": "workspace:*",
         "@iedora/product-core": "workspace:*",
@@ -47,6 +48,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@iedora/billing": "workspace:*",
+        "@iedora/core-tenancy": "workspace:*",
         "@iedora/db": "workspace:*",
         "better-auth": "^1.6.11",
         "drizzle-orm": "catalog:",
@@ -94,6 +96,24 @@
     "packages/brand": {
       "name": "@iedora/brand",
       "version": "0.1.0",
+      "devDependencies": {
+        "@iedora/eslint-config": "workspace:*",
+        "@types/node": "^22.19.19",
+        "eslint": "catalog:",
+        "typescript": "catalog:",
+        "typescript-eslint": "catalog:",
+        "vitest": "catalog:",
+      },
+    },
+    "packages/core-tenancy": {
+      "name": "@iedora/core-tenancy",
+      "version": "0.1.0",
+      "dependencies": {
+        "@iedora/auth": "workspace:*",
+        "@iedora/brand": "workspace:*",
+        "drizzle-orm": "catalog:",
+        "server-only": "^0.0.1",
+      },
       "devDependencies": {
         "@iedora/eslint-config": "workspace:*",
         "@types/node": "^22.19.19",
@@ -277,6 +297,7 @@
         "@iedora/auth": "workspace:*",
         "@iedora/billing": "workspace:*",
         "@iedora/brand": "workspace:*",
+        "@iedora/core-tenancy": "workspace:*",
         "@iedora/db": "workspace:*",
         "@iedora/design-system": "workspace:*",
         "@iedora/observability": "workspace:*",
@@ -626,6 +647,8 @@
     "@iedora/billing": ["@iedora/billing@workspace:packages/billing"],
 
     "@iedora/brand": ["@iedora/brand@workspace:packages/brand"],
+
+    "@iedora/core-tenancy": ["@iedora/core-tenancy@workspace:packages/core-tenancy"],
 
     "@iedora/db": ["@iedora/db@workspace:packages/db"],
 

@@ -9,6 +9,8 @@ import {
 import { SCOPES } from '@iedora/auth/scopes'
 import { detectTenantPreset } from '@iedora/auth'
 import { AdminPage } from '@iedora/product-core/shared/ui/admin-page'
+import { listTenantProductStates } from '@iedora/core-tenancy'
+import { PRODUCT_ONBOARDING_STATUSES } from '@iedora/brand'
 
 /**
  * Tenant detail — three stacked sections:
@@ -40,6 +42,7 @@ export default async function AdminTenantDetailPage({
   if (!detail) notFound()
 
   const { tenant, members, subscriptions } = detail
+  const productStates = await listTenantProductStates(tenantId)
   const dateFmt = new Intl.DateTimeFormat(undefined, {
     year: 'numeric',
     month: 'short',
@@ -206,8 +209,64 @@ export default async function AdminTenantDetailPage({
           </div>
         )}
       </section>
+
+      <section
+        className="space-y-3"
+        aria-labelledby="admin-tenant-products-h"
+        data-test-id="admin-tenant-products"
+      >
+        <h2
+          id="admin-tenant-products-h"
+          className="text-xs uppercase tracking-[0.18em] text-[var(--ink-40)]"
+        >
+          {t('products.heading')}
+        </h2>
+        {productStates.length === 0 ? (
+          <Card data-test-id="admin-tenant-products-empty">
+            <CardDesc>{t('products.empty')}</CardDesc>
+          </Card>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2">
+            {productStates.map((s) => (
+              <Card
+                key={s.product}
+                data-test-id={`admin-tenant-product-${s.product}`}
+              >
+                <div className="flex items-baseline justify-between gap-2">
+                  <CardTitle as="h3">{t(`products.label.${s.product}`)}</CardTitle>
+                  <Badge variant={productStateVariant(s.status)}>
+                    {t(`products.status.${s.status}`)}
+                  </Badge>
+                </div>
+                <div className="mt-3 space-y-1.5">
+                  <Row label={t('products.col.currentStep')}>
+                    <span>{s.currentStep ?? '—'}</span>
+                  </Row>
+                  <Row label={t('products.col.startedAt')}>
+                    <span className="tabular-nums">{dateFmt.format(s.startedAt)}</span>
+                  </Row>
+                  <Row label={t('products.col.completedAt')}>
+                    <span className="tabular-nums">
+                      {s.completedAt ? dateFmt.format(s.completedAt) : '—'}
+                    </span>
+                  </Row>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+      </section>
     </AdminPage>
   )
+}
+
+function productStateVariant(
+  status: string,
+): 'live' | 'accent' | 'ghost' | 'ink' {
+  if (status === PRODUCT_ONBOARDING_STATUSES.completed) return 'live'
+  if (status === PRODUCT_ONBOARDING_STATUSES.inProgress) return 'accent'
+  if (status === PRODUCT_ONBOARDING_STATUSES.skipped) return 'ghost'
+  return 'ink'
 }
 
 function Row({

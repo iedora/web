@@ -23,6 +23,12 @@ import {
 } from '@iedora/billing/schema'
 export { tenantSubscription, invoice }
 
+// `tenant_product_state` lives in `@iedora/core-tenancy` (cross-product
+// projection table). Re-exported here for the same reason: single
+// migration generator, single schema graph for the `core` DB.
+import { tenantProductState } from '@iedora/core-tenancy/schema'
+export { tenantProductState }
+
 /**
  * Drizzle schema for the iedora auth surface.
  *
@@ -279,6 +285,7 @@ export const schema = {
   tenantMember,
   tenantSubscription,
   invoice,
+  tenantProductState,
   rateLimit,
   auditLog,
 }

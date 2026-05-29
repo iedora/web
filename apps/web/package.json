@@ -19,6 +19,7 @@
     "@iedora/auth": "workspace:*",
     "@iedora/billing": "workspace:*",
     "@iedora/brand": "workspace:*",
+    "@iedora/core-tenancy": "workspace:*",
     "@iedora/design-system": "workspace:*",
     "@iedora/observability": "workspace:*",
     "@iedora/product-core": "workspace:*",

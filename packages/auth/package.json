@@ -26,6 +26,7 @@
   "dependencies": {
     "@iedora/billing": "workspace:*",
     "@iedora/db": "workspace:*",
+    "@iedora/core-tenancy": "workspace:*",
     "better-auth": "^1.6.11",
     "drizzle-orm": "catalog:",
     "postgres": "^3.4.9",

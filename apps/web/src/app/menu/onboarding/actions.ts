@@ -10,7 +10,12 @@ import {
   TENANT_ROLE_PRESETS,
 } from '@iedora/auth'
 import { createSubscription } from '@iedora/billing'
-import { PRODUCTS } from '@iedora/brand'
+import {
+  PRODUCTS,
+  PRODUCT_ONBOARDING_STATUSES,
+  PRODUCT_ONBOARDING_STEPS,
+} from '@iedora/brand'
+import { projectProductState } from '@iedora/core-tenancy'
 import { nextAvailableSlug, slugify } from '@iedora/product-menu/features/restaurant-slug'
 import { signInUrl } from '@iedora/product-core/url'
 import { publicUrl } from '@iedora/product-menu/shared/url'
@@ -102,6 +107,8 @@ async function addRestaurantToOrg(
   restaurantName: string,
   slug: string,
 ): Promise<OnboardingFormState> {
+  const session = await getSession()
+  if (!session?.user) redirect(signInUrl(publicUrl(ONBOARDING_STEPS.name.path).toString()))
   try {
     await db.transaction((tx) =>
       insertRestaurantWithDefaultMenu(tx, tenantId, restaurantName, slug),
@@ -110,6 +117,21 @@ async function addRestaurantToOrg(
     console.error('[onboarding] restaurant creation under existing org failed', err)
     return { error: 'Could not create restaurant. Please try again.' }
   }
+
+  // Cross-product projection: this tenant has a wizard in progress
+  // again (new restaurant pending step 2). Best-effort — failure
+  // doesn't block the redirect; the user can still complete the
+  // wizard, and the projection is rewritten on success.
+  await projectProductState({
+    tenantId,
+    product: PRODUCTS.menu,
+    status: PRODUCT_ONBOARDING_STATUSES.inProgress,
+    currentStep: PRODUCT_ONBOARDING_STEPS[PRODUCTS.menu].menu,
+    payload: { restaurantSlug: slug },
+    actor: { userId: session.user.id, email: session.user.email, role: null },
+  }).catch((err) => {
+    console.error('[onboarding] projectProductState (add-another) failed', err)
+  })
 
   revalidatePath('/menu/dashboard')
   redirect(ONBOARDING_STEPS.menu.buildPath({ slug }))
@@ -186,6 +208,21 @@ async function createOrgAndFirstRestaurant(
     console.error('[onboarding] restaurant creation failed', err)
     return { error: 'Could not create restaurant. Please try again.' }
   }
+
+  // Project the menu's onboarding state into core so the admin can see
+  // "this tenant is partway through menu's wizard". The product owns
+  // its real state (`restaurant.onboarding_completed_at`); this is the
+  // snapshot core reads.
+  await projectProductState({
+    tenantId,
+    product: PRODUCTS.menu,
+    status: PRODUCT_ONBOARDING_STATUSES.inProgress,
+    currentStep: PRODUCT_ONBOARDING_STEPS[PRODUCTS.menu].menu,
+    payload: { restaurantSlug: slug },
+    actor: { userId: session.user.id, email: session.user.email, role: null },
+  }).catch((err) => {
+    console.error('[onboarding] projectProductState (first) failed', err)
+  })
 
   revalidatePath('/menu/dashboard')
   redirect(ONBOARDING_STEPS.menu.buildPath({ slug }))

@@ -1,0 +1,31 @@
+{
+  "name": "@iedora/core-tenancy",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Cross-product tenant state — projection table that every product writes its onboarding/lifecycle state into, and the core admin reads from. No FK across product DBs; products call the projection helper after mutating their own state.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema.ts"
+  },
+  "scripts": {
+    "test": "vitest run --passWithNoTests",
+    "test:watch": "vitest",
+    "typecheck": "tsgo --noEmit",
+    "lint": "eslint src --cache --cache-location node_modules/.cache/.eslintcache"
+  },
+  "dependencies": {
+    "@iedora/auth": "workspace:*",
+    "@iedora/brand": "workspace:*",
+    "drizzle-orm": "catalog:",
+    "server-only": "^0.0.1"
+  },
+  "devDependencies": {
+    "@iedora/eslint-config": "workspace:*",
+    "@types/node": "^22.19.19",
+    "eslint": "catalog:",
+    "typescript": "catalog:",
+    "typescript-eslint": "catalog:",
+    "vitest": "catalog:"
+  }
+}
