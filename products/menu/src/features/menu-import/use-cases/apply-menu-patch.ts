@@ -80,6 +80,7 @@ export async function applyMenuPatch(
           description: it.description,
           priceCents: it.priceCents,
           available: true,
+          ...(it.variants && it.variants.length > 0 ? { variants: it.variants } : {}),
         },
         idx * 10,
       )
@@ -115,6 +116,7 @@ export async function applyMenuPatch(
         description: op.description,
         priceCents: op.priceCents,
         available: true,
+        ...(op.variants && op.variants.length > 0 ? { variants: op.variants } : {}),
       },
       tail + 10,
     )
@@ -128,6 +130,7 @@ export async function applyMenuPatch(
       name: op.name,
       description: op.description,
       priceCents: op.priceCents,
+      ...(op.variants !== undefined ? { variants: op.variants } : {}),
     })
     stats.updatedItems += 1
   }

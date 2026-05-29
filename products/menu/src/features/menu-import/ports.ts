@@ -129,6 +129,10 @@ export type PatchCurrentMenu = {
       id: string
       name: string
       priceCents: number
+      /** Half-dose / size variants already on the existing item — sent
+       *  to the AI so it can match against the new photo without
+       *  duplicating dishes that only differ by their variants. */
+      variants?: ParsedVariant[]
     }>
   }>
 }
@@ -142,7 +146,12 @@ export type PatchOperation =
   | {
       kind: 'add-category'
       name: string
-      items: Array<{ name: string; priceCents: number; description?: string }>
+      items: Array<{
+        name: string
+        priceCents: number
+        description?: string
+        variants?: ParsedVariant[]
+      }>
     }
   | { kind: 'remove-category'; categoryId: string }
   | { kind: 'rename-category'; categoryId: string; name: string }
@@ -156,6 +165,7 @@ export type PatchOperation =
       name: string
       priceCents: number
       description?: string
+      variants?: ParsedVariant[]
     }
   | {
       kind: 'update-item'
@@ -163,6 +173,9 @@ export type PatchOperation =
       name?: string
       priceCents?: number
       description?: string
+      /** Full replacement of the item's variant list. `[]` clears the
+       *  variants column; `undefined` leaves it untouched. */
+      variants?: ParsedVariant[]
     }
   | { kind: 'remove-item'; itemId: string }
 
@@ -243,7 +256,14 @@ export interface MenuImportPort {
   updateItemFields(
     itemId: string,
     restaurantId: string,
-    patch: { name?: string; description?: string; priceCents?: number },
+    patch: {
+      name?: string
+      description?: string
+      priceCents?: number
+      /** Full replacement of the variants jsonb column. Pass `[]` to
+       *  clear; omit (undefined) to leave the column untouched. */
+      variants?: ParsedVariant[]
+    },
   ): Promise<void>
 
   deleteItem(itemId: string, restaurantId: string): Promise<void>

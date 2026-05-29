@@ -73,6 +73,26 @@ export default function proxy(req: NextRequest) {
     }
   }
 
+  // 1b. Plain-localhost alias fallback — surfaces may declare
+  //     `aliasPaths` (top-level URL segments their slices emit without
+  //     the rewritePath prefix, because they run under a subdomain in
+  //     prod and rely on rule 1 to add the prefix). On bare `localhost`
+  //     no surface matches, so without this branch those paths 404.
+  //     Subdomain hosts (`menu.localhost`, `core.localhost`, …) go
+  //     through rule 1 above and never reach here.
+  if (!here && host === 'localhost') {
+    for (const s of surfaces) {
+      if (!s.rewritePath || !s.aliasPaths?.length) continue
+      const match = s.aliasPaths.some(
+        (p) => path === p || path.startsWith(`${p}/`),
+      )
+      if (!match) continue
+      const url = req.nextUrl.clone()
+      url.pathname = `${s.rewritePath}${path}`
+      return NextResponse.rewrite(url)
+    }
+  }
+
   // 2. Cross-host guard — visiting another surface's namespace from
   //    a host that doesn't own it. `localhost` (the dev catch-all)
   //    keeps the path-based fallback so every surface's /<name>/*

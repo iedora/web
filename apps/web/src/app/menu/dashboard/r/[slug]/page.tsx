@@ -75,6 +75,18 @@ export default async function RestaurantPage({
             id: it.id,
             name: it.name,
             priceCents: it.priceCents,
+            // Carry variants (dose / meia-dose, sizes, etc.) so the AI
+            // can match the full variant set against the photo and
+            // emit accurate diff ops instead of treating a half-dose
+            // change as a new dish.
+            ...(it.variants && it.variants.length > 0
+              ? {
+                  variants: it.variants.map((v) => ({
+                    label: v.label,
+                    priceCents: v.priceCents,
+                  })),
+                }
+              : {}),
           })),
         })),
       }

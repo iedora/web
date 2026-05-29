@@ -96,6 +96,16 @@ export function createKimiAdapter(
           id: it.id,
           name: it.name,
           priceCents: it.priceCents,
+          // Only ship variants when there are any — keeps the prompt
+          // shorter for the common single-price case.
+          ...(it.variants && it.variants.length > 0
+            ? {
+                variants: it.variants.map((v) => ({
+                  label: v.label,
+                  priceCents: v.priceCents,
+                })),
+              }
+            : {}),
         })),
       })),
     }

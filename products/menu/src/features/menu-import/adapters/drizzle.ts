@@ -111,14 +111,24 @@ function makeDrizzleMenuImport(): MenuImportPort {
     async updateItemFields(
       itemId: string,
       restaurantId: string,
-      patch: { name?: string; description?: string; priceCents?: number },
+      patch: {
+        name?: string
+        description?: string
+        priceCents?: number
+        variants?: Array<{ label: string; priceCents: number }>
+      },
     ) {
-      // Only spread the fields the AI included; everything else
-      // (variants, availability, image) stays put.
+      // Only spread the fields the AI included; untouched columns
+      // (availability, image, i18n overrides) stay put. Passing
+      // `variants: []` clears the jsonb column; omitting it leaves
+      // the existing variants in place.
       const set: Record<string, unknown> = {}
       if (patch.name !== undefined) set.name = patch.name
       if (patch.description !== undefined) set.description = patch.description
       if (patch.priceCents !== undefined) set.priceCents = patch.priceCents
+      if (patch.variants !== undefined) {
+        set.variants = patch.variants.length > 0 ? patch.variants : null
+      }
       if (Object.keys(set).length === 0) return
       await db
         .update(item)

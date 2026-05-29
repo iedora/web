@@ -28,6 +28,7 @@ export { Wordmark } from "./components/wordmark";
 export {
   Stage,
   PaperCard,
+  ActionCard,
   Masthead,
   OrnamentRule,
   DottedStepper,

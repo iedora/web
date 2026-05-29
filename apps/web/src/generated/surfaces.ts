@@ -10,6 +10,18 @@ export type Surface = {
   // URL prefix proxy.ts rewrites traffic under (e.g. "/core").
   // Empty string means this surface owns the URL root (no rewrite).
   readonly rewritePath: string
+  /**
+   * Top-level URL segments the surface's slice code emits WITHOUT the
+   * `rewritePath` prefix (e.g. the menu slice generates `/dashboard/...`,
+   * not `/menu/dashboard/...`, because it expects to run under
+   * `menu.<host>` where the host rewrite adds the prefix). Used by
+   * proxy.ts to make those paths resolvable on plain `localhost`
+   * (no subdomain) too. Each entry is matched as either an exact path
+   * or a prefix with a trailing `/`.
+   *
+   * Keep aligned with the directories under `apps/web/src/app/<surface>/`.
+   */
+  readonly aliasPaths?: ReadonlyArray<string>
 }
 
 export const surfaces: ReadonlyArray<Surface> = [
@@ -22,6 +34,7 @@ export const surfaces: ReadonlyArray<Surface> = [
     name: PRODUCTS.menu,
     hosts: [`menu.${BRAND_DOMAIN}`, "menu.localhost"],
     rewritePath: "/menu",
+    aliasPaths: ["/dashboard", "/onboarding", "/r", "/q", "/showcase"],
   },
   {
     name: PRODUCTS.core,

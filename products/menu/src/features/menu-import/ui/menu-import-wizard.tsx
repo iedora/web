@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from 'react'
 import { useTranslations } from 'next-intl'
 import {
+  ActionCard,
   Button,
   Checkbox,
   Field,
@@ -515,34 +516,22 @@ export function MenuImportWizard({
           <BuildingAnimation />
         ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <button
-              type="button"
+            <ActionCard
               disabled={disabled}
+              glyph="◉"
+              title={t('importMenuTakePhoto')}
+              hint={t('importMenuTakePhotoHint')}
               onClick={() => setStep({ kind: 'camera' })}
               data-test-id="menu-import-take-photo"
-              className="flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-[var(--ink-24)] p-8 text-center transition-colors hover:border-[var(--ink-40)] hover:bg-[var(--paper-2)] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-[var(--ink-24)] disabled:hover:bg-transparent"
-            >
-              <span className="text-sm font-medium">
-                {t('importMenuTakePhoto')}
-              </span>
-              <span className="text-xs text-[var(--ink-55)]">
-                {t('importMenuTakePhotoHint')}
-              </span>
-            </button>
-            <button
-              type="button"
+            />
+            <ActionCard
               disabled={disabled}
+              glyph="❧"
+              title={t('importMenuUploadPhoto')}
+              hint={t('importMenuUploadPhotoHint')}
               onClick={() => uploadRef.current?.click()}
               data-test-id="menu-import-upload-photo"
-              className="flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-[var(--ink-24)] p-8 text-center transition-colors hover:border-[var(--ink-40)] hover:bg-[var(--paper-2)] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-[var(--ink-24)] disabled:hover:bg-transparent"
-            >
-              <span className="text-sm font-medium">
-                {t('importMenuUploadPhoto')}
-              </span>
-              <span className="text-xs text-[var(--ink-55)]">
-                {t('importMenuUploadPhotoHint')}
-              </span>
-            </button>
+            />
           </div>
         )}
 

@@ -30,6 +30,54 @@ export function Stage({ className, grain = true, children, ...rest }: StageProps
   );
 }
 
+/* ── <ActionCard> ─ a button that reads like a printed-menu chip.
+ *    Square, hairline-bordered, with a centered cinnabar glyph +
+ *    Playfair title + Geist Mono hint. Single visual treatment — when
+ *    two ActionCards sit side-by-side they read as equal weight.
+ *    Hover inverts to ink fill so the chip becomes the dominant
+ *    element while pressed. Used in the AI-import wizards and
+ *    anywhere a focused-task surface offers paired actions.
+ */
+
+type ActionCardProps = HTMLAttributes<HTMLButtonElement> & {
+  /** Big centred line — set in Playfair Display 500. */
+  title: ReactNode;
+  /** Geist Mono uppercase hint underneath. */
+  hint?: ReactNode;
+  /** Optional glyph rendered above the title (e.g. ◉ / ↑ / ❧). Always
+   *  rendered in cinnabar italic Playfair. */
+  glyph?: ReactNode;
+  disabled?: boolean;
+};
+
+export function ActionCard({
+  title,
+  hint,
+  glyph,
+  className,
+  disabled,
+  children,
+  ...rest
+}: ActionCardProps) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      {...rest}
+      className={cn("ds-action-card", className)}
+    >
+      {glyph && (
+        <span className="ds-action-card__glyph" aria-hidden="true">
+          {glyph}
+        </span>
+      )}
+      <span className="ds-action-card__title">{title}</span>
+      {hint && <span className="ds-action-card__hint">{hint}</span>}
+      {children}
+    </button>
+  );
+}
+
 /* ── <PaperCard> ─ letterpress chrome: double hairline frame, drop shadow */
 
 type PaperCardProps = HTMLAttributes<HTMLDivElement> & {

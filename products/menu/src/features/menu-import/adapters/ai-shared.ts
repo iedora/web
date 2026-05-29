@@ -155,6 +155,18 @@ const PatchOperationAISchema = z.object({
         name: z.string(),
         priceCents: z.number().int().min(0).default(0),
         description: z.string().optional(),
+        variants: z
+          .array(
+            z.object({
+              label: z.string(),
+              priceCents: z.number().int().min(0).default(0),
+            }),
+          )
+          .optional()
+          .describe(
+            'Half-dose / size variants for this item — same shape as ' +
+              'the import flow. Omit when the dish has one price.',
+          ),
       }),
     )
     .optional()
@@ -190,6 +202,21 @@ const PatchOperationAISchema = z.object({
     .string()
     .optional()
     .describe('Optional description for add-item / update-item.'),
+  variants: z
+    .array(
+      z.object({
+        label: z.string(),
+        priceCents: z.number().int().min(0).default(0),
+      }),
+    )
+    .optional()
+    .describe(
+      'For add-item / update-item: the FULL variant set after this op ' +
+        '(half-dose, sizes, etc.) — same shape as the import flow. ' +
+        'Omit when the dish has one price. On update-item, providing ' +
+        'variants REPLACES the existing set; pass an empty array to ' +
+        'clear them.',
+    ),
 })
 
 export const MenuPatchSchema = z.object({
@@ -253,6 +280,29 @@ RULES:
   lagareiro" → "Polvo à lagareiro grelhado") is an "update-item" on
   the same id, not a remove + add.
 - PRICE PARSING — €12.50 → priceCents 1250. €0,00 or no symbol → 0.
+- VARIANT PRICES — Portuguese menus often print column headers like
+  "PREÇO / DOSE" + "PREÇO 1/2 DOSE" (or "DOSE / MEIA DOSE",
+  "S / L", "33cl / 50cl", "Imperial / Caneca"). EACH row is ONE dish
+  with multiple prices, one per column header. When you see this:
+    * The leftmost column is the dish's primary \`priceCents\`.
+    * Each remaining column becomes a \`variants\` entry on the same
+      dish: \`{ label: <column header>, priceCents: <row value> }\`.
+      Drop pricing labels like "PREÇO/" from the variant label —
+      keep "Meia dose", "1/2 Dose", "Large", "50cl".
+    * The column header is NOT a category. DO NOT emit "1/2 DOSE" as
+      a category name.
+    * NEVER duplicate a dish across rows to capture each price.
+  When matching against the current menu:
+    * The input items carry their existing \`variants\` array. Compare
+      the FULL variant set (primary price + variants) against the
+      photo. If the photo's variant set differs (a new half-dose
+      price, a new label, a removed variant), emit "update-item"
+      with the full new variant set in \`variants\` — that REPLACES the
+      stored set.
+    * If primary and variants both match, the item is unchanged. Don't
+      emit anything for it.
+    * Same rule for "add-item": include the variants the photo shows
+      for the new dish.
 - LANGUAGE / CURRENCY — return the menu's detected language and
   currency the same way as the full-import flow (single language in
   names/descriptions, ISO 4217 currency code).
@@ -355,6 +405,14 @@ export function normalizePatchOperations(
             name: it.name,
             priceCents: it.priceCents ?? 0,
             ...(it.description ? { description: it.description } : {}),
+            ...(it.variants && it.variants.length > 0
+              ? {
+                  variants: it.variants.map((v) => ({
+                    label: v.label,
+                    priceCents: v.priceCents ?? 0,
+                  })),
+                }
+              : {}),
           })),
         })
         break
@@ -385,6 +443,14 @@ export function normalizePatchOperations(
           name: op.name,
           priceCents: op.priceCents ?? 0,
           ...(op.description ? { description: op.description } : {}),
+          ...(op.variants && op.variants.length > 0
+            ? {
+                variants: op.variants.map((v) => ({
+                  label: v.label,
+                  priceCents: v.priceCents ?? 0,
+                })),
+              }
+            : {}),
         })
         break
       }
@@ -397,11 +463,18 @@ export function normalizePatchOperations(
         if (op.name) patch.name = op.name
         if (typeof op.priceCents === 'number') patch.priceCents = op.priceCents
         if (op.description) patch.description = op.description
+        if (op.variants !== undefined) {
+          patch.variants = op.variants.map((v) => ({
+            label: v.label,
+            priceCents: v.priceCents ?? 0,
+          }))
+        }
         // Skip no-op updates (only itemId, no fields to change).
         if (
           patch.name === undefined &&
           patch.priceCents === undefined &&
-          patch.description === undefined
+          patch.description === undefined &&
+          patch.variants === undefined
         ) {
           break
         }

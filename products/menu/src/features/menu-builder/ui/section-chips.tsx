@@ -38,42 +38,101 @@ export function SectionChips({
   )
   const scrollerRef = useRef<HTMLDivElement>(null)
   const chipRefs = useRef(new Map<string, HTMLButtonElement>())
+  // When the operator taps a chip, we kick off a smooth-scroll AND
+  // optimistically pin the highlight on the tapped section. The scroll
+  // handler must not fight back during the animation — at any frame
+  // the page is somewhere between the previous and the target section,
+  // so a naive "topmost crossed" calculation would re-elect the
+  // previous section and the chip would visibly flicker back. We hold
+  // a lock on the target id until the section's header actually lands
+  // near the chip-bar offset (or a hard timeout fires, in case the
+  // user interrupts the scroll).
+  const lockedTargetRef = useRef<string | null>(null)
+  const lockTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // IntersectionObserver highlights the section that occupies the most
-  // of the viewport. `rootMargin` shifts the "centre line" up by 30%
-  // so chips track scroll naturally (a section is "active" when its
-  // top edge crosses the upper third).
+  // Scroll-driven highlight. We tried IntersectionObserver here first;
+  // it broke on scroll UP because a section whose `top` was far above
+  // the viewport (large negative) never re-activated — observer-based
+  // "topmost intersecting" filters always biased toward sections
+  // entering from below.
+  //
+  // The robust rule, mobile-first: the active section is the one whose
+  // header has most recently crossed the sticky chip bar going down,
+  // i.e. the section with the largest `top` value that is still ≤ the
+  // chip-bar offset. Same logic up and down — read the DOM, pick a
+  // winner, done. rAF coalesces scroll bursts so it stays cheap on
+  // low-end Android.
   useEffect(() => {
     if (categories.length === 0) return
-    const observed: Element[] = []
-    const observer = new IntersectionObserver(
-      (entries) => {
-        // Pick the entry closest to the viewport top edge that is
-        // intersecting. Falls back to whatever we last had.
-        let bestId: string | null = null
-        let bestTop = Number.POSITIVE_INFINITY
-        for (const e of entries) {
-          if (!e.isIntersecting) continue
-          const top = e.boundingClientRect.top
-          if (top >= -40 && top < bestTop) {
-            bestTop = top
-            bestId = (e.target as HTMLElement).dataset.sectionId ?? null
+
+    let raf = 0
+    function update() {
+      raf = 0
+      // Offset = sticky chip bar height + a hair of breathing room.
+      // Falls back to the same 96 px constant used by `jumpToSection`
+      // when the scroller ref isn't mounted yet (first paint).
+      const offset = (scrollerRef.current?.getBoundingClientRect().bottom ?? 96) + 8
+
+      // Tap-locked: keep the highlight pinned to the tap target until
+      // its header sits within ~16 px of the offset line, then release.
+      // The release-on-arrival check (instead of a pure timer) keeps
+      // the chip honest even if the browser interrupts the smooth
+      // scroll (eg. user touches the page mid-animation).
+      const locked = lockedTargetRef.current
+      if (locked) {
+        const el = document.querySelector<HTMLElement>(
+          `[data-section-id="${locked}"]`,
+        )
+        if (el) {
+          const top = el.getBoundingClientRect().top
+          if (Math.abs(top - offset) < 16) {
+            lockedTargetRef.current = null
+            if (lockTimeoutRef.current) {
+              clearTimeout(lockTimeoutRef.current)
+              lockTimeoutRef.current = null
+            }
+          } else {
+            setActiveId(locked)
+            return
           }
+        } else {
+          // Section vanished (deleted mid-scroll) — drop the lock.
+          lockedTargetRef.current = null
         }
-        if (bestId) setActiveId(bestId)
-      },
-      { rootMargin: '-30% 0px -55% 0px', threshold: [0, 1] },
-    )
-    for (const c of categories) {
-      const el = document.querySelector(`[data-section-id="${c.id}"]`)
-      if (el) {
-        observer.observe(el)
-        observed.push(el)
       }
+
+      let bestId: string | null = categories[0]?.id ?? null
+      let bestTop = Number.NEGATIVE_INFINITY
+      for (const c of categories) {
+        const el = document.querySelector<HTMLElement>(
+          `[data-section-id="${c.id}"]`,
+        )
+        if (!el) continue
+        const top = el.getBoundingClientRect().top
+        // Pick the section whose header is the *last one* to have
+        // crossed the chip bar going downward — that's the section
+        // the user is currently reading, regardless of scroll
+        // direction. Sections still below the bar are skipped.
+        if (top <= offset && top > bestTop) {
+          bestTop = top
+          bestId = c.id
+        }
+      }
+      if (bestId) setActiveId(bestId)
     }
+
+    function onScroll() {
+      if (raf) return
+      raf = requestAnimationFrame(update)
+    }
+
+    update()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    window.addEventListener('resize', onScroll, { passive: true })
     return () => {
-      for (const el of observed) observer.unobserve(el)
-      observer.disconnect()
+      window.removeEventListener('scroll', onScroll)
+      window.removeEventListener('resize', onScroll)
+      if (raf) cancelAnimationFrame(raf)
     }
   }, [categories])
 
@@ -101,10 +160,21 @@ export function SectionChips({
     if (!el) return
     // Offset by the sticky chip bar height so the section header
     // doesn't slide under the chips after the scroll lands.
-    const offset = 96
+    const offset = (scrollerRef.current?.getBoundingClientRect().bottom ?? 96) + 8
     const top = el.getBoundingClientRect().top + window.scrollY - offset
-    window.scrollTo({ top, behavior: 'smooth' })
+    // Pin the highlight to the tapped chip for the duration of the
+    // smooth scroll. The scroll handler releases the lock once the
+    // section header lands at the offset line; this timer is the
+    // safety net for scrolls that never reach (eg. target near page
+    // bottom — `scrollTo` clamps and the arrival check never fires).
+    lockedTargetRef.current = id
+    if (lockTimeoutRef.current) clearTimeout(lockTimeoutRef.current)
+    lockTimeoutRef.current = setTimeout(() => {
+      lockedTargetRef.current = null
+      lockTimeoutRef.current = null
+    }, 1200)
     setActiveId(id)
+    window.scrollTo({ top, behavior: 'smooth' })
   }
 
   return (

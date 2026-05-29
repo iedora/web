@@ -35,7 +35,7 @@ SOPS entries necessárias (`sops ~/.config/iedora/secrets.sops.yaml`):
 | `POSTGRES_PASSWORD` | password root do postgres accessory |
 | `OPENOBSERVE_ADMIN_PASSWORD` | password da admin UI do OO (collector usa para Basic auth) |
 | `S3_ACCESS_KEY` / `S3_SECRET_KEY` | R2 creds |
-| `DEEPSEEK_API_KEY` | LLM |
+| `MOONSHOT_API_KEY` | LLM (Kimi) |
 
 `TUNNEL_TOKEN` e `KAMAL_REGISTRY_PASSWORD` não vão para o SOPS —
 saem de `infra/.tunnel-token` (Tofu output) e de `gh auth token`.
