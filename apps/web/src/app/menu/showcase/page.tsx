@@ -152,7 +152,7 @@ export default function ShowcasePage() {
             <Button arrow>Begin a work</Button>
             <Button variant="solid" arrow>Read the rooms</Button>
             <Button variant="ghost" arrow>Quietly</Button>
-            <Button variant="accent" arrow>Send</Button>
+            <Button variant="primary" arrow>Send</Button>
             <Button disabled>Disabled</Button>
           </div>
         </Section>

@@ -30,7 +30,7 @@ export default async function ImopushDashboardHome() {
 
   const actions = (
     <Button
-      variant="accent"
+      variant="primary"
       href={IMOPUSH_PATHS.newProperty}
       data-test-id="properties-new"
     >

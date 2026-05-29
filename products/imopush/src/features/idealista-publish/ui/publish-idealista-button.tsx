@@ -33,7 +33,7 @@ export function PublishIdealistaButton({ reference, retry }: Props) {
   return (
     <Button
       type="button"
-      variant="accent"
+      variant="primary"
       onClick={onClick}
       disabled={isPending}
       data-test-id={`idealista-publish-${reference}`}

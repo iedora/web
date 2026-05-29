@@ -30,15 +30,6 @@ describe("Button", () => {
       expect(html).toContain(`class="ds-btn ${klass}"`);
     });
 
-    it("legacy `default` alias maps to ds-btn--secondary", () => {
-      const html = renderToStaticMarkup(<Button variant="default">x</Button>);
-      expect(html).toContain('class="ds-btn ds-btn--secondary"');
-    });
-
-    it("legacy `accent` alias maps to ds-btn--primary", () => {
-      const html = renderToStaticMarkup(<Button variant="accent">x</Button>);
-      expect(html).toContain('class="ds-btn ds-btn--primary"');
-    });
   });
 
   describe("sizes", () => {

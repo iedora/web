@@ -151,6 +151,3 @@ export {
   EditorialInput,
   EditorialTextarea,
 } from "./components/pane";
-
-/** @deprecated Use <Button variant="accent" arrow>. */
-export { SendButton } from "./components/send-button";

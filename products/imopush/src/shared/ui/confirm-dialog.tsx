@@ -20,7 +20,7 @@ export type ConfirmDialogProps = {
   description?: ReactNode
   confirmLabel: string
   cancelLabel: string
-  variant?: 'default' | 'danger'
+  variant?: 'secondary' | 'danger'
   onConfirm: () => Promise<void> | void
   children: ReactNode
 }
@@ -35,7 +35,7 @@ export function ConfirmDialog({
   description,
   confirmLabel,
   cancelLabel,
-  variant = 'default',
+  variant = 'secondary',
   onConfirm,
   children,
 }: ConfirmDialogProps) {
@@ -71,7 +71,7 @@ export function ConfirmDialog({
               </Button>
               <Button
                 type="button"
-                variant={variant === 'danger' ? 'accent' : 'accent'}
+                variant={variant === 'danger' ? 'danger' : 'primary'}
                 onClick={handleConfirm}
                 disabled={isPending}
                 data-variant={variant}

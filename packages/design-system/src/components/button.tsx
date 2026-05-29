@@ -26,12 +26,6 @@ import { cn } from "../lib/cn";
  * with form state (`disabled={pending}` ➜ `loading={pending}`) so the
  * label text doesn't have to swap.
  *
- * Aliases:
- *   - `default` (deprecated) → `secondary`
- *   - `accent`  (deprecated) → `primary`
- * Kept so the rename PR doesn't blow up callsites. Editors warn via
- * the `@deprecated` JSDoc on each.
- *
  * Renders as <a> when `href` is provided, otherwise <button>.
  */
 
@@ -40,11 +34,7 @@ export type ButtonVariant =
   | "secondary"
   | "solid"
   | "ghost"
-  | "danger"
-  /** @deprecated Use `secondary` instead. */
-  | "default"
-  /** @deprecated Use `primary` instead. */
-  | "accent";
+  | "danger";
 
 export type ButtonSize = "sm" | "md" | "lg";
 
@@ -78,7 +68,6 @@ export type ButtonProps = AsButtonProps | AsAnchorProps;
 function variantClass(variant: ButtonVariant | undefined): string {
   switch (variant) {
     case "primary":
-    case "accent":
       return "ds-btn--primary";
     case "solid":
       return "ds-btn--solid";
@@ -87,7 +76,6 @@ function variantClass(variant: ButtonVariant | undefined): string {
     case "danger":
       return "ds-btn--danger";
     case "secondary":
-    case "default":
     case undefined:
       return "ds-btn--secondary";
   }
