@@ -2,9 +2,9 @@
 
 import { headers } from 'next/headers'
 import { revalidatePath } from 'next/cache'
-import { recordAudit, type AuditActor } from '@iedora/auth'
+import { recordAudit, type AuditActor } from '@iedora/core-auth'
 import { requireScope } from '../../guards'
-import { SCOPES } from '@iedora/auth/scopes'
+import { SCOPES } from '@iedora/core-auth/scopes'
 import { betterAuthAdminUsersGateway } from './adapters/better-auth'
 import { banUser as banUserUseCase } from './use-cases/ban-user'
 import { unbanUser as unbanUserUseCase } from './use-cases/unban-user'
@@ -22,12 +22,12 @@ import type { CrossTenantRole } from './use-cases/set-role'
  *     route already gates, but actions can be POSTed standalone).
  *  2. Builds the gateway adapter, threading the calling actor so every
  *     mutation routed through it carries actor attribution into the
- *     `@iedora/auth` primitive's audit row.
+ *     `@iedora/core-auth` primitive's audit row.
  *  3. Delegates to the use-case, which holds the policy.
  *  4. Revalidates the affected paths.
  *
  * Audit emission: `user.banned`, `user.unbanned`, `user.impersonated`,
- * `user.scopes.updated` are emitted by the `@iedora/auth` primitives
+ * `user.scopes.updated` are emitted by the `@iedora/core-auth` primitives
  * themselves — no duplicate write here. Session-revoke events are
  * still emitted at the action layer because there's no dedicated
  * primitive yet (gateway goes straight to `db.delete(session)`).

@@ -16,8 +16,8 @@
     "db:migrate:test": "bun --env-file=.env.test scripts/migrate-test.mjs"
   },
   "dependencies": {
-    "@iedora/auth": "workspace:*",
-    "@iedora/billing": "workspace:*",
+    "@iedora/core-auth": "workspace:*",
+    "@iedora/core-billing": "workspace:*",
     "@iedora/brand": "workspace:*",
     "@iedora/core-tenancy": "workspace:*",
     "@iedora/design-system": "workspace:*",

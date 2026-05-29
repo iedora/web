@@ -20,7 +20,7 @@ import {
 
 /**
  * End-to-end audit coverage — one assertion per state-changing primitive
- * in `@iedora/auth`. The contract these tests enforce:
+ * in `@iedora/core-auth`. The contract these tests enforce:
  *
  *   1. Every successful mutation writes exactly the expected event
  *      (no missing audit, no surprise extras).

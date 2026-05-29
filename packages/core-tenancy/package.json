@@ -15,7 +15,7 @@
     "lint": "eslint src --cache --cache-location node_modules/.cache/.eslintcache"
   },
   "dependencies": {
-    "@iedora/auth": "workspace:*",
+    "@iedora/core-auth": "workspace:*",
     "@iedora/brand": "workspace:*",
     "drizzle-orm": "catalog:",
     "server-only": "^0.0.1"

@@ -1,6 +1,6 @@
 /**
  * Audit-read slice barrel. Read-only — write path is in
- * `@iedora/auth/audit::recordAudit`. Adapters live under `./adapters/`,
+ * `@iedora/core-auth/audit::recordAudit`. Adapters live under `./adapters/`,
  * use-cases under `./use-cases/`.
  */
 

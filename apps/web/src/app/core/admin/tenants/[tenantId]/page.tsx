@@ -6,8 +6,8 @@ import {
   drizzleAdminTenantsGateway,
   getTenant,
 } from '@iedora/product-core/features/admin-tenants'
-import { SCOPES } from '@iedora/auth/scopes'
-import { detectTenantPreset } from '@iedora/auth'
+import { SCOPES } from '@iedora/core-auth/scopes'
+import { detectTenantPreset } from '@iedora/core-auth'
 import { AdminPage } from '@iedora/product-core/shared/ui/admin-page'
 import { listTenantProductStates } from '@iedora/core-tenancy'
 import { PRODUCT_ONBOARDING_STATUSES } from '@iedora/brand'

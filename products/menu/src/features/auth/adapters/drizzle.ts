@@ -2,11 +2,11 @@ import 'server-only'
 import { and, eq } from 'drizzle-orm'
 import { db } from '../../../shared/db/client'
 import { restaurant } from '../../../shared/db/schema'
-import { getSession as getCoreSession, getActiveTenantId } from '@iedora/auth/server'
+import { getSession as getCoreSession, getActiveTenantId } from '@iedora/core-auth/server'
 import type { AuthGateway, Session } from '../ports'
 
 /**
- * Production AuthGateway. Delegates session reads to `@iedora/auth/
+ * Production AuthGateway. Delegates session reads to `@iedora/core-auth/
  * server.getSession()` (better-auth under the hood) and active-tenant
  * resolution to `getActiveTenantId()` which lazily revalidates the
  * stored `session.active_tenant_id` against `tenant_member`.

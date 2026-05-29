@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
-import { authClient } from '@iedora/auth/client'
+import { authClient } from '@iedora/core-auth/client'
 
 /**
  * Fires once on mount: hits better-auth's sign-out endpoint (which

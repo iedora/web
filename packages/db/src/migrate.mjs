@@ -14,7 +14,7 @@
 //
 //   import { runMigrations } from '../db/src/migrate.mjs'
 //   await runMigrations({ url: process.env.CORE_DATABASE_URL,
-//                         folder: '/app/packages/auth/drizzle',
+//                         folder: '/app/packages/core-auth/drizzle',
 //                         tag: 'core' })
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'

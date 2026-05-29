@@ -1,7 +1,7 @@
 import 'server-only'
 import { randomUUID } from 'node:crypto'
 import { and, eq } from 'drizzle-orm'
-import { getCoreDb, recordAudit } from '@iedora/auth'
+import { getCoreDb, recordAudit } from '@iedora/core-auth'
 import type { ProductId } from '@iedora/brand'
 
 import { schema } from './schema'

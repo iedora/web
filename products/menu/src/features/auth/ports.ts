@@ -1,7 +1,7 @@
 /**
  * Auth slice ports — the narrow surface backed by better-auth + Drizzle.
  *
- * Identity (sessions, users, orgs, memberships) lives in the `@iedora/auth`
+ * Identity (sessions, users, orgs, memberships) lives in the `@iedora/core-auth`
  * `core` schema; restaurant ownership lives in the menu DB. The gateway
  * unifies the two so use-cases speak in domain terms (Session + tenant
  * restaurants) instead of two separate libraries.
@@ -11,7 +11,7 @@
  * The session shape consumed by the rest of the menu app.
  *
  * Source: better-auth's `auth.api.getSession()` (for the user) and
- * `@iedora/auth/server.getActiveTenantId()` (for the active tenant id,
+ * `@iedora/core-auth/server.getActiveTenantId()` (for the active tenant id,
  * with lazy membership revalidation). Translated by `adapters/drizzle.ts`.
  *
  * `scopes` is the cross-tenant scope set on the user (`null` for tenant

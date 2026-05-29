@@ -24,7 +24,7 @@ const serverSchema = z.object({
   // deployment / microservice) is a single flip.
   MENU_DATABASE_URL: z.url(),
 
-  // Auth (@iedora/auth — better-auth) -----------------------------------
+  // Auth (@iedora/core-auth — better-auth) -----------------------------------
   // Postgres URL pointing at the `core` database (better-auth tables).
   // Same Postgres instance as MENU_DATABASE_URL — different DB.
   CORE_DATABASE_URL: z.url(),

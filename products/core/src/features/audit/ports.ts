@@ -1,6 +1,6 @@
 /**
  * Audit-read slice ports. Read-only — the write path lives in
- * `@iedora/auth/audit::recordAudit` and is invoked from server actions
+ * `@iedora/core-auth/audit::recordAudit` and is invoked from server actions
  * + better-auth hooks. This slice only LISTS what was written.
  */
 

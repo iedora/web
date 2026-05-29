@@ -6,7 +6,7 @@ import {
   getSubscription,
   createSubscription,
   updateSubscription,
-} from '@iedora/billing'
+} from '@iedora/core-billing'
 import { PRODUCTS } from '@iedora/brand'
 import type { PlansGateway } from '../ports'
 import type { PlanCode } from '../types'
@@ -14,7 +14,7 @@ import type { PlanCode } from '../types'
 /**
  * Production PlansGateway. Plan code is now stored in
  * `core.tenant_subscription` keyed by `(tenantId, product='menu')`
- * via `@iedora/billing`. Menu's PlansGateway acts as a thin adapter
+ * via `@iedora/core-billing`. Menu's PlansGateway acts as a thin adapter
  * that:
  *   - reads the plan code from the cross-product subscription helper
  *     and CASTs it to menu's local `PlanCode` (the registry coerces

@@ -31,7 +31,7 @@ Full contract in [`docs/agents/slice-pattern.md`](../../../../docs/agents/slice-
 
 | Slice | What |
 |---|---|
-| **`auth`** | DAL guards + role/scope taxonomy over `@iedora/auth`. `verifySession`, `requireRestaurantAccess`, `requireRestaurantBySlug`, `requireActiveOrganization`, `requireScope`. `scopes.ts` maps `qr-codes:read|write|update|delete` to better-auth's `{qrCodes: ['read']}` shape; `requireScope` short-circuits when `session.user.role === 'iedora-admin'`. |
+| **`auth`** | DAL guards + role/scope taxonomy over `@iedora/core-auth`. `verifySession`, `requireRestaurantAccess`, `requireRestaurantBySlug`, `requireActiveOrganization`, `requireScope`. `scopes.ts` maps `qr-codes:read|write|update|delete` to better-auth's `{qrCodes: ['read']}` shape; `requireScope` short-circuits when `session.user.role === 'iedora-admin'`. |
 | **`billing`** | Invoice ledger (read-only today). |
 | **`dashboard-home`** | Restaurants-with-counts aggregate query for the dashboard root. |
 | **`i18n`** | Per-language registry (en, pt, es, fr) + format helpers + `LocalizedFields` editor UI. |

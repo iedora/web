@@ -1,9 +1,9 @@
-import { toNextJsHandler } from '@iedora/auth/next'
+import { toNextJsHandler } from '@iedora/core-auth/next'
 
 export const dynamic = 'force-dynamic'
 
 async function getHandler() {
-  const { auth } = await import('@iedora/auth')
+  const { auth } = await import('@iedora/core-auth')
   return toNextJsHandler(auth.handler)
 }
 

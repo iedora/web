@@ -14,10 +14,10 @@ Repo-level conventions: [`../../AGENTS.md`](../../AGENTS.md).
   dispatcher (`proxy.ts`) + every Next.js route under `src/app/`
   (pages, route handlers, server actions, layouts). The routes
   compose slice barrels from `@iedora/product-menu`,
-  `@iedora/product-core`, `@iedora/auth`, etc.
+  `@iedora/product-core`, `@iedora/core-auth`, etc.
 - **It is not** where slices, use-cases, ports, adapters, drizzle
   schema, or AI prompts live. Those belong in their owning workspace
-  package (`products/menu/src/features/`, `packages/auth/src/`, …).
+  package (`products/menu/src/features/`, `packages/core-auth/src/`, …).
 
 ## Hard rules
 
@@ -95,7 +95,7 @@ apps/web/
 - `bun run lint` — ESLint (`next` recommended).
 
 Real tests live with the products: `bun run --cwd products/menu test` /
-`test:e2e`, `bun run --cwd packages/auth test`, etc.
+`test:e2e`, `bun run --cwd packages/core-auth test`, etc.
 
 ## Deployable artefact
 

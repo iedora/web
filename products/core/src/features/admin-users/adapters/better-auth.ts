@@ -7,7 +7,7 @@ import {
   STAFF_ROLE_PRESETS,
   isStaffRole,
   type AuditActor,
-} from '@iedora/auth'
+} from '@iedora/core-auth'
 import {
   banUser as banUserCore,
   unbanUser as unbanUserCore,
@@ -15,8 +15,8 @@ import {
   impersonateUser as impersonateUserCore,
   listUsers as listUsersCore,
   getSession,
-} from '@iedora/auth/server'
-import type { Scope } from '@iedora/auth/scopes'
+} from '@iedora/core-auth/server'
+import type { Scope } from '@iedora/core-auth/scopes'
 import type {
   AdminUser,
   AdminUserSession,
@@ -28,7 +28,7 @@ import type {
 /**
  * Admin-users gateway. Used to wrap `auth.api.*` (better-auth admin
  * plugin); after the tenancy refactor, plumbed against our own
- * `@iedora/auth/server` helpers (which work over the same schema
+ * `@iedora/core-auth/server` helpers (which work over the same schema
  * columns better-auth used to manage).
  *
  * `actor` is captured at construction so every mutation routed

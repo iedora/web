@@ -20,7 +20,7 @@ import {
   getSession,
   IEDORA_ADMIN_ROLE,
 } from '@iedora/product-menu/features/auth'
-import { detectStaffPreset } from '@iedora/auth'
+import { detectStaffPreset } from '@iedora/core-auth'
 import { listRestaurantsWithCounts } from '@iedora/product-menu/features/dashboard-home'
 import { getOrganizationPlan, planHas } from '@iedora/product-menu/features/plans'
 import { LogoutButton } from '@iedora/product-menu/features/dashboard-home/ui/logout-button'

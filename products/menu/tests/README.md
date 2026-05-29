@@ -118,7 +118,7 @@ apps/web/
 > Auth in tests goes through `auth.api.signInEmail` against the test
 > DB — better-auth runs in-process, so there's no network IdP to mock
 > and no bootstrap server. The fixture + spec patterns below are being
-> rebuilt against `@iedora/auth`; treat the snippets as historical
+> rebuilt against `@iedora/core-auth`; treat the snippets as historical
 > reference until the new harness lands.
 
 `tests/e2e/helpers/` is **zero-domain** (just the `server-only` stub today; future s3mock/beacon helpers live under `src/shared/testing/`).

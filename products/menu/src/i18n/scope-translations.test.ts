@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ALL_SCOPES, parseScope, scopeI18nKey } from '@iedora/auth/scopes'
+import { ALL_SCOPES, parseScope, scopeI18nKey } from '@iedora/core-auth/scopes'
 import en from './messages/en.json'
 
 /**
@@ -9,7 +9,7 @@ import en from './messages/en.json'
  *
  * Without this guard the access page renders raw key paths like
  * `Core.admin.access.scopes.core.tenant.members.grant` whenever a
- * scope is added in `packages/auth/src/scopes.ts` and someone forgets
+ * scope is added in `packages/core-auth/src/scopes.ts` and someone forgets
  * to add the matching i18n entry. The two used to drift constantly.
  *
  * Same guard for `Core.admin.access.products.<product>` + `kinds.<kind>` —

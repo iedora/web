@@ -1,5 +1,5 @@
 {
-  "name": "@iedora/auth",
+  "name": "@iedora/core-auth",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -24,7 +24,7 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
-    "@iedora/billing": "workspace:*",
+    "@iedora/core-billing": "workspace:*",
     "@iedora/db": "workspace:*",
     "@iedora/core-tenancy": "workspace:*",
     "better-auth": "^1.6.11",

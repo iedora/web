@@ -5,7 +5,7 @@
  *
  *   - **No `@/` path mapping.** Use RELATIVE imports between slices and
  *     within shared/. This mirrors the convention every other workspace
- *     in the repo uses (packages/auth, packages/design-system, …) and
+ *     in the repo uses (packages/core-auth, packages/design-system, …) and
  *     means apps/web's tsconfig never needs a per-product path entry.
  *
  *   - **DB setup via @iedora/db.** `src/shared/db/client.ts` calls

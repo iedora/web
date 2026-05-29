@@ -6,7 +6,7 @@ import {
   recordAudit,
   CORE_AUDIT_EVENTS,
   type AuditActor,
-} from '@iedora/auth'
+} from '@iedora/core-auth'
 import type {
   ProductId,
   ProductOnboardingStatus,

@@ -8,7 +8,7 @@ import { Badge } from '@iedora/design-system'
  * with preset attribution).
  *
  * Scopes follow `<kind>:<product>:<resource>:<verb>` (see
- * `@iedora/auth/scopes`). We group by `<kind>:<product>` because
+ * `@iedora/core-auth/scopes`). We group by `<kind>:<product>` because
  * that's the boundary humans reason about ("what can support do in
  * core?", "what can a tenant member do in menu?").
  */

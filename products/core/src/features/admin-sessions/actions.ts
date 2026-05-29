@@ -2,9 +2,9 @@
 
 import { headers } from 'next/headers'
 import { revalidatePath } from 'next/cache'
-import { recordAudit } from '@iedora/auth/audit'
+import { recordAudit } from '@iedora/core-auth/audit'
 import { requireScope } from '../../guards'
-import { SCOPES } from '@iedora/auth/scopes'
+import { SCOPES } from '@iedora/core-auth/scopes'
 import { betterAuthAdminSessionsGateway } from './adapters/better-auth'
 
 type ActionResult = { ok: true } | { ok: false; error: string }

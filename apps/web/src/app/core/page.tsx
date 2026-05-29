@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { getSession } from '@iedora/product-core'
-import { isStaffUser } from '@iedora/auth/server'
+import { isStaffUser } from '@iedora/core-auth/server'
 import { PRODUCTS, productUrl } from '@iedora/brand'
 import { signInUrl } from '@iedora/product-core/url'
 

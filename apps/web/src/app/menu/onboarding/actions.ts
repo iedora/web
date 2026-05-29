@@ -8,8 +8,8 @@ import {
   createTenant,
   setActiveTenant,
   TENANT_ROLE_PRESETS,
-} from '@iedora/auth'
-import { createSubscription } from '@iedora/billing'
+} from '@iedora/core-auth'
+import { createSubscription } from '@iedora/core-billing'
 import {
   PRODUCTS,
   PRODUCT_ONBOARDING_STATUSES,

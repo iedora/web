@@ -1,11 +1,11 @@
 /**
  * Core audit event taxonomy — every state-changing primitive in
- * `@iedora/auth` writes one of these into `core.audit_log`. Constants
+ * `@iedora/core-auth` writes one of these into `core.audit_log`. Constants
  * (not raw strings) so adding/renaming an event is a single-file
  * change that the type system propagates to every emitter + every
  * query that filters on `event`.
  *
- * Shape mirrors `BILLING_AUDIT_EVENTS` in `@iedora/billing` — same
+ * Shape mirrors `BILLING_AUDIT_EVENTS` in `@iedora/core-billing` — same
  * `<resource>.<verb-past-tense>` convention. Events from this set and
  * the billing set never collide (different prefixes).
  *

@@ -31,8 +31,8 @@
     "test:watch": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@iedora/auth": "workspace:*",
-    "@iedora/billing": "workspace:*",
+    "@iedora/core-auth": "workspace:*",
+    "@iedora/core-billing": "workspace:*",
     "@iedora/brand": "workspace:*",
     "@iedora/db": "workspace:*",
     "@iedora/design-system": "workspace:*",

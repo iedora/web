@@ -1,5 +1,5 @@
 {
-  "name": "@iedora/billing",
+  "name": "@iedora/core-billing",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -16,7 +16,7 @@
     "lint": "eslint src --cache --cache-location node_modules/.cache/.eslintcache"
   },
   "dependencies": {
-    "@iedora/auth": "workspace:*",
+    "@iedora/core-auth": "workspace:*",
     "@iedora/brand": "workspace:*",
     "@iedora/db": "workspace:*",
     "drizzle-orm": "catalog:",

@@ -1,5 +1,5 @@
 /**
- * Applies @iedora/auth's Drizzle migrations against the `core` Postgres
+ * Applies @iedora/core-auth's Drizzle migrations against the `core` Postgres
  * database. Runs in three places:
  *
  *   1. CI — apps/web/scripts/migrate-test.mjs spawns it before the e2e

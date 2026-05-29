@@ -379,7 +379,7 @@ export function registerIedoraOtel(opts: RegisterOptions): void {
  *
  * Long-lived processes (Next.js apps, daemons) don't need this — the SDK
  * flushes on its periodic interval and the process never exits anyway.
- * Short-lived scripts (`packages/auth/scripts/migrate.mjs`,
+ * Short-lived scripts (`packages/core-auth/scripts/migrate.mjs`,
  * `products/<p>/scripts/migrate.mjs`, any one-shot CLI) do: they finish
  * faster than the default BatchSpanProcessor / BatchLogRecordProcessor
  * cycle (~5s) and the OTLP exporter would never see the spans / logs /

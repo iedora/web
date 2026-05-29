@@ -34,7 +34,7 @@
     "db:studio": "bun --bun drizzle-kit studio"
   },
   "dependencies": {
-    "@iedora/auth": "workspace:*",
+    "@iedora/core-auth": "workspace:*",
     "@iedora/brand": "workspace:*",
     "@iedora/db": "workspace:*",
     "@iedora/design-system": "workspace:*",

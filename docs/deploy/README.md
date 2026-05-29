@@ -177,7 +177,7 @@ ssh root@$HOST docker ps
 no Dockerfile) ou manualmente:
 
 ```bash
-ssh -t root@$HOST docker exec iedora-web node /app/packages/auth/scripts/migrate.mjs
+ssh -t root@$HOST docker exec iedora-web node /app/packages/core-auth/scripts/migrate.mjs
 ssh -t root@$HOST docker exec iedora-web node /app/products/menu/scripts/migrate.mjs
 ```
 

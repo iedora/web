@@ -11,7 +11,7 @@ import {
   SidebarTrigger,
   Wordmark,
 } from '@iedora/design-system'
-import { SCOPES, type Scope } from '@iedora/auth/scopes'
+import { SCOPES, type Scope } from '@iedora/core-auth/scopes'
 import { ActiveSidebarLinks, type ActiveSidebarItem } from '@iedora/design-system'
 
 /**

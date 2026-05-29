@@ -1,5 +1,5 @@
 /**
- * @iedora/billing — public API.
+ * @iedora/core-billing — public API.
  *
  * Centralised billing primitives. `tenant_subscription` + `invoice`
  * tables live in the `core` schema (managed by this package); plan

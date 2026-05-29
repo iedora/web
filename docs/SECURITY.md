@@ -33,7 +33,7 @@ are prioritised over reports against unreleased branches.
 
 In scope:
 - the two product surfaces above and their auth / data flows
-- the in-process auth surface (`@iedora/auth`, better-auth, the
+- the in-process auth surface (`@iedora/core-auth`, better-auth, the
   `better-auth.session_token` cookie on `.iedora.com`, the `core`
   Postgres DB)
 - the CI/CD supply chain (Gitea Actions, Kamal deploy, Gitea OCI registry)

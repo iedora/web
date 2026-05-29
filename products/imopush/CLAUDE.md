@@ -9,7 +9,7 @@ Repo-level conventions: [`../../AGENTS.md`](../../AGENTS.md).
 ## Hard rules
 
 1. **No `@/` path mapping.** Slices import each other via RELATIVE
-   paths (`../<slice>/<file>`) — same convention as `packages/auth`,
+   paths (`../<slice>/<file>`) — same convention as `packages/core-auth`,
    `packages/design-system`, every other workspace package. This is
    what lets `apps/web/tsconfig.json` stay clean of per-product path
    entries as the repo grows.

@@ -1,6 +1,6 @@
 import { requireScope } from '@iedora/product-core'
-import { SCOPES, type Scope } from '@iedora/auth/scopes'
-import { detectStaffPreset } from '@iedora/auth'
+import { SCOPES, type Scope } from '@iedora/core-auth/scopes'
+import { detectStaffPreset } from '@iedora/core-auth'
 import { AdminShell } from '@iedora/product-core/shared/ui/admin-shell'
 
 /**

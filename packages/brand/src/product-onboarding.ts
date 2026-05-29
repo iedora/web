@@ -3,7 +3,7 @@
  * **shape** of every product's onboarding flow. Lives in `@iedora/brand`
  * (not in the product packages) so:
  *
- *   - `@iedora/auth`'s `tenant_product_state` projection table has a
+ *   - `@iedora/core-auth`'s `tenant_product_state` projection table has a
  *     stable enum of valid `current_step` values per product.
  *   - `@iedora/product-core`'s admin surface can render every product's
  *     onboarding state GENERICALLY — by step key + status — without

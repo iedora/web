@@ -8,7 +8,7 @@ import {
   Pagination,
 } from '@iedora/design-system'
 import { hasScope, requireScope } from '@iedora/product-core'
-import { SCOPES } from '@iedora/auth/scopes'
+import { SCOPES } from '@iedora/core-auth/scopes'
 import {
   betterAuthAdminUsersGateway,
   listUsers,

@@ -9,7 +9,7 @@ import {
   Button,
 } from '@iedora/design-system'
 import { requireScope } from '@iedora/product-core'
-import { SCOPES } from '@iedora/auth/scopes'
+import { SCOPES } from '@iedora/core-auth/scopes'
 import {
   betterAuthAdminSessionsGateway,
   listAllSessions,

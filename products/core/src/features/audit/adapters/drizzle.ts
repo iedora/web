@@ -1,11 +1,11 @@
 import 'server-only'
 import { and, desc, eq, ilike, sql } from 'drizzle-orm'
-import { getCoreDb, schema } from '@iedora/auth'
+import { getCoreDb, schema } from '@iedora/core-auth'
 import type { AuditEntry, AuditGateway, ListAuditInput } from '../ports'
 
 /**
  * Drizzle adapter for the audit-log read path. Queries the
- * `core.audit_log` table (declared in `@iedora/auth/schema`) directly
+ * `core.audit_log` table (declared in `@iedora/core-auth/schema`) directly
  * — there's no better-auth API for this; the table is iedora-owned
  * append-only state.
  */

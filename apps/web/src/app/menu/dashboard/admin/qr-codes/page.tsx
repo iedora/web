@@ -1,6 +1,6 @@
 import { headers } from 'next/headers'
 import { requireScope } from '@iedora/product-menu/features/auth'
-import { SCOPES } from '@iedora/auth/scopes'
+import { SCOPES } from '@iedora/core-auth/scopes'
 import { listQrCodesForAdmin } from '@iedora/product-menu/features/qr-codes'
 import { computeQrStats } from '@iedora/product-menu/features/qr-codes/stats'
 import { QrCodesAdmin } from '@iedora/product-menu/features/qr-codes/ui/qr-codes-admin'

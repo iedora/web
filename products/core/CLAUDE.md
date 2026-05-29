@@ -6,12 +6,12 @@ admin — runs at `core.iedora.com`. After the Opt-B refactor, the
 exposes the server-only guards those routes import.
 
 Repo-level conventions: [`../../AGENTS.md`](../../AGENTS.md).
-Auth SDK contract: [`../../packages/auth/README.md`](../../packages/auth/README.md).
+Auth SDK contract: [`../../packages/core-auth/README.md`](../../packages/core-auth/README.md).
 
 ## What's here
 
 - `src/guards.ts` — `getSession()` + `requireIedoraAdmin()`. Thin
-  wrappers over `@iedora/auth`'s API, tagged `'server-only'`.
+  wrappers over `@iedora/core-auth`'s API, tagged `'server-only'`.
 - `src/index.ts` — package barrel; re-exports the guards.
 
 ## What's NOT here (lives in apps/web)
@@ -53,6 +53,6 @@ all workspaces (see `.gitea/workflows/ci.yml`).
 
 ## Testing
 
-Core has no Drizzle schema of its own — the `core` database is owned by `@iedora/auth` (better-auth tables + audit log). Unit tests use `fake-gateway.ts` adapters; E2E tests will use the shared `e2e-run` composite action with `needs_product_migrations: false`.
+Core has no Drizzle schema of its own — the `core` database is owned by `@iedora/core-auth` (better-auth tables + audit log). Unit tests use `fake-gateway.ts` adapters; E2E tests will use the shared `e2e-run` composite action with `needs_product_migrations: false`.
 
 See [`docs/testing/e2e-architecture.md`](../../docs/testing/e2e-architecture.md) for the E2E contract and [`docs/testing/todos/e2e-implementation.md`](../../docs/testing/todos/e2e-implementation.md) for the implementation checklist.

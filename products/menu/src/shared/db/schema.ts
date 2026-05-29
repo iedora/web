@@ -12,8 +12,8 @@ import {
 import type { LanguageCode, LocalizedText } from '../../features/i18n/types'
 
 // Single Postgres schema for the menu product: `menu.*`. Identity +
-// tenancy + billing live in the `core` schema (managed by @iedora/auth
-// and @iedora/billing) on the SAME Postgres instance but a separate
+// tenancy + billing live in the `core` schema (managed by @iedora/core-auth
+// and @iedora/core-billing) on the SAME Postgres instance but a separate
 // schema — there's no FK from `menu.*` to `core.*` because the two
 // schemas are owned by different products and migrated independently
 // (microservices-ready: each could move to its own DB tomorrow).
@@ -21,7 +21,7 @@ import type { LanguageCode, LocalizedText } from '../../features/i18n/types'
 // `tenantId` columns mirror `core.tenant.id`. Plan info lives in
 // `core.tenant_subscription` (one row per (tenant, product='menu'));
 // invoice ledger lives in `core.invoice` filtered by `product='menu'`.
-// Both queried via `@iedora/billing` helpers.
+// Both queried via `@iedora/core-billing` helpers.
 export const menuSchema = pgSchema('menu')
 
 // One row per AI menu-import generation. Weekly quota is enforced by
@@ -285,7 +285,7 @@ export const dailyView = menuSchema.table(
 
 // ─── Billing tables removed ──────────────────────────────────────────
 // `org_plan` + `invoice` lived here in the better-auth-organization era.
-// Both moved to `core` (managed by @iedora/billing) so plans + invoices
+// Both moved to `core` (managed by @iedora/core-billing) so plans + invoices
 // are uniform across products. Menu callers reach for the cross-product
 // helpers:
 //   - getSubscription(tenantId, PRODUCTS.menu)   → tenant_subscription row

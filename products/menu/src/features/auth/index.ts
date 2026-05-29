@@ -7,7 +7,7 @@ import { requireActiveOrganization as _requireActiveOrganization } from './use-c
 import { requireRestaurantAccess as _requireRestaurantAccess } from './use-cases/require-restaurant-access'
 import { requireRestaurantBySlug as _requireRestaurantBySlug } from './use-cases/require-restaurant-by-slug'
 import { requireScope as _requireScope } from './use-cases/require-scope'
-import type { Scope } from '@iedora/auth/scopes'
+import type { Scope } from '@iedora/core-auth/scopes'
 
 /**
  * Public API of the auth slice. Convenience wrappers bind the production
@@ -55,7 +55,7 @@ export const requireRestaurantBySlug = cache((slug: string) =>
 /**
  * Capability-based guard. Resolves the caller's permissions through
  * better-auth's organization plugin (per-org `member.role` evaluated
- * against the @iedora/auth statement). `iedora-admin` short-circuits to
+ * against the @iedora/core-auth statement). `iedora-admin` short-circuits to
  * allowed.
  */
 export const requireScope = cache((scope: Scope) =>
@@ -63,4 +63,4 @@ export const requireScope = cache((scope: Scope) =>
 )
 
 export type { AuthGateway, Session } from './ports'
-export { IEDORA_ADMIN_ROLE } from '@iedora/auth'
+export { IEDORA_ADMIN_ROLE } from '@iedora/core-auth'

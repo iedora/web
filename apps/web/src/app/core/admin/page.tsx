@@ -8,15 +8,15 @@ import {
   Badge,
 } from '@iedora/design-system'
 import { requireScope } from '@iedora/product-core'
-import { SCOPES } from '@iedora/auth/scopes'
+import { SCOPES } from '@iedora/core-auth/scopes'
 import {
   detectStaffPreset,
   STAFF_ROLE_PRESETS,
   STAFF_ROLES,
   IEDORA_ADMIN_ROLE,
-} from '@iedora/auth'
-import type { Scope } from '@iedora/auth/scopes'
-import { listUsers } from '@iedora/auth/server'
+} from '@iedora/core-auth'
+import type { Scope } from '@iedora/core-auth/scopes'
+import { listUsers } from '@iedora/core-auth/server'
 import {
   drizzleAdminTenantsGateway,
   listTenants,

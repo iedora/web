@@ -1,4 +1,4 @@
-# @iedora/auth
+# @iedora/core-auth
 
 > Shared auth surface for the iedora estate — better-auth instance,
 > Drizzle schema, and the role/scope access-control taxonomy. One config,
@@ -26,7 +26,7 @@ drizzle.config.ts  Migration tooling config.
 
 ```ts
 // products/<x>/src/shared/auth.ts
-import { getAuth } from '@iedora/auth'
+import { getAuth } from '@iedora/core-auth'
 export const auth = getAuth()
 
 // products/<x>/src/app/api/auth/[...all]/route.ts
@@ -109,7 +109,7 @@ Products talk to `core` data EXCLUSIVELY through this package's API
 - Add a foreign-key constraint from its own tables to anything under
   the `core` schema. Foreign references stay as plain `text` columns
   carrying the opaque id (e.g. `restaurant.organization_id`).
-- Import Drizzle table objects from `@iedora/auth/schema` for read
+- Import Drizzle table objects from `@iedora/core-auth/schema` for read
   queries. The `schema` export exists for migrations and the package's
   own adapters; product code asks the API instead.
 

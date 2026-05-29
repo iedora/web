@@ -12,7 +12,7 @@ import {
 import type { Scope } from './scopes'
 
 // Billing tables live in the same `core` schema but are owned by
-// `@iedora/billing`. Re-export them here so drizzle-kit's single
+// `@iedora/core-billing`. Re-export them here so drizzle-kit's single
 // schema scan (config in `drizzle.config.ts` points at this file)
 // picks up the full set of `core.*` tables and generates one
 // migration set covering both. Helpers + audit hooks for the
@@ -20,7 +20,7 @@ import type { Scope } from './scopes'
 import {
   tenantSubscription,
   invoice,
-} from '@iedora/billing/schema'
+} from '@iedora/core-billing/schema'
 export { tenantSubscription, invoice }
 
 // `tenant_product_state` lives in `@iedora/core-tenancy` (cross-product

@@ -9,7 +9,7 @@ import {
   FieldInput,
   FieldLabel,
 } from '@iedora/design-system'
-import { authClient } from '@iedora/auth/client'
+import { authClient } from '@iedora/core-auth/client'
 import { signInUrl } from '@iedora/product-core/url'
 
 export function SignUpForm({ next }: { next: string }) {

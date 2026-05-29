@@ -1,13 +1,13 @@
 import 'server-only'
 import { notFound, redirect } from 'next/navigation'
 import { signInUrl } from '@iedora/product-core/url'
-import { hasScope, ScopeDeniedError } from '@iedora/auth/server'
-import { type Scope } from '@iedora/auth/scopes'
+import { hasScope, ScopeDeniedError } from '@iedora/core-auth/server'
+import { type Scope } from '@iedora/core-auth/scopes'
 import type { AuthGateway, Session } from '../ports'
 
 /**
  * Capability-based guard. Two-layer evaluation handled by
- * `@iedora/auth/server.hasScope`:
+ * `@iedora/core-auth/server.hasScope`:
  *
  *   1. Staff (`user.scopes`) — wildcard short-circuits cross-tenant.
  *   2. Tenant (`tenant_member.scopes` for the active tenant).

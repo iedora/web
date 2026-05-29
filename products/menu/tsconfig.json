@@ -10,7 +10,7 @@
     // reads the `.d.ts` outputs (cached + incremental), not the source.
     //
     // Source uses RELATIVE imports between slices — no internal `@/`
-    // path mapping. Same convention as packages/auth, packages/db,
+    // path mapping. Same convention as packages/core-auth, packages/db,
     // products/imopush, etc.
     "composite": true,
     "declaration": true,

@@ -1,4 +1,4 @@
-// packages/auth/migrate.mjs — runtime migrator (core DB).
+// packages/core-auth/migrate.mjs — runtime migrator (core DB).
 // Thin wrapper sobre @iedora/db/migrate (helper canónico em data layer).
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'

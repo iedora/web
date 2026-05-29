@@ -46,7 +46,7 @@ export function getCoreDb(): CoreDb {
 
 // ── Testing override ──────────────────────────────────────────────
 //
-// PGLite-backed tests in `@iedora/auth` swap the real Postgres pool
+// PGLite-backed tests in `@iedora/core-auth` swap the real Postgres pool
 // for a drizzle handle pointing at an in-memory database. Production
 // code never sets this; the override path is purely additive.
 

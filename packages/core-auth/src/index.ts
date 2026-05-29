@@ -1,10 +1,10 @@
 /**
- * @iedora/auth — public API.
+ * @iedora/core-auth — public API.
  *
- * Server entry. Browser code imports from `@iedora/auth/client` instead
+ * Server entry. Browser code imports from `@iedora/core-auth/client` instead
  * (the `better-auth/react` client lives there). The role-preset layer
  * (`STAFF_ROLE_PRESETS`, `TENANT_ROLE_PRESETS`, role literals) is also
- * re-exported here for convenience; deep import `@iedora/auth/role-presets`
+ * re-exported here for convenience; deep import `@iedora/core-auth/role-presets`
  * for the same surface without pulling the server-only modules.
  */
 

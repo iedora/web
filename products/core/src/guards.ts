@@ -1,20 +1,20 @@
 import 'server-only'
 import { headers } from 'next/headers'
 import { notFound, redirect } from 'next/navigation'
-import { recordAudit } from '@iedora/auth'
+import { recordAudit } from '@iedora/core-auth'
 import {
   getSession,
   userHasScope,
   hasScope as hasScopeServer,
-} from '@iedora/auth/server'
+} from '@iedora/core-auth/server'
 import { signInUrl } from './url'
-import { type Scope } from '@iedora/auth/scopes'
+import { type Scope } from '@iedora/core-auth/scopes'
 
 /**
  * Non-redirecting read of the current better-auth session. Returns
  * `null` when there's no cookie / expired / tampered.
  *
- * Thin pass-through over `@iedora/auth/server.getSession()`. Kept in
+ * Thin pass-through over `@iedora/core-auth/server.getSession()`. Kept in
  * this package's public API for callers that already import from
  * `@iedora/product-core` and prefer not to add a second auth dep.
  */
@@ -57,7 +57,7 @@ async function recordDenied(input: {
  * tenant). Use to conditionally render UI; never inverts (surfaces
  * hidden by absence, not by explicit deny).
  *
- * Delegates to `@iedora/auth/server.hasScope` — the same primitive
+ * Delegates to `@iedora/core-auth/server.hasScope` — the same primitive
  * the rest of the estate uses.
  */
 export async function hasScope(scope: Scope): Promise<boolean> {
@@ -78,7 +78,7 @@ export async function hasScope(scope: Scope): Promise<boolean> {
  *
  * STAFF-only convenience: `requireScope` is the right primitive for
  * routes under `/core/admin/*`. For tenant-scoped routes, use
- * `requireScope` from `@iedora/auth/server` (which checks both staff
+ * `requireScope` from `@iedora/core-auth/server` (which checks both staff
  * and tenant layers).
  */
 export async function requireScope(scope: Scope) {

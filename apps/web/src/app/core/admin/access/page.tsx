@@ -8,14 +8,14 @@ import {
   parseScope,
   scopeI18nKey,
   type Scope,
-} from '@iedora/auth/scopes'
+} from '@iedora/core-auth/scopes'
 import {
   STAFF_ROLES,
   STAFF_ROLE_PRESETS,
   detectStaffPreset,
   type StaffRoleKey,
-} from '@iedora/auth/role-presets'
-import { listUsers } from '@iedora/auth/server'
+} from '@iedora/core-auth/role-presets'
+import { listUsers } from '@iedora/core-auth/server'
 import { AdminPage } from '@iedora/product-core/shared/ui/admin-page'
 
 /**

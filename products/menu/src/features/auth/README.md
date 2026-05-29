@@ -2,8 +2,8 @@
 
 Session resolution + tenant access guards. The DAL of the project lives here.
 
-Identity is sourced from **`@iedora/auth`** (better-auth running
-in-process; see `packages/auth/README.md`). This slice does NOT call an
+Identity is sourced from **`@iedora/core-auth`** (better-auth running
+in-process; see `packages/core-auth/README.md`). This slice does NOT call an
 external IdP; it consumes `auth.api.*` directly and adds the menu-side
 guards on top — tenant scoping, scope-string checks, the cross-tenant
 `iedora-admin` short-circuit.
@@ -36,14 +36,14 @@ All wrappers are `React.cache()`-memoized per request.
 used at call sites (`qr-codes:read`, `qr-codes:write`, …). The
 `scopeToPermission()` helper converts them to better-auth's
 permission shape (`{qrCodes: ['read']}`) which is what the underlying
-access-control engine in `@iedora/auth` actually checks.
+access-control engine in `@iedora/core-auth` actually checks.
 
 ## Routes
 
 - `/api/auth/[...all]` — better-auth's catch-all. Owns sign-in / sign-up
   / sign-out / get-session / organization + admin plugin endpoints.
   Mounted by `toNextJsHandler(auth)` against the singleton from
-  `@iedora/auth`.
+  `@iedora/core-auth`.
 
 ## Session + cookie
 

@@ -16,7 +16,7 @@ import {
   drizzleAdminTenantsGateway,
   listTenants,
 } from '@iedora/product-core/features/admin-tenants'
-import { SCOPES } from '@iedora/auth/scopes'
+import { SCOPES } from '@iedora/core-auth/scopes'
 import { AdminPage } from '@iedora/product-core/shared/ui/admin-page'
 
 /**

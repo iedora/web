@@ -1,6 +1,6 @@
 import 'server-only'
 import { and, desc, eq, ilike, isNotNull, or } from 'drizzle-orm'
-import { getCoreDb, schema } from '@iedora/auth'
+import { getCoreDb, schema } from '@iedora/core-auth'
 import type {
   AdminSessionRow,
   AdminSessionsGateway,

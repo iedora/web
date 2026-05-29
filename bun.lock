@@ -12,9 +12,9 @@
       "name": "@iedora/web",
       "version": "0.1.0",
       "dependencies": {
-        "@iedora/auth": "workspace:*",
-        "@iedora/billing": "workspace:*",
         "@iedora/brand": "workspace:*",
+        "@iedora/core-auth": "workspace:*",
+        "@iedora/core-billing": "workspace:*",
         "@iedora/core-tenancy": "workspace:*",
         "@iedora/design-system": "workspace:*",
         "@iedora/observability": "workspace:*",
@@ -43,11 +43,23 @@
         "typescript": "catalog:",
       },
     },
-    "packages/auth": {
-      "name": "@iedora/auth",
+    "packages/brand": {
+      "name": "@iedora/brand",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@iedora/eslint-config": "workspace:*",
+        "@types/node": "^22.19.19",
+        "eslint": "catalog:",
+        "typescript": "catalog:",
+        "typescript-eslint": "catalog:",
+        "vitest": "catalog:",
+      },
+    },
+    "packages/core-auth": {
+      "name": "@iedora/core-auth",
       "version": "0.1.0",
       "dependencies": {
-        "@iedora/billing": "workspace:*",
+        "@iedora/core-billing": "workspace:*",
         "@iedora/core-tenancy": "workspace:*",
         "@iedora/db": "workspace:*",
         "better-auth": "^1.6.11",
@@ -74,12 +86,12 @@
         "react": "^19.0.0",
       },
     },
-    "packages/billing": {
-      "name": "@iedora/billing",
+    "packages/core-billing": {
+      "name": "@iedora/core-billing",
       "version": "0.1.0",
       "dependencies": {
-        "@iedora/auth": "workspace:*",
         "@iedora/brand": "workspace:*",
+        "@iedora/core-auth": "workspace:*",
         "@iedora/db": "workspace:*",
         "drizzle-orm": "catalog:",
         "server-only": "^0.0.1",
@@ -93,24 +105,12 @@
         "vitest": "catalog:",
       },
     },
-    "packages/brand": {
-      "name": "@iedora/brand",
-      "version": "0.1.0",
-      "devDependencies": {
-        "@iedora/eslint-config": "workspace:*",
-        "@types/node": "^22.19.19",
-        "eslint": "catalog:",
-        "typescript": "catalog:",
-        "typescript-eslint": "catalog:",
-        "vitest": "catalog:",
-      },
-    },
     "packages/core-tenancy": {
       "name": "@iedora/core-tenancy",
       "version": "0.1.0",
       "dependencies": {
-        "@iedora/auth": "workspace:*",
         "@iedora/brand": "workspace:*",
+        "@iedora/core-auth": "workspace:*",
         "drizzle-orm": "catalog:",
         "server-only": "^0.0.1",
       },
@@ -224,9 +224,9 @@
       "name": "@iedora/product-core",
       "version": "0.1.0",
       "dependencies": {
-        "@iedora/auth": "workspace:*",
-        "@iedora/billing": "workspace:*",
         "@iedora/brand": "workspace:*",
+        "@iedora/core-auth": "workspace:*",
+        "@iedora/core-billing": "workspace:*",
         "@iedora/db": "workspace:*",
         "@iedora/design-system": "workspace:*",
         "drizzle-orm": "catalog:",
@@ -254,8 +254,8 @@
       "name": "@iedora/product-imopush",
       "version": "0.1.0",
       "dependencies": {
-        "@iedora/auth": "workspace:*",
         "@iedora/brand": "workspace:*",
+        "@iedora/core-auth": "workspace:*",
         "@iedora/db": "workspace:*",
         "@iedora/design-system": "workspace:*",
         "@iedora/observability": "workspace:*",
@@ -294,9 +294,9 @@
         "@dnd-kit/core": "^6.3.1",
         "@dnd-kit/sortable": "^10.0.0",
         "@dnd-kit/utilities": "^3.2.2",
-        "@iedora/auth": "workspace:*",
-        "@iedora/billing": "workspace:*",
         "@iedora/brand": "workspace:*",
+        "@iedora/core-auth": "workspace:*",
+        "@iedora/core-billing": "workspace:*",
         "@iedora/core-tenancy": "workspace:*",
         "@iedora/db": "workspace:*",
         "@iedora/design-system": "workspace:*",
@@ -642,11 +642,11 @@
 
     "@humanwhocodes/retry": ["@humanwhocodes/retry@0.4.3", "", {}, "sha512-bV0Tgo9K4hfPCek+aMAn81RppFKv2ySDQeMoSZuvTASywNTnVJCArCZE2FWqpvIatKu7VMRLWlR1EazvVhDyhQ=="],
 
-    "@iedora/auth": ["@iedora/auth@workspace:packages/auth"],
-
-    "@iedora/billing": ["@iedora/billing@workspace:packages/billing"],
-
     "@iedora/brand": ["@iedora/brand@workspace:packages/brand"],
+
+    "@iedora/core-auth": ["@iedora/core-auth@workspace:packages/core-auth"],
+
+    "@iedora/core-billing": ["@iedora/core-billing@workspace:packages/core-billing"],
 
     "@iedora/core-tenancy": ["@iedora/core-tenancy@workspace:packages/core-tenancy"],
 

@@ -10,7 +10,7 @@ import type { Scope } from '../scopes'
 
 /**
  * Next-aware authorisation surface — the bridge between the framework-
- * free primitives in `@iedora/auth` and Next routes / server actions.
+ * free primitives in `@iedora/core-auth` and Next routes / server actions.
  *
  * Two layers of scope evaluation, in this order:
  *

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { requireScope } from '../auth'
-import { SCOPES } from '@iedora/auth/scopes'
+import { SCOPES } from '@iedora/core-auth/scopes'
 import { drizzleQrCodesGateway } from './adapters/drizzle'
 import { bindCode as runBind } from './use-cases/bind'
 import { bulkGenerate as runBulkGenerate } from './use-cases/bulk-generate'

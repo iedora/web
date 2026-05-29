@@ -1,9 +1,9 @@
 import 'server-only'
 import { and, asc, count, desc, eq, ilike, sql } from 'drizzle-orm'
-import { getCoreDb, schema } from '@iedora/auth'
-import type { Scope } from '@iedora/auth/scopes'
+import { getCoreDb, schema } from '@iedora/core-auth'
+import type { Scope } from '@iedora/core-auth/scopes'
 import type { ProductId } from '@iedora/brand'
-import type { SubscriptionStatus } from '@iedora/billing'
+import type { SubscriptionStatus } from '@iedora/core-billing'
 
 import type {
   AdminTenantsGateway,

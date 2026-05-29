@@ -14,7 +14,7 @@ export async function registerNode() {
   // Vercel pattern: validate at startup (register), not at build time.
   // If this throws, the server never binds the port → health check fails
   // → CI/deploy catches the misconfiguration.
-  const { getAuth } = await import('@iedora/auth')
+  const { getAuth } = await import('@iedora/core-auth')
   getAuth()
 
   // Register OTel FIRST — the pino instrumentation registers a

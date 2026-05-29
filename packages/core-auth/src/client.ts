@@ -5,7 +5,7 @@ import { createAuthClient } from 'better-auth/react'
  * `./auth.ts` (today: just email+password + cross-subdomain cookies).
  *
  * Tenant / scope mutations are NOT exposed through this client —
- * they're our own server actions backed by `@iedora/auth/server`
+ * they're our own server actions backed by `@iedora/core-auth/server`
  * helpers, so the browser never holds AC-bound types and the cross-
  * product contract stays simple.
  *
@@ -15,7 +15,7 @@ import { createAuthClient } from 'better-auth/react'
  *
  * Consumers do:
  *   ```ts
- *   import { authClient } from '@iedora/auth/client'
+ *   import { authClient } from '@iedora/core-auth/client'
  *   const { data } = await authClient.signIn.email({ email, password })
  *   ```
  */
