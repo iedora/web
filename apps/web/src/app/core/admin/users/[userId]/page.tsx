@@ -78,7 +78,7 @@ export default async function UserAdminDetailPage({
       data-test-id="admin-user-detail"
     >
       <section
-        className="grid gap-4 sm:grid-cols-2"
+        className="grid gap-5 sm:grid-cols-2 sm:gap-6"
         data-test-id="admin-user-detail-cards"
       >
         <Card>

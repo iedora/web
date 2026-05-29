@@ -98,7 +98,7 @@ export default async function CoreAdminOverview() {
       </Card>
 
       <section
-        className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+        className="grid gap-5 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3"
         data-test-id="admin-overview-cards"
       >
         <Card data-test-id="admin-overview-card-users">
@@ -148,7 +148,7 @@ export default async function CoreAdminOverview() {
             {t('presets.description')}
           </p>
         </header>
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-5 sm:gap-6 lg:grid-cols-2">
           {STAFF_ROLES.map((roleKey) => {
             const scopes = STAFF_ROLE_PRESETS[roleKey]
             return (

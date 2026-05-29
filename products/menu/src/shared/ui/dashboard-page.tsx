@@ -176,7 +176,7 @@ export function DashboardPage({
         )}
       </div>
 
-      <div className="space-y-8">
+      <div className="space-y-10 sm:space-y-12">
         {children}
       </div>
     </div>

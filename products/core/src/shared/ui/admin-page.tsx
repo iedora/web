@@ -99,7 +99,7 @@ export function AdminPage({
         )}
       </div>
 
-      <div className="space-y-8">{children}</div>
+      <div className="space-y-10 sm:space-y-12">{children}</div>
     </div>
   )
 }

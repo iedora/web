@@ -123,7 +123,7 @@ export default async function AccessPage() {
         >
           {t('rolesHeading')}
         </h2>
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-5 sm:gap-6 lg:grid-cols-2">
           {roleScopes.map(({ key, scopes }) => {
             const isMe = key === myRole
             return (
