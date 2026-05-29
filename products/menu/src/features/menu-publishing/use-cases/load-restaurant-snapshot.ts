@@ -2,7 +2,7 @@ import 'server-only'
 import { eq } from 'drizzle-orm'
 import { unstable_cache } from 'next/cache'
 import { SpanStatusCode } from '@opentelemetry/api'
-import { meter, tenantContext, tracer, IEDORA_RESTAURANT_ID, IEDORA_ORGANIZATION_ID } from '@iedora/observability'
+import { meter, tenantContext, tracer, IEDORA_RESTAURANT_ID, IEDORA_TENANT_ID } from '@iedora/observability'
 import { db } from '../../../shared/db/client'
 import { restaurant, type RestaurantTheme } from '../../../shared/db/schema'
 import type { LanguageCode, LocalizedText } from '../../i18n'
@@ -127,7 +127,7 @@ export async function loadRestaurantSnapshot(
 
               inner.setAttribute('iedora.outcome', 'found')
               inner.setAttribute(IEDORA_RESTAURANT_ID, r.id)
-              inner.setAttribute(IEDORA_ORGANIZATION_ID, r.tenantId)
+              inner.setAttribute(IEDORA_TENANT_ID, r.tenantId)
               inner.setAttribute('iedora.tree_menu_count', tree.length)
               return {
                 id: r.id,
@@ -155,7 +155,7 @@ export async function loadRestaurantSnapshot(
       span.setAttribute('iedora.outcome', outcome)
       if (result) {
         span.setAttribute(IEDORA_RESTAURANT_ID, result.id)
-        span.setAttribute(IEDORA_ORGANIZATION_ID, result.tenantId)
+        span.setAttribute(IEDORA_TENANT_ID, result.tenantId)
         // Seed the tenant context for the remainder of this request's
         // async chain. The public menu route (/r/[slug]) does NOT go
         // through requireRestaurantAccess (no auth), so without this

@@ -129,7 +129,7 @@ export async function GET(
   if (inserted.length > 0) {
     // Fire-and-forget — a transient daily_view failure mustn't 500 the beacon
     // and waste the visitor's connection.
-    void incrementDailyView(snap.id, snap.organizationId, language).catch(
+    void incrementDailyView(snap.id, snap.tenantId, language).catch(
       (err) => console.error('[track] view increment failed', err),
     )
   }

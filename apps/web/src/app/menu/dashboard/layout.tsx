@@ -19,6 +19,7 @@ import {
   getSession,
   IEDORA_ADMIN_ROLE,
 } from '@iedora/product-menu/features/auth'
+import { detectStaffPreset } from '@iedora/auth'
 import { listRestaurantsWithCounts } from '@iedora/product-menu/features/dashboard-home'
 import { getOrganizationPlan, planHas } from '@iedora/product-menu/features/plans'
 import { LogoutButton } from '@iedora/product-menu/features/dashboard-home/ui/logout-button'
@@ -57,11 +58,14 @@ export default async function DashboardLayout({
   ])
   const showAnalyticsLink = planHas(plan, 'analytics')
   // QR codes admin is cross-tenant (`requireScope` in
-  // `products/menu/src/features/qr-codes/`). Anyone whose `user.role`
-  // is `iedora-admin` sees it. Sessions / users admin live under the
-  // `core` surface — see products/core/src/url.ts and
-  // apps/web/src/app/core/admin/.
-  const isStaffAdmin = session?.user.role === IEDORA_ADMIN_ROLE
+  // `products/menu/src/features/qr-codes/`). Anyone whose user.scopes
+  // matches the iedora-admin preset sees it. Sessions / users admin
+  // live under the `core` surface — see products/core/src/url.ts.
+  const sessionScopes =
+    (session?.user as { scopes?: string[] | null } | undefined)?.scopes ?? null
+  const isStaffAdmin =
+    sessionScopes !== null &&
+    detectStaffPreset(sessionScopes as unknown as never[]) === IEDORA_ADMIN_ROLE
   const showAdminLink = isStaffAdmin
 
   const t = await getTranslations('AppHeader')

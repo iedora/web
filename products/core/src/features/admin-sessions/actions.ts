@@ -20,7 +20,7 @@ export async function revokeSessionAction(input: {
     outcome: 'success',
     actor: {
       userId: session.user.id,
-      role: session.user.role,
+      role: null, // user.role replaced by user.scopes; audit row keeps null for searchability
       email: session.user.email,
     },
     headers: await headers(),

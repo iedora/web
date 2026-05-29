@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { getSession } from '@iedora/product-core'
+import { isStaffUser } from '@iedora/auth/server'
 import { PRODUCTS, productUrl } from '@iedora/brand'
 import { signInUrl } from '@iedora/product-core/url'
 
@@ -25,15 +26,13 @@ import { signInUrl } from '@iedora/product-core/url'
  * products (org membership for menu, equivalent for imopush) and
  * render a chooser when there's more than one.
  */
-const STAFF_ROLES = new Set(['iedora-admin', 'iedora-support'])
-
 export default async function CoreHome() {
   const session = await getSession()
   if (!session?.user) {
     redirect(signInUrl())
   }
 
-  if (STAFF_ROLES.has(session.user.role ?? '')) {
+  if (await isStaffUser(session.user.id)) {
     redirect('/core/admin')
   }
 

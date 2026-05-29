@@ -1,25 +1,25 @@
 import 'server-only'
 import { notFound, redirect } from 'next/navigation'
-import { headers } from 'next/headers'
 import { signInUrl } from '@iedora/product-core/url'
-import { auth as iedoraAuth } from '@iedora/auth'
+import { hasScope, ScopeDeniedError } from '@iedora/auth/server'
 import { type Scope } from '@iedora/auth/scopes'
-import { scopeToPermission } from '@iedora/auth/permissions'
 import type { AuthGateway, Session } from '../ports'
 
 /**
- * Capability-based guard. Resolves the caller's permissions through the
- * @iedora/auth organization plugin's `hasPermission` API, which evaluates
- * the user's per-org `member.role` against the access-control taxonomy
- * declared in `@iedora/auth/permissions`.
+ * Capability-based guard. Two-layer evaluation handled by
+ * `@iedora/auth/server.hasScope`:
  *
- * Cross-tenant staff (`session.user.role === 'iedora-admin'`) shortcuts
- * to allowed — the wildcard role bound to every (resource, action) pair.
+ *   1. Staff (`user.scopes`) — wildcard short-circuits cross-tenant.
+ *   2. Tenant (`tenant_member.scopes` for the active tenant).
  *
  * Failure modes:
- *   - no session     → bounce to /sign-in (same as `verifySession`)
+ *   - no session     → bounce to /sign-in
  *   - missing scope  → 404. We hide the existence of the surface from
  *                      tenant users; 403 would advertise it.
+ *
+ * The thin wrapper here keeps menu's slice contract intact (consumers
+ * still pass `auth: AuthGateway` for testability) while delegating
+ * the actual decision to the cross-product helper.
  */
 export async function requireScope(
   auth: AuthGateway,
@@ -30,19 +30,12 @@ export async function requireScope(
     redirect(signInUrl())
   }
 
-  // Wildcard short-circuit for cross-tenant staff. Avoids a roundtrip
-  // through the org-scoped permission API for callers we already know
-  // can do everything.
-  if (session.user.role === 'iedora-admin') {
-    return session
-  }
-
-  const { success } = await iedoraAuth.api.hasPermission({
-    body: { permissions: scopeToPermission(scope) as never },
-    headers: await headers(),
-  })
-  if (!success) {
-    notFound()
+  try {
+    const ok = await hasScope(scope)
+    if (!ok) notFound()
+  } catch (err) {
+    if (err instanceof ScopeDeniedError) notFound()
+    throw err
   }
   return session
 }

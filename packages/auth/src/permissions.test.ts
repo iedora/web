@@ -53,9 +53,9 @@ describe('STAFF_ROLES', () => {
   })
 
   it('iedora-support cannot impersonate or set roles', () => {
-    const support = new Set(STAFF_ROLE_PRESETS[IEDORA_SUPPORT_ROLE])
-    expect(support.has(SCOPES.core.staff.users.impersonate)).toBe(false)
-    expect(support.has(SCOPES.core.staff.users.setRole)).toBe(false)
+    const support = STAFF_ROLE_PRESETS[IEDORA_SUPPORT_ROLE] as readonly string[]
+    expect(support.includes(SCOPES.core.staff.users.impersonate)).toBe(false)
+    expect(support.includes(SCOPES.core.staff.users.setRole)).toBe(false)
   })
 })
 

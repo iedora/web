@@ -27,7 +27,11 @@ export interface PlansGateway {
    * was updated, false when nothing matched (org missing). Schema enforces
    * the column type; the use-case enforces the registry membership.
    */
-  updateOrgPlan(tenantId: string, code: PlanCode): Promise<boolean>
+  updateOrgPlan(
+    tenantId: string,
+    code: PlanCode,
+    actor?: { userId: string; email?: string | null },
+  ): Promise<boolean>
 
   /**
    * Counts AI menu-import generations for `tenantId` newer than

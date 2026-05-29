@@ -13,7 +13,7 @@ export type AuditEntry = {
   actorRole: string | null
   actorEmail: string | null
   targetUserId: string | null
-  targetOrgId: string | null
+  targetTenantId: string | null
   targetSessionId: string | null
   ipHash: string | null
   userAgent: string | null
@@ -30,7 +30,7 @@ export type ListAuditInput = {
   /** Exact match on the target user id (for the user-detail panel). */
   targetUserId?: string
   /** Exact match on the target org id (for the org-detail panel). */
-  targetOrgId?: string
+  targetTenantId?: string
   /** Show only important events when true. */
   importantOnly?: boolean
   page: number

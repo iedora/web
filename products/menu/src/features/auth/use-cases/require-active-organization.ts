@@ -13,7 +13,7 @@ import { verifySession } from './verify-session'
  */
 export async function requireActiveOrganization(auth: AuthGateway) {
   const session = await verifySession(auth)
-  const tenantId = session.session.activeOrganizationId
+  const tenantId = session.session.activeTenantId
   if (!tenantId) redirect('/menu/onboarding')
   return { session, tenantId }
 }

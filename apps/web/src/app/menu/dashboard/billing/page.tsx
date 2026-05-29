@@ -212,7 +212,7 @@ export default async function BillingPage({
                   {t(`plans.${inv.plan}.name`)}
                   <span aria-hidden="true"> · </span>
                   <span className="billing-invoice__period">
-                    {formatPeriod(inv.periodStart, inv.periodEnd, locale)}
+                    {inv.issuedAt.toLocaleDateString(locale)}
                   </span>
                 </p>
                 <p className="billing-invoice__amount">

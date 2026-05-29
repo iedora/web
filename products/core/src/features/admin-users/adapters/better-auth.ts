@@ -1,7 +1,21 @@
 import 'server-only'
-import { headers as nextHeaders } from 'next/headers'
-import { eq } from 'drizzle-orm'
-import { auth, getCoreDb, schema } from '@iedora/auth'
+import { desc, eq } from 'drizzle-orm'
+import {
+  getCoreDb,
+  schema,
+  detectStaffPreset,
+  STAFF_ROLE_PRESETS,
+  isStaffRole,
+} from '@iedora/auth'
+import {
+  banUser as banUserCore,
+  unbanUser as unbanUserCore,
+  setUserScopes,
+  impersonateUser as impersonateUserCore,
+  listUsers as listUsersCore,
+  getSession,
+} from '@iedora/auth/server'
+import type { Scope } from '@iedora/auth/scopes'
 import type {
   AdminUser,
   AdminUserSession,
@@ -11,65 +25,50 @@ import type {
 } from '../ports'
 
 /**
- * The only file that names `auth.api.*` for the users slice. Every
- * other module talks to the gateway interface, which keeps better-auth
- * envelopes out of the use-cases and lets tests run against a fake.
+ * Admin-users gateway. Used to wrap `auth.api.*` (better-auth admin
+ * plugin); after the tenancy refactor, plumbed against our own
+ * `@iedora/auth/server` helpers (which work over the same schema
+ * columns better-auth used to manage).
  *
- * Each method re-reads request headers via `next/headers` so the call
- * authenticates as the caller of the current server action / page.
- * Cheaper than threading a `Headers` arg through every use-case.
+ * Each method that authenticates as the caller reads `next/headers`
+ * lazily so the gateway can be constructed once per request.
  */
 export function betterAuthAdminUsersGateway(): AdminUsersGateway {
-  const h = async () => await nextHeaders()
   return {
     async listUsers(input: ListUsersInput): Promise<ListUsersResult> {
       const offset = (input.page - 1) * input.pageSize
-      const response = await auth.api.listUsers({
-        query: {
-          limit: input.pageSize,
-          offset,
-          sortBy: input.sortBy,
-          sortDirection: input.sortDirection,
-          ...(input.q
-            ? {
-                searchField: 'email',
-                searchOperator: 'contains',
-                searchValue: input.q,
-              }
-            : {}),
-        },
-        headers: await h(),
+      // Map admin UI's `kind` filter ('staff' / 'tenant') onto our
+      // listUsers helper. Role-string filter is converted to "staff
+      // preset matches": match if user.scopes equals the preset.
+      const kindFilter =
+        input.role === 'iedora-admin' || input.role === 'iedora-support'
+          ? 'staff'
+          : input.role === 'member'
+            ? 'tenant'
+            : undefined
+      const result = await listUsersCore({
+        limit: input.pageSize,
+        offset,
+        search: input.q,
+        kind: kindFilter,
+        bannedOnly: input.banned === true ? true : undefined,
       })
-
-      let users = (response.users ?? []).map(mapUser)
-      // better-auth's `searchField` is single-column; layer a small
-      // in-memory union so the query box matches "name OR email".
-      if (input.q) {
-        const needle = input.q.toLowerCase()
-        users = users.filter(
-          (u) =>
-            u.email.toLowerCase().includes(needle) ||
-            u.name.toLowerCase().includes(needle),
-        )
+      let users = result.users.map(mapUser)
+      // When a SPECIFIC staff preset is requested, narrow to that one.
+      if (isStaffRole(input.role)) {
+        users = users.filter((u) => u.role === input.role)
       }
-      if (typeof input.banned === 'boolean') {
-        users = users.filter((u) => u.banned === input.banned)
-      }
-      if (input.role !== undefined) {
-        users = users.filter((u) => (u.role ?? null) === input.role)
-      }
-
+      // Best-effort total — listUsersCore doesn't return one yet; the
+      // admin UI shows "page X" without a hard count today.
       return {
         users,
-        total: typeof response.total === 'number' ? response.total : users.length,
+        total: users.length + (result.hasMore ? input.pageSize : 0),
         page: input.page,
         pageSize: input.pageSize,
       }
     },
 
     async getUserById({ userId }) {
-      // better-auth has no admin-side `getUser({ id })` endpoint, so
-      // fall through to Drizzle. Cheaper than re-paging listUsers.
       const db = getCoreDb()
       const [row] = await db
         .select()
@@ -81,11 +80,13 @@ export function betterAuthAdminUsersGateway(): AdminUsersGateway {
     },
 
     async listUserSessions({ userId }) {
-      const response = await auth.api.listUserSessions({
-        body: { userId },
-        headers: await h(),
-      })
-      return (response.sessions ?? []).map<AdminUserSession>((s) => ({
+      const db = getCoreDb()
+      const rows = await db
+        .select()
+        .from(schema.session)
+        .where(eq(schema.session.userId, userId))
+        .orderBy(desc(schema.session.createdAt))
+      return rows.map<AdminUserSession>((s) => ({
         id: s.id,
         token: s.token,
         userId,
@@ -93,60 +94,50 @@ export function betterAuthAdminUsersGateway(): AdminUsersGateway {
         userAgent: s.userAgent ?? null,
         createdAt: new Date(s.createdAt),
         expiresAt: new Date(s.expiresAt),
-        impersonatedBy:
-          (s as { impersonatedBy?: string | null }).impersonatedBy ?? null,
+        impersonatedBy: s.impersonatedBy ?? null,
       }))
     },
 
     async banUser({ userId, reason, expiresInSec }) {
-      await auth.api.banUser({
-        body: {
-          userId,
-          ...(reason ? { banReason: reason } : {}),
-          ...(typeof expiresInSec === 'number'
-            ? { banExpiresIn: expiresInSec }
-            : {}),
-        },
-        headers: await h(),
-      })
+      const expiresAt =
+        typeof expiresInSec === 'number'
+          ? new Date(Date.now() + expiresInSec * 1000)
+          : undefined
+      await banUserCore({ userId, reason, expiresAt })
     },
 
     async unbanUser({ userId }) {
-      await auth.api.unbanUser({
-        body: { userId },
-        headers: await h(),
-      })
+      await unbanUserCore(userId)
     },
 
     async setRole({ userId, role }) {
-      await auth.api.setRole({
-        body: {
-          userId,
-          // better-auth accepts `null`/empty to clear the role.
-          role: (role ?? '') as never,
-        },
-        headers: await h(),
-      })
+      // Expand the named preset (or clear scopes to null) and persist
+      // directly onto `user.scopes`. The audit row tied to this change
+      // is left to the calling action — gateway is plumbing only.
+      const scopes =
+        role && isStaffRole(role) ? STAFF_ROLE_PRESETS[role] : null
+      await setUserScopes(userId, scopes as readonly Scope[] | null)
     },
 
     async revokeUserSessions({ userId }) {
-      await auth.api.revokeUserSessions({
-        body: { userId },
-        headers: await h(),
-      })
+      const db = getCoreDb()
+      await db.delete(schema.session).where(eq(schema.session.userId, userId))
     },
 
     async revokeUserSession({ sessionToken }) {
-      await auth.api.revokeUserSession({
-        body: { sessionToken },
-        headers: await h(),
-      })
+      const db = getCoreDb()
+      await db.delete(schema.session).where(eq(schema.session.token, sessionToken))
     },
 
     async impersonateUser({ userId }) {
-      await auth.api.impersonateUser({
-        body: { userId },
-        headers: await h(),
+      const actor = await getSession()
+      if (!actor?.user) {
+        throw new Error('[admin-users] impersonate: caller has no session')
+      }
+      await impersonateUserCore({
+        actorSessionId: actor.session.id,
+        actorUserId: actor.user.id,
+        targetUserId: userId,
       })
     },
   }
@@ -157,7 +148,7 @@ function mapUser(u: {
   email: string
   name: string
   emailVerified?: boolean | null
-  role?: string | null
+  scopes?: Scope[] | string[] | null
   banned?: boolean | null
   banReason?: string | null
   banExpires?: Date | string | number | null
@@ -167,12 +158,18 @@ function mapUser(u: {
   const banExpires = u.banExpires
     ? new Date(u.banExpires).getTime()
     : null
+  // Detect named preset for UI display. Custom scope sets show as null
+  // ("Custom") — the admin UI can choose to label them as such.
+  const role =
+    u.scopes && u.scopes.length > 0
+      ? detectStaffPreset(u.scopes as readonly Scope[])
+      : null
   return {
     id: u.id,
     email: u.email,
     name: u.name,
     emailVerified: Boolean(u.emailVerified),
-    role: u.role ?? null,
+    role,
     banned: Boolean(u.banned),
     banReason: u.banReason ?? null,
     banExpires,

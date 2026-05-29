@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@iedora/auth": "workspace:*",
+    "@iedora/billing": "workspace:*",
     "@iedora/brand": "workspace:*",
     "@iedora/design-system": "workspace:*",
     "@iedora/observability": "workspace:*",

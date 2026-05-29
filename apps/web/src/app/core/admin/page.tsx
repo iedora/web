@@ -1,4 +1,3 @@
-import { headers } from 'next/headers'
 import { getTranslations } from 'next-intl/server'
 import {
   Card,
@@ -10,11 +9,9 @@ import {
 } from '@iedora/design-system'
 import { requireScope } from '@iedora/product-core'
 import { SCOPES } from '@iedora/auth/scopes'
-import {
-  drizzleAdminOrgsGateway,
-  listOrgs,
-} from '@iedora/product-core/features/admin-orgs'
-import { auth } from '@iedora/auth'
+import { detectStaffPreset } from '@iedora/auth'
+import type { Scope } from '@iedora/auth/scopes'
+import { listUsers } from '@iedora/auth/server'
 import { AdminPage } from '@iedora/product-core/shared/ui/admin-page'
 
 /**
@@ -35,24 +32,15 @@ import { AdminPage } from '@iedora/product-core/shared/ui/admin-page'
 export default async function CoreAdminOverview() {
   const session = await requireScope(SCOPES.core.staff.admin.read)
   const t = await getTranslations('Core.admin.overview')
-  const h = await headers()
 
-  // Cheap aggregates — both endpoints already return a `total`
-  // envelope. Cap at 1 row to skip scrolling actual data.
-  const [usersResponse, orgsResult] = await Promise.all([
-    auth.api.listUsers({
-      query: { limit: 1, sortBy: 'createdAt', sortDirection: 'desc' },
-      headers: h,
-    }),
-    listOrgs(drizzleAdminOrgsGateway(), {
-      page: 1,
-      pageSize: 1,
-      sortBy: 'createdAt',
-      sortDirection: 'desc',
-    }),
-  ])
-  const totalUsers = usersResponse.total ?? usersResponse.users?.length ?? 0
-  const totalOrgs = orgsResult.total
+  // Cheap aggregate — listUsers paginates by default; we just want a
+  // count probe. (When @iedora/auth.listUsers grows a `total` we can
+  // skip the row fetch entirely.)
+  const usersPage = await listUsers({ limit: 1 })
+  const totalUsers = usersPage.users.length + (usersPage.hasMore ? 1 : 0)
+  const userScopes =
+    ((session.user as { scopes?: string[] | null }).scopes ?? []) as readonly Scope[]
+  const staffPreset = detectStaffPreset(userScopes)
 
   return (
     <AdminPage
@@ -82,10 +70,10 @@ export default async function CoreAdminOverview() {
             ) : null}
           </div>
           <Badge
-            variant={session.user.role === 'iedora-admin' ? 'accent' : 'ink'}
+            variant={staffPreset === 'iedora-admin' ? 'accent' : 'ink'}
             data-test-id="admin-overview-identity-role"
           >
-            {session.user.role}
+            {staffPreset ?? 'staff'}
           </Badge>
         </div>
       </Card>
@@ -105,20 +93,9 @@ export default async function CoreAdminOverview() {
             </Button>
           </CardFoot>
         </Card>
-        <Card data-test-id="admin-overview-card-orgs">
-          <CardTitle as="h2">{t('orgs.title')}</CardTitle>
-          <CardDesc>{t('orgs.count', { count: totalOrgs })}</CardDesc>
-          <CardFoot>
-            <Button
-              as="a"
-              href="/core/admin/organizations"
-              variant="ghost"
-              arrow
-            >
-              {t('orgs.cta')}
-            </Button>
-          </CardFoot>
-        </Card>
+        {/* admin-orgs card removed in the tenancy refactor. A follow-up
+            `admin-tenants` UI will land here once the cross-product
+            tenant admin surface is designed. */}
         <Card data-test-id="admin-overview-card-sessions">
           <CardTitle as="h2">{t('sessions.title')}</CardTitle>
           <CardDesc>{t('sessions.description')}</CardDesc>

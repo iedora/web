@@ -10,23 +10,25 @@
 /**
  * The session shape consumed by the rest of the menu app.
  *
- * Source: better-auth's `auth.api.getSession()` plus the organization
- * plugin's `activeOrganizationId`. Translated by `adapters/drizzle.ts`.
+ * Source: better-auth's `auth.api.getSession()` (for the user) and
+ * `@iedora/auth/server.getActiveTenantId()` (for the active tenant id,
+ * with lazy membership revalidation). Translated by `adapters/drizzle.ts`.
  *
- * `role` is the cross-tenant scalar (`'iedora-admin'`, `'iedora-support'`,
- * or `null` for tenants). Per-org permissions are evaluated at call time
- * via `requireScope()`, NOT through a flat list on the session.
+ * `scopes` is the cross-tenant scope set on the user (`null` for tenant
+ * users; populated for staff). Tenant-level scopes are NOT carried on
+ * the session — they're read per-request via `getMemberScopes(active
+ * tenant, userId)`.
  */
 export type Session = {
   user: {
     id: string
     email: string
     name: string
-    role: string | null
+    scopes: string[] | null
   }
   session: {
     id: string
-    activeOrganizationId: string | null
+    activeTenantId: string | null
   }
 }
 

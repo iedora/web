@@ -5,7 +5,7 @@ import { auth, type AuthSession } from '../auth'
 import { recordAudit } from '../audit'
 import { getActiveTenantId } from '../sessions'
 import { getMemberScopes } from '../tenant-members'
-import { userHasScope, getUserScopes } from '../staff'
+import { userHasScope } from '../staff'
 import type { Scope } from '../scopes'
 
 /**

@@ -1,18 +1,24 @@
 import 'server-only'
 import { headers } from 'next/headers'
 import { notFound, redirect } from 'next/navigation'
-import { auth, recordAudit } from '@iedora/auth'
-import { hasStaffScope } from '@iedora/auth/permissions'
+import { recordAudit } from '@iedora/auth'
+import {
+  getSession,
+  userHasScope,
+  hasScope as hasScopeServer,
+} from '@iedora/auth/server'
 import { signInUrl } from './url'
 import { type Scope } from '@iedora/auth/scopes'
 
 /**
  * Non-redirecting read of the current better-auth session. Returns
  * `null` when there's no cookie / expired / tampered.
+ *
+ * Thin pass-through over `@iedora/auth/server.getSession()`. Kept in
+ * this package's public API for callers that already import from
+ * `@iedora/product-core` and prefer not to add a second auth dep.
  */
-export async function getSession() {
-  return auth.api.getSession({ headers: await headers() })
-}
+export { getSession }
 
 /**
  * Capture a denied authz attempt to the audit log. Important=false —
@@ -31,7 +37,10 @@ async function recordDenied(input: {
     actor: input.session?.user
       ? {
           userId: input.session.user.id,
-          role: input.session.user.role ?? null,
+          // `user.role` is gone; staff identity is now `user.scopes`.
+          // The audit row keeps a single string for searchability —
+          // pass null and rely on the actorUserId for cross-referencing.
+          role: null,
           email: input.session.user.email,
         }
       : null,
@@ -43,34 +52,34 @@ async function recordDenied(input: {
 
 /**
  * Non-throwing scope probe. Returns true iff the current caller has
- * the requested scope. Use to conditionally render UI (a button, a
- * nav link) that would otherwise 404 on click via `requireScope`.
- * Never throws — anonymous, tenant, and unknown-role callers all
- * return false.
+ * the requested scope — STAFF wildcard first (`user.scopes`), then
+ * the per-tenant fallback (`tenant_member.scopes` for the active
+ * tenant). Use to conditionally render UI; never inverts (surfaces
+ * hidden by absence, not by explicit deny).
  *
- * Positive semantics: render IF the scope is held. Do not invert.
- * Surfaces are hidden by absence, not by explicit deny.
- *
- * Thin wrapper over `hasStaffScope` (`@iedora/auth/permissions`) —
- * the AC eval lives in one place; this file adds the Next session
- * read on top.
+ * Delegates to `@iedora/auth/server.hasScope` — the same primitive
+ * the rest of the estate uses.
  */
 export async function hasScope(scope: Scope): Promise<boolean> {
-  const session = await getSession()
-  return hasStaffScope(session?.user?.role, scope)
+  return hasScopeServer(scope)
 }
 
 /**
  * Capability-based guard. Two failure modes:
  *
  *   - no session                → redirect to /sign-in (anonymous).
- *   - missing scope (any reason — tenant role, non-staff, role
- *     without this scope) → `notFound()`. We hide the existence of
- *     the surface; a 403 would advertise it.
+ *   - missing scope (any reason — tenant user, non-staff, custom
+ *     scope set without this scope) → `notFound()`. We hide the
+ *     existence of the surface; a 403 would advertise it.
  *
  * Successful + denied attempts both land in the audit log
  * (`auth.denied`, `important: false`) so probes + accidental clicks
  * stay filterable separately from real activity.
+ *
+ * STAFF-only convenience: `requireScope` is the right primitive for
+ * routes under `/core/admin/*`. For tenant-scoped routes, use
+ * `requireScope` from `@iedora/auth/server` (which checks both staff
+ * and tenant layers).
  */
 export async function requireScope(scope: Scope) {
   const h = await headers()
@@ -79,7 +88,7 @@ export async function requireScope(scope: Scope) {
     await recordDenied({ reason: 'no-session', scope, h })
     redirect(signInUrl())
   }
-  if (!(await hasStaffScope(session.user.role, scope))) {
+  if (!(await userHasScope(session.user.id, scope))) {
     await recordDenied({ reason: 'no-scope', scope, session, h })
     notFound()
   }

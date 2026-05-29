@@ -1,73 +1,72 @@
 import 'server-only'
-import { headers as nextHeaders } from 'next/headers'
-import { auth } from '@iedora/auth'
+import { and, desc, eq, ilike, isNotNull, or } from 'drizzle-orm'
+import { getCoreDb, schema } from '@iedora/auth'
 import type {
   AdminSessionRow,
   AdminSessionsGateway,
   ListAllSessionsInput,
 } from '../ports'
 
+/**
+ * Cross-tenant sessions admin gateway. Used to plumb through better-
+ * auth's admin plugin (`auth.api.listUsers` + `listUserSessions`);
+ * after the tenancy refactor the plugin was dropped, so we read
+ * sessions + users directly via Drizzle. Same shape, single round-
+ * trip per page (one JOIN instead of N per-user fetches).
+ */
 export function betterAuthAdminSessionsGateway(): AdminSessionsGateway {
-  const h = async () => await nextHeaders()
   return {
     async listAllSessions(input: ListAllSessionsInput) {
+      const db = getCoreDb()
       const limit = input.userLimit ?? 500
-      const usersResponse = await auth.api.listUsers({
-        query: { limit, sortBy: 'createdAt', sortDirection: 'desc' },
-        headers: await h(),
-      })
-
-      const users = usersResponse.users ?? []
-      const needle = input.q?.toLowerCase() ?? null
-      const candidates = needle
-        ? users.filter(
-            (u) =>
-              u.email.toLowerCase().includes(needle) ||
-              u.name.toLowerCase().includes(needle),
-          )
-        : users
-
-      const headers = await h()
-      const lists = await Promise.all(
-        candidates.map((u) =>
-          auth.api
-            .listUserSessions({ body: { userId: u.id }, headers })
-            .then((r) => ({
-              user: u,
-              sessions: r.sessions ?? [],
-            })),
-        ),
-      )
-
-      const rows: AdminSessionRow[] = []
-      for (const { user, sessions } of lists) {
-        for (const s of sessions) {
-          const impersonatedBy =
-            (s as { impersonatedBy?: string | null }).impersonatedBy ?? null
-          if (input.impersonatedOnly && !impersonatedBy) continue
-          rows.push({
-            id: s.id,
-            token: s.token,
-            userId: user.id,
-            userEmail: user.email,
-            userName: user.name,
-            ipAddress: s.ipAddress ?? null,
-            userAgent: s.userAgent ?? null,
-            createdAt: new Date(s.createdAt),
-            expiresAt: new Date(s.expiresAt),
-            impersonatedBy,
-          })
-        }
+      const conditions = []
+      if (input.q) {
+        const q = `%${input.q}%`
+        conditions.push(or(ilike(schema.user.email, q), ilike(schema.user.name, q))!)
       }
-      rows.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-      return rows
+      if (input.impersonatedOnly) {
+        conditions.push(isNotNull(schema.session.impersonatedBy))
+      }
+
+      const rows = await db
+        .select({
+          id: schema.session.id,
+          token: schema.session.token,
+          userId: schema.user.id,
+          userEmail: schema.user.email,
+          userName: schema.user.name,
+          ipAddress: schema.session.ipAddress,
+          userAgent: schema.session.userAgent,
+          createdAt: schema.session.createdAt,
+          expiresAt: schema.session.expiresAt,
+          impersonatedBy: schema.session.impersonatedBy,
+        })
+        .from(schema.session)
+        .innerJoin(schema.user, eq(schema.user.id, schema.session.userId))
+        .where(conditions.length > 0 ? and(...conditions) : undefined)
+        .orderBy(desc(schema.session.createdAt))
+        .limit(limit)
+
+      const out: AdminSessionRow[] = rows.map((r) => ({
+        id: r.id,
+        token: r.token,
+        userId: r.userId,
+        userEmail: r.userEmail,
+        userName: r.userName,
+        ipAddress: r.ipAddress ?? null,
+        userAgent: r.userAgent ?? null,
+        createdAt: r.createdAt,
+        expiresAt: r.expiresAt,
+        impersonatedBy: r.impersonatedBy ?? null,
+      }))
+      return out
     },
 
     async revokeSession({ sessionToken }) {
-      await auth.api.revokeUserSession({
-        body: { sessionToken },
-        headers: await h(),
-      })
+      const db = getCoreDb()
+      await db
+        .delete(schema.session)
+        .where(eq(schema.session.token, sessionToken))
     },
   }
 }

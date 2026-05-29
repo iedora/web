@@ -13,6 +13,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@iedora/auth": "workspace:*",
+        "@iedora/billing": "workspace:*",
         "@iedora/brand": "workspace:*",
         "@iedora/design-system": "workspace:*",
         "@iedora/observability": "workspace:*",
@@ -272,6 +273,7 @@
         "@dnd-kit/sortable": "^10.0.0",
         "@dnd-kit/utilities": "^3.2.2",
         "@iedora/auth": "workspace:*",
+        "@iedora/billing": "workspace:*",
         "@iedora/brand": "workspace:*",
         "@iedora/db": "workspace:*",
         "@iedora/design-system": "workspace:*",

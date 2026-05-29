@@ -50,7 +50,7 @@ export async function banUserAction(input: {
     outcome: 'success',
     actor: {
       userId: session.user.id,
-      role: session.user.role,
+      role: null, // user.role replaced by user.scopes; audit row keeps null for searchability
       email: session.user.email,
     },
     target: { userId: input.userId },
@@ -77,7 +77,7 @@ export async function unbanUserAction(input: {
     outcome: 'success',
     actor: {
       userId: session.user.id,
-      role: session.user.role,
+      role: null, // user.role replaced by user.scopes; audit row keeps null for searchability
       email: session.user.email,
     },
     target: { userId: input.userId },
@@ -106,7 +106,7 @@ export async function setUserRoleAction(input: {
     outcome: 'success',
     actor: {
       userId: session.user.id,
-      role: session.user.role,
+      role: null, // user.role replaced by user.scopes; audit row keeps null for searchability
       email: session.user.email,
     },
     target: { userId: input.userId },
@@ -131,7 +131,7 @@ export async function revokeUserSessionAction(input: {
     outcome: 'success',
     actor: {
       userId: session.user.id,
-      role: session.user.role,
+      role: null, // user.role replaced by user.scopes; audit row keeps null for searchability
       email: session.user.email,
     },
     target: { userId: input.userId },
@@ -154,7 +154,7 @@ export async function revokeAllUserSessionsAction(input: {
     outcome: 'success',
     actor: {
       userId: session.user.id,
-      role: session.user.role,
+      role: null, // user.role replaced by user.scopes; audit row keeps null for searchability
       email: session.user.email,
     },
     target: { userId: input.userId },
@@ -181,7 +181,7 @@ export async function impersonateUserAction(input: {
     outcome: 'success',
     actor: {
       userId: session.user.id,
-      role: session.user.role,
+      role: null, // user.role replaced by user.scopes; audit row keeps null for searchability
       email: session.user.email,
     },
     target: { userId: input.userId },

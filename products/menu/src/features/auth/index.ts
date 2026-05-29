@@ -32,7 +32,7 @@ export const getSession = cache(() => drizzleAuthGateway.getSession())
 export const verifySession = cache(() => _verifySession(drizzleAuthGateway))
 
 /**
- * Returns the caller's active organization id (`session.activeOrganizationId`
+ * Returns the caller's active organization id (`session.activeTenantId`
  * from better-auth's organization plugin), or null when none is set / no
  * session. Cached per render via React's `cache()`.
  */

@@ -4,12 +4,16 @@ import { requireScope } from '@iedora/product-core'
 import {
   SCOPES,
   ALL_SCOPES,
-  listAllowedScopes,
   parseScope,
   scopeI18nKey,
   type Scope,
 } from '@iedora/auth/scopes'
-import { staffRoles, type StaffRoleKey } from '@iedora/auth/permissions'
+import {
+  STAFF_ROLES,
+  STAFF_ROLE_PRESETS,
+  detectStaffPreset,
+  type StaffRoleKey,
+} from '@iedora/auth/permissions'
 import { AdminPage } from '@iedora/product-core/shared/ui/admin-page'
 
 /**
@@ -36,13 +40,11 @@ export default async function AccessPage() {
   const session = await requireScope(SCOPES.core.staff.admin.read)
   const t = await getTranslations('Core.admin.access')
 
-  const roleKeys = Object.keys(staffRoles) as ReadonlyArray<StaffRoleKey>
-  const roleScopes = await Promise.all(
-    roleKeys.map(async (key) => ({
-      key,
-      scopes: await listAllowedScopes(key),
-    })),
-  )
+  const roleKeys = STAFF_ROLES
+  const roleScopes = roleKeys.map((key) => ({
+    key,
+    scopes: STAFF_ROLE_PRESETS[key],
+  }))
 
   // Group scopes by KIND → PRODUCT → RESOURCE, in insertion order from
   // ALL_SCOPES (so the catalogue reads in the same order as the SCOPES
@@ -64,7 +66,11 @@ export default async function AccessPage() {
     resources.get(resource)!.push({ scope, verb })
   }
 
-  const myRole = (session.user.role ?? null) as StaffRoleKey | null
+  const myScopes =
+    ((session.user as { scopes?: string[] | null }).scopes ?? null) as
+      | readonly Scope[]
+      | null
+  const myRole: StaffRoleKey | null = myScopes ? detectStaffPreset(myScopes) : null
 
   return (
     <AdminPage
@@ -110,7 +116,7 @@ export default async function AccessPage() {
                       {t('noScopes')}
                     </span>
                   ) : (
-                    scopes.map((s) => (
+                    scopes.map((s: Scope) => (
                       <Badge
                         key={s}
                         variant="ghost"

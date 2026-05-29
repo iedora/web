@@ -29,8 +29,8 @@ export function drizzleAuditGateway(): AuditGateway {
       if (input.targetUserId) {
         conditions.push(eq(schema.auditLog.targetUserId, input.targetUserId))
       }
-      if (input.targetOrgId) {
-        conditions.push(eq(schema.auditLog.targetOrgId, input.targetOrgId))
+      if (input.targetTenantId) {
+        conditions.push(eq(schema.auditLog.targetTenantId, input.targetTenantId))
       }
       if (input.importantOnly) {
         conditions.push(eq(schema.auditLog.important, true))
@@ -60,7 +60,7 @@ export function drizzleAuditGateway(): AuditGateway {
         actorRole: r.actorRole,
         actorEmail: r.actorEmail,
         targetUserId: r.targetUserId,
-        targetOrgId: r.targetOrgId,
+        targetTenantId: r.targetTenantId,
         targetSessionId: r.targetSessionId,
         ipHash: r.ipHash,
         userAgent: r.userAgent,

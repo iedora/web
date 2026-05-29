@@ -186,7 +186,7 @@ export default async function AuditPage({
                       )}
                     </td>
                     <td className="text-xs font-[family-name:var(--mono)]">
-                      {e.targetUserId ?? e.targetOrgId ?? e.targetSessionId ?? '—'}
+                      {e.targetUserId ?? e.targetTenantId ?? e.targetSessionId ?? '—'}
                     </td>
                     <td className="text-xs">
                       {e.meta ? (

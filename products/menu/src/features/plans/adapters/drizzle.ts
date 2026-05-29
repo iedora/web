@@ -1,31 +1,39 @@
 import 'server-only'
 import { and, count, eq, gt } from 'drizzle-orm'
 import { db } from '../../../shared/db/client'
-import { aiMenuGeneration, orgPlan, restaurant } from '../../../shared/db/schema'
+import { aiMenuGeneration, restaurant } from '../../../shared/db/schema'
+import {
+  getSubscription,
+  createSubscription,
+  updateSubscription,
+} from '@iedora/billing'
+import { PRODUCTS } from '@iedora/brand'
 import type { PlansGateway } from '../ports'
+import type { PlanCode } from '../types'
 
 /**
- * Production PlansGateway. Wraps Drizzle reads/writes against the LOCAL
- * `org_plan` table (menu-owned) and the `restaurant` count. Plans are a
- * menu-domain concept (gate restaurant counts, monthly views, etc.) and
- * are keyed by the Genkan-issued `tenantId` — there's no FK,
- * Genkan is a separate database.
+ * Production PlansGateway. Plan code is now stored in
+ * `core.tenant_subscription` keyed by `(tenantId, product='menu')`
+ * via `@iedora/billing`. Menu's PlansGateway acts as a thin adapter
+ * that:
+ *   - reads the plan code from the cross-product subscription helper
+ *     and CASTs it to menu's local `PlanCode` (the registry coerces
+ *     unknowns back to the default at read time);
+ *   - keeps the AI-generations + restaurant-count counters local
+ *     (menu-domain data; no reason for those to live in core).
  *
- * Missing rows mean "never set a plan yet" — `getOrgPlan` returns null
- * and the use-case coerces back to the default via `getPlan`. The
- * onboarding flow inserts a default row when it first creates a
- * restaurant for the org.
+ * Write helpers (`updateOrgPlan`) upsert through
+ * `getSubscription` / `createSubscription` / `updateSubscription` so
+ * the audit log captures the change at the cross-product boundary.
  *
- * Server-only — the Drizzle client never belongs on the client.
+ * Server-only — the Drizzle client + billing helpers never belong
+ * on the client.
  */
 export const drizzlePlans: PlansGateway = {
   async getOrgPlan(tenantId) {
-    const rows = await db
-      .select({ plan: orgPlan.plan })
-      .from(orgPlan)
-      .where(eq(orgPlan.tenantId, tenantId))
-      .limit(1)
-    return rows[0]?.plan ?? null
+    const sub = await getSubscription(tenantId, PRODUCTS.menu)
+    if (!sub) return null
+    return sub.plan as PlanCode
   },
 
   async countOrgRestaurants(tenantId) {
@@ -36,16 +44,24 @@ export const drizzlePlans: PlansGateway = {
     return Number(rows[0]?.value ?? 0)
   },
 
-  async updateOrgPlan(tenantId, code) {
-    // Upsert: this is the only place that writes the `org_plan` row, so we
-    // treat "no row yet" as success-by-create instead of an error.
-    await db
-      .insert(orgPlan)
-      .values({ tenantId, plan: code })
-      .onConflictDoUpdate({
-        target: orgPlan.tenantId,
-        set: { plan: code },
+  async updateOrgPlan(tenantId, code, actor) {
+    const sub = await getSubscription(tenantId, PRODUCTS.menu)
+    const actorInfo = actor ?? { userId: 'system', email: null }
+    if (sub) {
+      await updateSubscription({
+        subscriptionId: sub.id,
+        plan: code,
+        actor: actorInfo,
       })
+    } else {
+      await createSubscription({
+        tenantId,
+        product: PRODUCTS.menu,
+        plan: code,
+        status: 'active',
+        actor: actorInfo,
+      })
+    }
     return true
   },
 
