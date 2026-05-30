@@ -17,7 +17,7 @@
 # Node version is declared once via ARG at the top (Next.js 16 official
 # pattern). Bump the ARG value periodically to track the latest LTS.
 # Bun base image is pinned by digest — it changes less often.
-ARG NODE_VERSION=24.11.0-bookworm-slim
+ARG NODE_VERSION=24.16.0-bookworm-slim
 
 # ── Stage 1: dependencies ─────────────────────────────────────────────────────
 FROM oven/bun:1.3-debian@sha256:9dba1a1b43ce28c9d7931bfc4eb00feb63b0114720a0277a8f939ae4dfc9db6f AS deps
