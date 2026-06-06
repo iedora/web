@@ -17,9 +17,9 @@ State backend: bucket `homelab-iac-state` do homelab (criado por
 
 ## Workflow
 
-Pré-req único: ter o repo `homelab-iac` em `~/projects/personal/homelab-iac`
-com `iac/.envrc` bootstrapado (`cp iac/.envrc.example iac/.envrc` + edita
-identifiers + `tools/seed-secrets.sh`). Sops + age têm de estar no PATH.
+Pré-req único: ter o repo `homelab-iac` em `~/projects/personal/homelab-iac`,
+a age key em `~/.config/sops/age/keys.txt`, e correr `tools/seed-secrets.sh`
+uma vez. Sops + age têm de estar no PATH.
 
 ```bash
 cd ~/projects/personal/iedora/infra/tofu/r2
@@ -60,14 +60,13 @@ O bucket e os ficheiros nele não são tocados.
 ```
 ~/projects/personal/
 ├── homelab-iac/          ← platform (LXCs, tunnel, Coolify install, state bucket)
-│   └── iac/
-│       ├── .envrc        ← gitignored; tem secrets via sops
-│       └── secrets.sops.yaml  ← encrypted, committed
+│   ├── secrets.sops.yaml ← encrypted, committed (single source of truth)
+│   └── tools/lib/common.sh ← expõe source_envrc
 └── iedora/               ← app
     ├── apps/web/
     │   └── .env.prod     ← app secrets (sops, committed)
     └── infra/tofu/
-        ├── .envrc        ← committed: sources $HOMELAB_IAC_ROOT/iac/.envrc
+        ├── .envrc        ← committed: sources $HOMELAB_IAC_ROOT/tools/lib/common.sh + source_envrc
         └── r2/           ← este stack
 ```
 
