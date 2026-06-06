@@ -1,9 +1,25 @@
-# Sops creation rules. Same age recipient as the iedora-iac repo —
-# single operator key on the Mac (~/.config/sops/age/keys.txt), backed up
-# in personal Bitwarden vault.
+# Sops recipients for the iedora app repo. One age key per MACHINE.
+# Mirror of iedora-iac/.sops.yaml structure — see that file for the full
+# onboarding/revoking workflow comments.
+#
+# Scope: human operator machines only. Bot/server keys (e.g. ops LXC) are
+# intentionally NOT recipients here — ops doesn't run the app, so least
+# privilege applies. If CI/CD ever needs to decrypt for deploys, add a
+# dedicated `&ci_gha` key that lives only in GitHub Actions secrets.
+
+keys:
+  # ── Eduardo ─────────────────────────────────────────────────────────────
+  - &eduardo_mac      age1867kx5pchlg2aty9tqhwvlyyjn6p2rmxlrn9czszusqjdu2acp9qakhet5
+  # - &eduardo_windows  age1...  # uncomment when bootstrapping Windows
+
+  # ── (template — duplicate this block per new human) ─────────────────────
+  # - &joao_mac      age1...
+  # - &joao_windows  age1...
+
 creation_rules:
-  # Production env vars for apps/web — dotenv format, committed encrypted.
-  # Source of truth for app-runtime secrets; Coolify UI is a derived
-  # consumer (paste values after editing with `sops apps/web/.env.prod`).
   - path_regex: apps/web/\.env\.prod$
-    age: age1867kx5pchlg2aty9tqhwvlyyjn6p2rmxlrn9czszusqjdu2acp9qakhet5
+    key_groups:
+      - age:
+          - *eduardo_mac
+          # - *eduardo_windows
+          # - *joao_mac
