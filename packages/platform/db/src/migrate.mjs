@@ -22,6 +22,42 @@ import { drizzle } from 'drizzle-orm/postgres-js'
 import { migrate } from 'drizzle-orm/postgres-js/migrator'
 import postgres from 'postgres'
 
+// Same server, maintenance `postgres` database — CREATE DATABASE can't run
+// inside the target connection (nor in a transaction).
+function adminUrlFor(connStr) {
+  const u = new URL(connStr)
+  u.pathname = '/postgres'
+  return u.toString()
+}
+
+function dbNameFromUrl(connStr) {
+  const u = new URL(connStr)
+  return decodeURIComponent(u.pathname.replace(/^\//, '')) || 'postgres'
+}
+
+/**
+ * Idempotently create the target database if it's missing. This is why there
+ * is no out-of-band `CREATE DATABASE` (no dev init.sql, no Coolify init
+ * script): every migrate path creates its own database, so adding a new one
+ * is just adding its migrate target. Mirrors scripts/run-migrations.mjs.
+ *
+ * @param {string} url    Target connection string.
+ * @param {string} label  Log label.
+ */
+async function ensureDatabase(url, label) {
+  const targetDb = dbNameFromUrl(url)
+  const adminSql = postgres(adminUrlFor(url), { max: 1, onnotice: () => {} })
+  try {
+    const rows = await adminSql`SELECT 1 FROM pg_database WHERE datname = ${targetDb}`
+    if (rows.length === 0) {
+      await adminSql.unsafe(`CREATE DATABASE "${targetDb.replace(/"/g, '""')}"`)
+      console.error(`[migrate:${label}] created database "${targetDb}"`)
+    }
+  } finally {
+    await adminSql.end({ timeout: 5 })
+  }
+}
+
 /**
  * Apply pending drizzle migrations against a single Postgres database.
  *
@@ -45,6 +81,7 @@ export async function runMigrations({ url, folder, tag }) {
     console.error(`[migrate:${label}] connection URL em falta`)
     process.exit(1)
   }
+  await ensureDatabase(url, label)
   const sql = postgres(url, { max: 1 })
   try {
     console.error(`[migrate:${label}] ${url.replace(/:[^@]+@/, ':***@')} ← ${folder}`)

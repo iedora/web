@@ -10,8 +10,8 @@ Single-node homelab. Deploy é **`git push origin main`** → Coolify webhook
 - **Runner**: `coolify-runner-01` LXC (Docker + Traefik). Builds + serve.
 - **Ingress**: Cloudflare tunnel `coolify-iedora` (HA, 8 conexões).
   Wildcard `*.iedora.com` → Traefik no runner → app pelo Host header.
-- **DB**: Postgres 18 como **Coolify Resource** (1 container, 2 DBs: core,
-  menu — criadas pelo Init Script no setup; ver passo 1 abaixo).
+- **DB**: Postgres 18 como **Coolify Resource** (1 container; as DBs `core`
+  e `menu` são criadas automaticamente pelo migrator no pre-deploy).
 - **Object storage**: R2 bucket `iedora-assets` + token bucket-scoped,
   geridos por [`infra/tofu/r2/`](../infra/tofu/r2/). Outputs vão para
   `apps/web/.env.prod` (sops) → Coolify UI.
@@ -29,8 +29,7 @@ UI Coolify → Project `iedora` → "+ New Resource" → "PostgreSQL 18":
 | Server | `coolify-runner-01` |
 | Name | `iedora-pg` |
 | Postgres User | `postgres` |
-| Postgres DB | `postgres` (default; outras 3 criadas pelo init script abaixo) |
-| Init Script | `CREATE DATABASE menu; CREATE DATABASE core;` |
+| Postgres DB | `postgres` (default; as DBs por-produto são criadas pelo migrator) |
 | Backups | schedule = `0 3 * * *`, destination = R2 (mesmas creds que iac state), retention = 14d |
 
 Anota a password gerada — vai para o `DATABASE_URL`.
