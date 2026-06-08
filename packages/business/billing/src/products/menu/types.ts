@@ -5,8 +5,8 @@
  * for other products doesn't crowd a single file.
  *
  * `PlanLimits` carries menu-specific capacity gates. New products
- * (imopush, …) define their own `PlanLimits` in their own folder
- * under this directory.
+ * define their own `PlanLimits` in their own folder under this
+ * directory.
  */
 
 export type PlanCode = 'free' | 'casa'

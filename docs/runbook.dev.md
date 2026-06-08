@@ -7,7 +7,7 @@ Deploy → ver [`runbook.deploy.md`](./runbook.deploy.md).
 ```bash
 bun install
 bun run dev:up           # postgres + s3mock
-bun run dev:migrate      # schema nas 3 DBs (core, menu, imopush)
+bun run dev:migrate      # schema nas 2 DBs (core, menu)
 bun run dev              # next dev em :3000
 ```
 
@@ -30,7 +30,7 @@ Reset volumes: `bun run dev:reset`. Logs: `bun run dev:logs`.
 | `bun run dev:down` | Pára containers (mantém volumes). |
 | `bun run dev:logs` | Tail dos logs do compose stack. |
 | `bun run dev:reset` | Pára + apaga volumes (**perde dados locais**). |
-| `bun run dev:migrate` | Aplica Drizzle migrations em sequência: `auth` → `menu` → `imopush`. |
+| `bun run dev:migrate` | Aplica Drizzle migrations em sequência: `auth` → `menu`. |
 | `bun run typecheck` | TS check paralelo em todos os workspaces. |
 | `bun run lint` | ESLint paralelo em todos os workspaces. |
 | `bun run test` | Vitest em todos os workspaces. |
@@ -50,7 +50,7 @@ Reset volumes: `bun run dev:reset`. Logs: `bun run dev:logs`.
 | `bun run test:e2e:debug` | Playwright com `PWDEBUG=1`. |
 | `bun run db:migrate:test` | Aplica migrations nas DBs `*_test` (chama `scripts/migrate-test.mjs`). |
 
-## Comandos (`products/menu`, `products/imopush`, `packages/business/auth`)
+## Comandos (`products/menu`, `packages/business/auth`)
 
 | Comando | O que faz |
 |---|---|

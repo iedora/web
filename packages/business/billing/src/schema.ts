@@ -126,7 +126,7 @@ export const manualPayment = coreSchema.table(
   {
     id: text('id').primaryKey(),
     tenantId: text('tenant_id').notNull(),
-    /** Cross-product discriminator (`'menu'`, `'imopush'`, ...). */
+    /** Cross-product discriminator (`'menu'`, ...). */
     product: text('product').$type<ProductId>().notNull(),
     /** Snapshot of the plan code at the moment of payment. */
     planCode: text('plan_code').notNull(),

@@ -45,7 +45,7 @@ const spaceGrotesk = Space_Grotesk({
   subsets: ["latin"],
 });
 
-// Root layout serves every surface (menu / core / house / imopush) —
+// Root layout serves every surface (menu / core / house) —
 // the title/description here are the brand-level fallbacks. Each
 // surface's pages override via their own `export const metadata` so
 // the template suffix lands on the brand, not on a specific product.

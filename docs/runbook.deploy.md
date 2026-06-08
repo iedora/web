@@ -10,8 +10,8 @@ Single-node homelab. Deploy é **`git push origin main`** → Coolify webhook
 - **Runner**: `coolify-runner-01` LXC (Docker + Traefik). Builds + serve.
 - **Ingress**: Cloudflare tunnel `coolify-iedora` (HA, 8 conexões).
   Wildcard `*.iedora.com` → Traefik no runner → app pelo Host header.
-- **DB**: Postgres 18 como **Coolify Resource** (1 container, 3 DBs: core,
-  menu, imopush — criadas pelo Init Script no setup; ver passo 1 abaixo).
+- **DB**: Postgres 18 como **Coolify Resource** (1 container, 2 DBs: core,
+  menu — criadas pelo Init Script no setup; ver passo 1 abaixo).
 - **Object storage**: R2 bucket `iedora-assets` + token bucket-scoped,
   geridos por [`infra/tofu/r2/`](../infra/tofu/r2/). Outputs vão para
   `apps/web/.env.prod` (sops) → Coolify UI.
@@ -30,7 +30,7 @@ UI Coolify → Project `iedora` → "+ New Resource" → "PostgreSQL 18":
 | Name | `iedora-pg` |
 | Postgres User | `postgres` |
 | Postgres DB | `postgres` (default; outras 3 criadas pelo init script abaixo) |
-| Init Script | `CREATE DATABASE menu; CREATE DATABASE core; CREATE DATABASE imopush;` |
+| Init Script | `CREATE DATABASE menu; CREATE DATABASE core;` |
 | Backups | schedule = `0 3 * * *`, destination = R2 (mesmas creds que iac state), retention = 14d |
 
 Anota a password gerada — vai para o `DATABASE_URL`.
@@ -48,7 +48,7 @@ UI Coolify → Project `iedora` → "+ New Resource" → "Public Repository":
 | Base Directory | `/` (repo root é o build context) |
 | Port (container) | `3000` |
 | Health Check Path | `/up` |
-| Domains | `iedora.com,menu.iedora.com,core.iedora.com,imopush.iedora.com` |
+| Domains | `iedora.com,menu.iedora.com,core.iedora.com` |
 | Webhook auto-deploy | ✓ enabled |
 
 ### 3. Environment variables (Coolify UI → Application → Environment)
@@ -64,7 +64,6 @@ CORE_COOKIE_DOMAIN=.iedora.com
 CORE_TRUSTED_ORIGINS=https://iedora.com,https://menu.iedora.com,https://core.iedora.com
 NEXT_PUBLIC_CORE_URL=https://core.iedora.com
 NEXT_PUBLIC_MENU_URL=https://menu.iedora.com
-NEXT_PUBLIC_IMOPUSH_URL=https://imopush.iedora.com
 NEXT_PUBLIC_BRAND_URL=https://iedora.com
 IEDORA_BOOTSTRAP_ADMIN_EMAILS=eduardoferdcarvalho@gmail.com
 LOG_LEVEL=info
@@ -94,7 +93,6 @@ and remember to run `bun prod:env:updatekeys` here too.
 ```
 CORE_DATABASE_URL=postgresql://postgres:<pg-pw>@iedora-pg:5432/core
 MENU_DATABASE_URL=postgresql://postgres:<pg-pw>@iedora-pg:5432/menu
-IMOPUSH_DATABASE_URL=postgresql://postgres:<pg-pw>@iedora-pg:5432/imopush
 ```
 
 (`<pg-pw>` é a password gerada pelo Coolify Resource Postgres no passo 1.
@@ -106,7 +104,7 @@ o novo valor; ter aqui criaria drift.)
 Coolify UI → Application → "Pre-deployment Command":
 
 ```sh
-sh -c "node /app/packages/business/auth/migrate.mjs && node /app/products/menu/migrate.mjs && node /app/products/imopush/migrate.mjs"
+sh -c "node /app/packages/business/auth/migrate.mjs && node /app/products/menu/migrate.mjs"
 ```
 
 Corre num container efémero antes do traffic swap. Falha aborta o deploy.

@@ -67,10 +67,6 @@ export const PRODUCT_ONBOARDING_STEPS = {
     name: 'name',
     menu: 'menu',
   },
-  [PRODUCTS.imopush]: {
-    account: 'account',
-    firstProperty: 'first-property',
-  },
   [PRODUCTS.core]: {
     // No operator-facing onboarding for core today (signup is the
     // entry, and the cross-tenant admin surface is staff-only). The

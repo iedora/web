@@ -31,7 +31,6 @@ import type { ProductId, ProductOnboardingStatus } from '@iedora/brand'
  *
  * `payload` is a free-form JSON blob each product owns. Examples:
  *   - menu:    `{ restaurantSlug, restaurantId }`
- *   - imopush: `{ propertyId, listingPlatforms: [...] }`
  * Core's admin renderer NEVER reads payload — keeps the cross-product
  * boundary clean. Helpful for the product's own debugging / future
  * reverse-lookup.

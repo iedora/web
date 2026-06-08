@@ -7,7 +7,7 @@
  * registry. Status taxonomy is Stripe-shape so the future webhook
  * handler maps 1:1.
  *
- * Cross-product callers (menu, imopush, …) import from here ONLY —
+ * Cross-product callers (menu, …) import from here ONLY —
  * never reach into `core.tenant_subscription` directly.
  */
 

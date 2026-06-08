@@ -12,8 +12,7 @@
  * Real work lives in @iedora/db/scripts/run-migrations — this file is
  * the thin per-product entrypoint that picks the env var, computes the
  * migrations folder path, and supplies the schema + lock name. Mirror
- * its shape when adding a new product (see products/menu/scripts/migrate.mjs
- * + products/imopush/scripts/migrate.mjs).
+ * its shape when adding a new product (see products/menu/scripts/migrate.mjs).
  */
 
 import { fileURLToPath } from 'node:url'

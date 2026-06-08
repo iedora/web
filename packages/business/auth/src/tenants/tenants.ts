@@ -10,7 +10,7 @@ import { CORE_AUDIT_EVENTS, type AuditActor } from '../audit/audit-events'
 /**
  * Cross-product tenant primitives. The single source of truth for
  * "what tenants exist + who belongs to them" — every product (menu,
- * imopush, future) consults this module instead of querying the
+ * future) consults this module instead of querying the
  * `core` schema directly.
  *
  * When core eventually splits into its own service, the implementation

@@ -26,7 +26,6 @@ describe('SCOPES tree', () => {
     const products = new Set(ALL_SCOPES.map((s) => s.split(':')[1]))
     expect(products).toContain('core')
     expect(products).toContain('menu')
-    expect(products).toContain('imopush')
   })
 
   it('has no leftover :write verbs (use :create/:update/:delete or specific actions)', () => {
@@ -58,8 +57,5 @@ describe('scopeI18nKey', () => {
     expect(scopeI18nKey(SCOPES.core.staff.users.read as Scope)).toBe(
       'scopes.core.staff.users.read',
     )
-    expect(
-      scopeI18nKey(SCOPES.imopush.tenant.idealista.publish as Scope),
-    ).toBe('scopes.imopush.tenant.idealista.publish')
   })
 })

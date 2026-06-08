@@ -18,7 +18,6 @@
         "@iedora/design-system": "workspace:*",
         "@iedora/observability": "workspace:*",
         "@iedora/product-core": "workspace:*",
-        "@iedora/product-imopush": "workspace:*",
         "@iedora/product-menu": "workspace:*",
         "@iedora/tenancy": "workspace:*",
         "@toon-format/toon": "^2.3.0",
@@ -278,40 +277,6 @@
       "peerDependencies": {
         "next": "^16.2.6",
         "next-intl": "^4.9.2",
-        "react": "^19.2.0",
-      },
-    },
-    "products/imopush": {
-      "name": "@iedora/product-imopush",
-      "version": "0.1.0",
-      "dependencies": {
-        "@iedora/auth": "workspace:*",
-        "@iedora/brand": "workspace:*",
-        "@iedora/db": "workspace:*",
-        "@iedora/design-system": "workspace:*",
-        "@iedora/observability": "workspace:*",
-        "@iedora/product-core": "workspace:*",
-        "drizzle-orm": "catalog:",
-        "lucide-react": "^1.16.0",
-        "next-intl": "catalog:",
-        "postgres": "^3.4.9",
-        "server-only": "^0.0.1",
-        "zod": "catalog:",
-      },
-      "devDependencies": {
-        "@iedora/eslint-config": "workspace:*",
-        "@types/node": "^22.19.19",
-        "@types/react": "catalog:",
-        "drizzle-kit": "catalog:",
-        "eslint": "catalog:",
-        "next": "catalog:",
-        "react": "catalog:",
-        "typescript": "catalog:",
-        "typescript-eslint": "catalog:",
-        "vitest": "catalog:",
-      },
-      "peerDependencies": {
-        "next": "^16.2.6",
         "react": "^19.2.0",
       },
     },
@@ -699,8 +664,6 @@
     "@iedora/observability": ["@iedora/observability@workspace:packages/platform/observability"],
 
     "@iedora/product-core": ["@iedora/product-core@workspace:products/core"],
-
-    "@iedora/product-imopush": ["@iedora/product-imopush@workspace:products/imopush"],
 
     "@iedora/product-menu": ["@iedora/product-menu@workspace:products/menu"],
 

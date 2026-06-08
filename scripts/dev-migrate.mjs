@@ -3,7 +3,7 @@
  * Fast-path wrapper for `bun run dev:migrate`.
  *
  * The real migrate chain (`packages/business/auth` →
- * `products/menu` → `products/imopush`) spawns three Node processes,
+ * `products/menu`) spawns two Node processes,
  * each loading the env, opening a Postgres connection, taking an
  * advisory lock, and querying `__drizzle_migrations`. End-to-end ~3-5s
  * even when there's nothing to apply — felt every single `bun run dev`
@@ -12,7 +12,7 @@
  * This script fingerprints every drizzle/ folder we know about and
  * compares it to the last fingerprint we successfully applied. Match
  * = skip the whole chain (~10ms). Mismatch = run the real chain in
- * parallel (the three DBs are independent, no FK across them), then
+ * parallel (the DBs are independent, no FK across them), then
  * write the new fingerprint.
  *
  * Cache file: `.dev-cache/migrate-fingerprint`. Gitignored. Safe to
@@ -42,11 +42,6 @@ const targets = [
     cwd: 'products/menu',
     label: 'menu',
     drizzleDir: 'products/menu/drizzle',
-  },
-  {
-    cwd: 'products/imopush',
-    label: 'imopush',
-    drizzleDir: 'products/imopush/drizzle',
   },
 ]
 
@@ -130,7 +125,7 @@ if (cached === current) {
 
 console.log('[dev-migrate] schema changed — running migrations in parallel…')
 try {
-  // Three independent databases → safe to fan out. Each migrate takes
+  // Independent databases → safe to fan out. Each migrate takes
   // its own advisory lock so even hitting the same Postgres instance
   // is fine.
   await Promise.all(targets.map(runMigrate))

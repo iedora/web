@@ -47,7 +47,6 @@ export const PLAN_CATALOG: Record<ProductId, Record<string, PlanCatalogEntry>> =
   // `getPlanCatalogEntry` returns null for unknown codes. Add a plan
   // registry under `./products/<id>/` and import it here when the
   // product goes paid.
-  imopush: {},
   core: {},
 }
 

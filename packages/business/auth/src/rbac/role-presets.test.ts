@@ -118,7 +118,7 @@ describe('detect*Preset (reverse mapping)', () => {
 
   it('returns null for custom (non-preset) scope mixes', () => {
     expect(
-      detectTenantPreset([SCOPES.imopush.tenant.idealista.publish]),
+      detectTenantPreset([SCOPES.menu.tenant.qrCodes.delete]),
     ).toBeNull()
     expect(
       detectStaffPreset([SCOPES.core.staff.audit.read]),

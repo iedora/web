@@ -41,11 +41,6 @@ export const surfaces: ReadonlyArray<Surface> = [
     hosts: [`core.${BRAND_DOMAIN}`, "core.localhost"],
     rewritePath: "/core",
   },
-  {
-    name: PRODUCTS.imopush,
-    hosts: [`imopush.${BRAND_DOMAIN}`, "imopush.localhost"],
-    rewritePath: "/imopush",
-  },
 ]
 
 // surfaceByHost returns the surface whose host list contains `host`,

@@ -152,24 +152,6 @@ export const SCOPES = {
       },
     },
   },
-
-  // ── imopush: realestate listings + portal distribution ─────────
-  imopush: {
-    tenant: {
-      properties: {
-        read:   'tenant:imopush:properties:read',
-        create: 'tenant:imopush:properties:create',
-        update: 'tenant:imopush:properties:update',
-        delete: 'tenant:imopush:properties:delete',
-      },
-      idealista: {
-        // Publish a property to Idealista. Standalone verb so an
-        // operator like Mario can be granted publish-to-idealista
-        // without write access to property data itself.
-        publish: 'tenant:imopush:idealista:publish',
-      },
-    },
-  },
 } as const
 
 /**

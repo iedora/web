@@ -113,8 +113,7 @@
         },
         "products": {
           "core": "Core (auth + admin)",
-          "menu": "Menu (restaurants)",
-          "imopush": "Imopush (publication immobilière)"
+          "menu": "Menu (restaurants)"
         },
         "kinds": {
           "staff": "Staff (cross-tenant)",
@@ -193,19 +192,6 @@
                 "create": "Créer de nouveaux QR codes (unité ou en lot).",
                 "update": "Lier un QR code existant à un restaurant.",
                 "delete": "Supprimer des QR codes."
-              }
-            }
-          },
-          "imopush": {
-            "tenant": {
-              "properties": {
-                "read": "Voir les biens de ce tenant.",
-                "create": "Enregistrer un nouveau bien.",
-                "update": "Éditer les détails d'un bien.",
-                "delete": "Retirer un bien du catalogue."
-              },
-              "idealista": {
-                "publish": "Publier un bien sur Idealista."
               }
             }
           }

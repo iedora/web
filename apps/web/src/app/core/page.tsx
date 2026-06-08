@@ -17,13 +17,13 @@ import { signInUrl } from '@iedora/product-core/url'
  *      default product).
  *
  * Note: callers that arrive via the sign-in flow with a `next` param
- * (e.g. clicking "Log in" on menu.iedora.com or imopush.iedora.com)
+ * (e.g. clicking "Log in" on menu.iedora.com)
  * don't pass through here at all — the sign-in page honours `next`
  * directly. This file only handles direct hits to `core.iedora.com/`.
  *
  * When a second tenant-facing product opens beyond early access,
  * promote this to a product picker: resolve the user's accessible
- * products (org membership for menu, equivalent for imopush) and
+ * products (org membership for menu) and
  * render a chooser when there's more than one.
  */
 export default async function CoreHome() {

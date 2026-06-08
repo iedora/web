@@ -139,8 +139,6 @@ COPY --from=builder --chown=nextjs:nextjs /workspace/packages/business/auth/driz
 COPY --from=builder --chown=nextjs:nextjs /workspace/packages/business/auth/migrate.mjs ./packages/business/auth/migrate.mjs
 COPY --from=builder --chown=nextjs:nextjs /workspace/products/menu/drizzle     ./products/menu/drizzle
 COPY --from=builder --chown=nextjs:nextjs /workspace/products/menu/migrate.mjs ./products/menu/migrate.mjs
-COPY --from=builder --chown=nextjs:nextjs /workspace/products/imopush/drizzle     ./products/imopush/drizzle
-COPY --from=builder --chown=nextjs:nextjs /workspace/products/imopush/migrate.mjs ./products/imopush/migrate.mjs
 
 # Drizzle + postgres devem ser bundled via outputFileTracingIncludes em
 # next.config.ts. Empiricamente nft falha (silently skips conditional

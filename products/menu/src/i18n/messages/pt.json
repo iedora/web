@@ -649,8 +649,7 @@
         },
         "products": {
           "core": "Core (auth + admin)",
-          "menu": "Menu (restaurantes)",
-          "imopush": "Imopush (publicação imobiliária)"
+          "menu": "Menu (restaurantes)"
         },
         "kinds": {
           "staff": "Staff (cross-tenant)",
@@ -729,19 +728,6 @@
                 "create": "Gerar QR codes novos (singular ou em bulk).",
                 "update": "Ligar um QR code existente a um restaurante.",
                 "delete": "Eliminar QR codes."
-              }
-            }
-          },
-          "imopush": {
-            "tenant": {
-              "properties": {
-                "read": "Ver imóveis deste tenant.",
-                "create": "Registar um imóvel novo.",
-                "update": "Editar os detalhes de um imóvel.",
-                "delete": "Remover um imóvel do catálogo."
-              },
-              "idealista": {
-                "publish": "Publicar um imóvel no Idealista."
               }
             }
           }
@@ -903,86 +889,6 @@
           "inviteColumnExpires": "Expira"
         }
       }
-    }
-  },
-  "Imopush": {
-    "PropertyList": {
-      "title": "Propriedades",
-      "newProperty": "Nova propriedade",
-      "emptyLabel": "Sem propriedades",
-      "emptyHint": "Adiciona a primeira propriedade acima."
-    },
-    "Property": {
-      "location": "Localização",
-      "data": "Dados",
-      "features": "Características",
-      "description": "Descrição",
-      "platforms": "Plataformas",
-      "statusDraft": "Por publicar",
-      "statusPublished": "Publicado",
-      "statusPublishing": "A publicar…",
-      "statusFailed": "Falha",
-      "energyCertificate": "Certificado energético",
-      "heating": "Aquecimento",
-      "heatingIndividual": "Individual",
-      "heatingCentral": "Central",
-      "heatingNone": "Sem aquecimento",
-      "yearBuilt": "Ano de construção",
-      "delete": "Eliminar",
-      "deleteTitle": "Eliminar propriedade",
-      "deleteDescription": "Esta ação irá remover a propriedade de todas as plataformas onde foi publicada.",
-      "viewListing": "Ver anúncio",
-      "rooms": "T{count}",
-      "bathrooms": "{count} WC",
-      "rooms_label": "Quartos",
-      "bathrooms_label": "Casas de banho",
-      "areaLabel": "Área",
-      "usableArea": "Área útil",
-      "lotSize": "Terreno",
-      "floors": "Pisos",
-      "feature": {
-        "pool": "Piscina",
-        "garden": "Jardim",
-        "terrace": "Terraço",
-        "balcony": "Varanda",
-        "parking": "Estacionamento",
-        "storage": "Arrecadação",
-        "wardrobe": "Roupeiros",
-        "airConditioning": "Ar condicionado",
-        "fireplace": "Lareira",
-        "lift": "Elevador"
-      }
-    },
-    "PropertyPhotos": {
-      "noPhoto": "Sem foto",
-      "expandPhoto": "Expandir foto",
-      "previousPhoto": "Foto anterior",
-      "nextPhoto": "Próxima foto",
-      "closeLightbox": "Fechar"
-    },
-    "IdealistaPublish": {
-      "publish": "Publicar no Idealista",
-      "publishing": "A publicar…",
-      "retry": "Tentar novamente"
-    },
-    "IdealistaIntegrator": {
-      "title": "Idealista",
-      "description": "Publica e gere anúncios no Idealista.pt usando a conta da agência.",
-      "accountLabel": "Conta configurada",
-      "stateLabel": "Estado",
-      "stateActive": "Ativo",
-      "note": "As publicações são feitas por automação do Chrome com CDP — sem API Key necessária."
-    },
-    "Nav": {
-      "ariaLabel": "Navegação principal",
-      "properties": "Propriedades",
-      "integrators": "Integradores",
-      "idealista": "Idealista"
-    },
-    "Common": {
-      "edit": "Editar",
-      "delete": "Eliminar",
-      "cancel": "Cancelar"
     }
   }
 }

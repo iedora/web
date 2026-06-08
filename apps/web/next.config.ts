@@ -16,7 +16,6 @@ const nextConfig: NextConfig = {
     '@iedora/design-system',
     '@iedora/observability',
     '@iedora/product-core',
-    '@iedora/product-imopush',
     '@iedora/product-menu',
   ],
   // Força drizzle-orm + postgres-js a ficarem em node_modules do

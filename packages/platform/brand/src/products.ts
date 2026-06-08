@@ -38,7 +38,6 @@ import { BRAND_DOMAIN } from './index'
 export const PRODUCTS = {
   menu: 'menu',
   core: 'core',
-  imopush: 'imopush',
 } as const
 
 export type ProductId = (typeof PRODUCTS)[keyof typeof PRODUCTS]
@@ -49,9 +48,5 @@ export function productUrl(id: ProductId): string {
       return process.env.NEXT_PUBLIC_MENU_URL ?? `https://menu.${BRAND_DOMAIN}`
     case PRODUCTS.core:
       return process.env.NEXT_PUBLIC_CORE_URL ?? `https://core.${BRAND_DOMAIN}`
-    case PRODUCTS.imopush:
-      return (
-        process.env.NEXT_PUBLIC_IMOPUSH_URL ?? `https://imopush.${BRAND_DOMAIN}`
-      )
   }
 }

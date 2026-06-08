@@ -32,7 +32,6 @@ variable "cors_origins" {
     "https://iedora.com",
     "https://menu.iedora.com",
     "https://core.iedora.com",
-    "https://imopush.iedora.com",
   ]
   description = "Origens browser autorizadas a PUT/POST directamente no bucket (signed URLs)."
 }

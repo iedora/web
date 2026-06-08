@@ -588,8 +588,7 @@
             "empty": "No product activity recorded yet for this tenant.",
             "label": {
               "core": "Core",
-              "menu": "Menu",
-              "imopush": "Imopush"
+              "menu": "Menu"
             },
             "status": {
               "pending": "Pending",
@@ -725,8 +724,7 @@
         },
         "products": {
           "core": "Core (auth + admin)",
-          "menu": "Menu (restaurants)",
-          "imopush": "Imopush (real-estate publishing)"
+          "menu": "Menu (restaurants)"
         },
         "kinds": {
           "staff": "Staff (cross-tenant)",
@@ -805,19 +803,6 @@
                 "create": "Mint new QR codes (single or bulk).",
                 "update": "Bind an existing QR code to a restaurant.",
                 "delete": "Delete QR codes."
-              }
-            }
-          },
-          "imopush": {
-            "tenant": {
-              "properties": {
-                "read": "View properties belonging to this tenant.",
-                "create": "Register a new property.",
-                "update": "Edit a property's listing details.",
-                "delete": "Remove a property from the catalogue."
-              },
-              "idealista": {
-                "publish": "Push a property listing to Idealista."
               }
             }
           }
@@ -992,86 +977,6 @@
           "inviteColumnExpires": "Expires"
         }
       }
-    }
-  },
-  "Imopush": {
-    "PropertyList": {
-      "title": "Properties",
-      "newProperty": "New property",
-      "emptyLabel": "No properties",
-      "emptyHint": "Add your first property above."
-    },
-    "Property": {
-      "location": "Location",
-      "data": "Details",
-      "features": "Features",
-      "description": "Description",
-      "platforms": "Platforms",
-      "statusDraft": "Draft",
-      "statusPublished": "Published",
-      "statusPublishing": "Publishing…",
-      "statusFailed": "Failed",
-      "energyCertificate": "Energy certificate",
-      "heating": "Heating",
-      "heatingIndividual": "Individual",
-      "heatingCentral": "Central",
-      "heatingNone": "No heating",
-      "yearBuilt": "Year built",
-      "delete": "Delete",
-      "deleteTitle": "Delete property",
-      "deleteDescription": "This will remove the property from every platform it was published on.",
-      "viewListing": "View listing",
-      "rooms": "{count} rooms",
-      "bathrooms": "{count} bathrooms",
-      "rooms_label": "Rooms",
-      "bathrooms_label": "Bathrooms",
-      "areaLabel": "Area",
-      "usableArea": "Usable area",
-      "lotSize": "Lot size",
-      "floors": "Floors",
-      "feature": {
-        "pool": "Pool",
-        "garden": "Garden",
-        "terrace": "Terrace",
-        "balcony": "Balcony",
-        "parking": "Parking",
-        "storage": "Storage",
-        "wardrobe": "Wardrobes",
-        "airConditioning": "Air conditioning",
-        "fireplace": "Fireplace",
-        "lift": "Lift"
-      }
-    },
-    "PropertyPhotos": {
-      "noPhoto": "No photo",
-      "expandPhoto": "Expand photo",
-      "previousPhoto": "Previous photo",
-      "nextPhoto": "Next photo",
-      "closeLightbox": "Close"
-    },
-    "IdealistaPublish": {
-      "publish": "Publish on Idealista",
-      "publishing": "Publishing…",
-      "retry": "Retry"
-    },
-    "IdealistaIntegrator": {
-      "title": "Idealista",
-      "description": "Publish and manage Idealista.pt listings using the agency account.",
-      "accountLabel": "Configured account",
-      "stateLabel": "State",
-      "stateActive": "Active",
-      "note": "Publishing is driven by Chrome automation over CDP — no API key needed."
-    },
-    "Nav": {
-      "ariaLabel": "Primary navigation",
-      "properties": "Properties",
-      "integrators": "Integrators",
-      "idealista": "Idealista"
-    },
-    "Common": {
-      "edit": "Edit",
-      "delete": "Delete",
-      "cancel": "Cancel"
     }
   }
 }

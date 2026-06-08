@@ -27,7 +27,7 @@ import postgres from 'postgres'
  *
  * No-op (não erro) quando o workspace ainda não tem migrations geradas
  * — i.e. `meta/_journal.json` em falta. Permite que produtos scaffold
- * (ex: imopush no estado actual) participem do pipeline sem partir.
+ * (ex: produtos novos) participem do pipeline sem partir.
  *
  * @param {object}  opts
  * @param {string}  opts.url    Postgres connection string. Vazio → exit 1.

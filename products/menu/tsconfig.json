@@ -11,7 +11,6 @@
     //
     // Source uses RELATIVE imports between slices — no internal `@/`
     // path mapping. Same convention as packages/business/auth, packages/platform/db,
-    // products/imopush, etc.
     "composite": true,
     "declaration": true,
     "declarationMap": true,

@@ -24,7 +24,6 @@ import {
 const ENV_KEYS = {
   menu: 'NEXT_PUBLIC_MENU_URL',
   core: 'NEXT_PUBLIC_CORE_URL',
-  imopush: 'NEXT_PUBLIC_IMOPUSH_URL',
 } as const satisfies Record<ProductId, string>
 
 afterEach(() => {
@@ -44,7 +43,7 @@ describe('PRODUCTS registry', () => {
     // The type is structural, but the runtime keys should match the
     // declared ProductId members. Touch each id so a future addition
     // requires updating this list.
-    const ids: ProductId[] = ['menu', 'core', 'imopush']
+    const ids: ProductId[] = ['menu', 'core']
     expect(new Set(ids)).toEqual(new Set(Object.values(PRODUCTS)))
   })
 })
@@ -53,21 +52,14 @@ describe('productUrl()', () => {
   it('falls back to https://<id>.iedora.com when env is unset', () => {
     expect(productUrl(PRODUCTS.menu)).toBe(`https://menu.${BRAND_DOMAIN}`)
     expect(productUrl(PRODUCTS.core)).toBe(`https://core.${BRAND_DOMAIN}`)
-    expect(productUrl(PRODUCTS.imopush)).toBe(
-      `https://imopush.${BRAND_DOMAIN}`,
-    )
   })
 
   it('returns the env var when set', () => {
     process.env.NEXT_PUBLIC_MENU_URL = 'http://localhost:3000/menu'
     process.env.NEXT_PUBLIC_CORE_URL = 'http://localhost:3000/core'
-    process.env.NEXT_PUBLIC_IMOPUSH_URL = 'http://localhost:3000/imopush'
 
     expect(productUrl(PRODUCTS.menu)).toBe('http://localhost:3000/menu')
     expect(productUrl(PRODUCTS.core)).toBe('http://localhost:3000/core')
-    expect(productUrl(PRODUCTS.imopush)).toBe(
-      'http://localhost:3000/imopush',
-    )
   })
 
   it('every PRODUCTS entry resolves through productUrl', () => {
@@ -84,11 +76,8 @@ describe('productUrl()', () => {
 
   it('env var override does not leak across ids', () => {
     process.env.NEXT_PUBLIC_MENU_URL = 'http://menu-override'
-    // core/imopush still hit the default
+    // core still hits the default
     expect(productUrl(PRODUCTS.menu)).toBe('http://menu-override')
     expect(productUrl(PRODUCTS.core)).toBe(`https://core.${BRAND_DOMAIN}`)
-    expect(productUrl(PRODUCTS.imopush)).toBe(
-      `https://imopush.${BRAND_DOMAIN}`,
-    )
   })
 })

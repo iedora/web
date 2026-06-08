@@ -12,7 +12,7 @@ import {
 
 /**
  * Subscription primitives. Cross-product helpers — every product
- * (menu, imopush, …) talks to this module instead of querying the
+ * (menu, …) talks to this module instead of querying the
  * `core` schema directly. When core eventually splits into its own
  * service, the implementation here flips to an RPC client; the
  * exported signatures stay stable.

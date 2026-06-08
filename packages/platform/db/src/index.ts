@@ -4,7 +4,7 @@
  * with their URL + schema and get back a typed drizzle client plus
  * ping/close helpers with consistent semantics across products.
  *
- * Why this exists: every product (menu, imopush, …) needs the same
+ * Why this exists: every product (menu, …) needs the same
  * wiring — postgres-js pool with HMR-safe globalThis caching,
  * drizzle wrapper with `casing: 'snake_case'`, ping for health
  * routes, graceful drain on SIGTERM. Copy-paste between products was
