@@ -17,7 +17,7 @@
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^2.0.47",
-    "ai": "^6.0.190"
+    "ai": "^6.0.198"
   },
   "devDependencies": {
     "@iedora/eslint-config": "workspace:*",

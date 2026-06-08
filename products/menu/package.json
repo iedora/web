@@ -82,7 +82,7 @@
     "@iedora/product-core": "workspace:*",
     "@iedora/tenancy": "workspace:*",
     "@toon-format/toon": "^2.3.0",
-    "ai": "^6.0.190",
+    "ai": "^6.0.198",
     "clsx": "^2.1.1",
     "drizzle-orm": "catalog:",
     "pino": "^10.3.1",
