@@ -13,8 +13,8 @@ Single-node homelab. Deploy é **`git push origin main`** → Coolify webhook
 - **DB**: Postgres 18 como **Coolify Resource** (1 container; as DBs `core`
   e `menu` são criadas automaticamente pelo migrator no pre-deploy).
 - **Object storage**: R2 bucket `iedora-assets` + token bucket-scoped,
-  geridos por [`infra/tofu/r2/`](../infra/tofu/r2/). Outputs vão para
-  `apps/web/.env.prod` (sops) → Coolify UI.
+  geridos no repo de infra `iedora/infra` (`tofu/r2.tf`). Os outputs
+  sincronizam para `iedora-infra/stacks/web/secrets.env` via `sync-secrets.sh`.
 - **Registry**: nenhum — Coolify builda no runner a partir do GitHub clone,
   imagem fica no Docker local do runner.
 
@@ -78,7 +78,7 @@ bun prod:env:updatekeys    # re-wrap DEK after editing .sops.yaml recipients
 
 This file holds: `S3_ENDPOINT`, `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY`,
 `S3_SECRET_KEY`, `CORE_SECRET`, `DEEPSEEK_API_KEY`, `MOONSHOT_API_KEY`.
-When rodas o tofu de R2 ([`infra/tofu/r2/`](../infra/tofu/r2/)) para
+When rodas o tofu de R2 (no repo `iedora/infra`, `tofu/r2.tf`) para
 criar/rotar o token, copia os 5 outputs para `.env.prod` e re-cola em
 Coolify. Marca cada key de `.env.prod` como "Is Secret" ✓ na Coolify UI.
 
