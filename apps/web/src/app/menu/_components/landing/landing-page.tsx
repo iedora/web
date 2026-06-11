@@ -10,9 +10,10 @@ import "./landing.css";
 /**
  * Sign-in / sign-up navigate to the menu surface's auth pages
  * (`https://menu.iedora.com/sign-in` in prod, `http://localhost:3000/menu/
- * sign-in` in dev). The pages call better-auth via `authClient.signIn.email`
- * / `signUp.email` and set the cookie on the parent `.iedora.com` domain
- * so SSO across iedora products works transparently.
+ * sign-in` in dev). The pages call the Go auth service via server
+ * actions (`signInAction`/`signUpAction`) which set the cookie on the
+ * parent `.iedora.com` domain so SSO across iedora products works
+ * transparently.
  */
 const SIGN_IN_HREF = signInUrl();
 const SIGN_UP_HREF = signUpUrl();

@@ -18,9 +18,9 @@ import { isValidSlugShape } from '../restaurant-slug'
  * friendly message instead of a generic 400.
  *
  * Every mutation that affects the public menu calls
- * `revalidateRestaurant` (AGENTS.md hard rule #12); the dashboard path
- * revalidation is kept on purpose — tag-only invalidation is a later
- * step in the migration.
+ * `revalidateRestaurant` (AGENTS.md hard rule #12); path-based
+ * revalidation on the dashboard side is kept as a belt-and-suspenders
+ * guard until tag-only invalidation is fully rolled out.
  */
 
 type ActionResult = { ok: true } | { ok: false; error: string }

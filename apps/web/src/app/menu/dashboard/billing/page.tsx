@@ -11,7 +11,7 @@ import { Badge } from '@iedora/design-system'
  * assignment; there is no tenant-facing endpoint), so the cards are
  * informational: the active plan is marked, the recommended plan is
  * badged, and the feature lists explain what an upgrade buys. Invoices
- * moved out of the product entirely with the Go backend migration.
+ * are processed by the admin BFF.
  *
  * The plan cards lead with a 22px restaurant-style title, a one-line
  * tagline, then a clean feature list. The current plan carries a

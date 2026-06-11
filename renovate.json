@@ -34,7 +34,7 @@
       "groupName": "tofu-providers"
     },
     {
-      "matchPackageNames": ["next", "react", "react-dom", "better-auth"],
+      "matchPackageNames": ["next", "react", "react-dom"],
       "matchUpdateTypes": ["major"],
       "dependencyDashboardApproval": true,
       "automerge": false,
