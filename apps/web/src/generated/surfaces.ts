@@ -7,7 +7,7 @@ import { BRAND_DOMAIN, PRODUCTS } from '@iedora/brand'
 export type Surface = {
   readonly name: string
   readonly hosts: ReadonlyArray<string>
-  // URL prefix proxy.ts rewrites traffic under (e.g. "/core").
+  // URL prefix proxy.ts rewrites traffic under (e.g. "/menu").
   // Empty string means this surface owns the URL root (no rewrite).
   readonly rewritePath: string
   /**
@@ -34,12 +34,16 @@ export const surfaces: ReadonlyArray<Surface> = [
     name: PRODUCTS.menu,
     hosts: [`menu.${BRAND_DOMAIN}`, "menu.localhost"],
     rewritePath: "/menu",
-    aliasPaths: ["/dashboard", "/onboarding", "/r", "/q", "/showcase"],
-  },
-  {
-    name: PRODUCTS.core,
-    hosts: [`core.${BRAND_DOMAIN}`, "core.localhost"],
-    rewritePath: "/core",
+    aliasPaths: [
+      "/dashboard",
+      "/onboarding",
+      "/r",
+      "/q",
+      "/showcase",
+      "/sign-in",
+      "/sign-up",
+      "/sign-out",
+    ],
   },
 ]
 

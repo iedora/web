@@ -1,50 +1,19 @@
 import Link from 'next/link'
-import dynamic from 'next/dynamic'
 import { getLocale, getTranslations } from 'next-intl/server'
-import { hasScope } from '@iedora/auth/server'
-import { SCOPES } from '@iedora/auth/scopes'
 import { requireRestaurantBySlug } from '@iedora/product-menu/features/auth'
-import { loadRestaurantAdminMenus } from '@iedora/product-menu/features/menu-publishing'
 import { DashboardPage } from '@iedora/product-menu/shared/ui/dashboard-page'
 import { formatEditedAt } from '@iedora/product-menu/shared/ui/editorial-list'
 import { CreateMenuDialog } from '@iedora/product-menu/features/menu-builder/ui/create-menu-dialog'
 import { SeedSampleButton } from '@iedora/product-menu/features/menu-builder/ui/seed-sample-button'
-import { ImportMenuDialog } from '@iedora/product-menu/features/menu-import/ui/import-menu-dialog'
-import type { PatchCurrentMenu } from '@iedora/product-menu/features/menu-import/ports'
-import { loadMenuTree } from '@iedora/product-menu/features/menu-publishing/use-cases/load-tree'
-import { AiTranslationDialog } from '@iedora/product-menu/features/menu-translation/ui/ai-translation-dialog'
-import { getLanguageConfig } from '@iedora/product-menu/features/restaurant-identity'
-
-// UpdateMenuDialog wraps the 800+ LOC MenuImportWizard (AI image parsing,
-// preview tree, patch editor). Most operators land on the restaurant
-// page and never open this dialog — pull it out of the initial chunk.
-const UpdateMenuDialog = dynamic(
-  () =>
-    import(
-      '@iedora/product-menu/features/menu-import/ui/update-menu-dialog'
-    ).then((m) => m.UpdateMenuDialog),
-)
 
 /**
  * Restaurant home — single column, mobile-canonical.
  *
- * The previous layout left actions scattered: one bold black button
- * (Update from photo) shouting over a row of tiny mono links (Translate
- * / Settings / QR) and a lonely link below (View public menu). Each
- * action had a different visual weight; nothing told the operator how
- * the actions related.
- *
- * The new layout treats each action as its own *section card*: serif
- * title, short editorial lede, then the affordance — a dialog trigger
- * for the AI flows, a chevron for the navigation ones. Every action
- * has equal weight, the same tap target size, and the same rhythm.
- *
- *   1. Menu hero (unchanged) — the menu itself is the hero. Tap → editor.
- *   2. Action sections — Update from photo · Translate · QR · Settings
- *      · View public menu. Each a labeled card; each one a single
- *      obvious tap target on a phone.
- *
- * Mobile is the canonical layout; desktop just widens the gutters.
+ * Layout: menu hero (the menu itself is the page's primary content;
+ * tap → editor), then one labeled *section card* per action — QR ·
+ * Settings · View public menu. Every action has equal weight, the
+ * same tap target size, and the same rhythm. Mobile is the canonical
+ * layout; desktop just widens the gutters.
  */
 export default async function RestaurantPage({
   params,
@@ -52,75 +21,20 @@ export default async function RestaurantPage({
   params: Promise<{ slug: string }>
 }) {
   const { slug } = await params
-  // i18n + scope check are independent of the restaurant lookup — kick
-  // them off concurrently with the auth round-trip.
-  const canTransferPromise = hasScope(SCOPES.menu.staff.restaurants.transfer)
+  // i18n is independent of the restaurant lookup — kick it off
+  // concurrently with the auth round-trip. The guard's single Go call
+  // already returns the menu summaries alongside the restaurant.
   const tPromise = getTranslations('Restaurant')
   const tDashPromise = getTranslations('Dashboard')
   const localePromise = getLocale()
-  // Snapshot load is keyed by slug, not by r.id — also independent of
-  // the auth round-trip. The auth guard runs in parallel; we still
-  // await it before touching r.id (cached snapshot trusts that this
-  // ran first).
-  const snapPromise = loadRestaurantAdminMenus(slug)
-  const { restaurant: r } = await requireRestaurantBySlug(slug)
-
-  // Now that r.id is known, fan out the per-restaurant fetches alongside
-  // the still-pending top-level promises. `loadMenuTree` is speculative
-  // (only needed if `primaryMenu` exists, which is the common case) —
-  // the wasted call on empty restaurants is acceptable.
-  const [canTransfer, t, tDash, locale, snap, langConfig, trees] =
-    await Promise.all([
-      canTransferPromise,
-      tPromise,
-      tDashPromise,
-      localePromise,
-      snapPromise,
-      getLanguageConfig(r.id),
-      loadMenuTree({ restaurantId: r.id }),
-    ])
-  const menus = snap?.menus ?? []
+  const { restaurant: r, menus } = await requireRestaurantBySlug(slug)
   const primaryMenu = menus[0] ?? null
 
-  const { defaultLanguage, supportedLanguages } = langConfig
-  const canTranslate = supportedLanguages.length > 1
-
-  // Compact menu snapshot for the PATCH-update wizard — only id + name
-  // + priceCents per item so the client payload stays small.
-  let patchCurrent: PatchCurrentMenu | null = null
-  if (primaryMenu) {
-    const tree = trees.find((m) => m.id === primaryMenu.id)
-    if (tree) {
-      const firstItem = tree.categories
-        .flatMap((c) => c.items)
-        .find((it) => it.currency)
-      patchCurrent = {
-        language: defaultLanguage,
-        currency: firstItem?.currency ?? 'EUR',
-        categories: tree.categories.map((c) => ({
-          id: c.id,
-          name: c.name,
-          items: c.items.map((it) => ({
-            id: it.id,
-            name: it.name,
-            priceCents: it.priceCents,
-            // Carry variants (dose / meia-dose, sizes, etc.) so the AI
-            // can match the full variant set against the photo and
-            // emit accurate diff ops instead of treating a half-dose
-            // change as a new dish.
-            ...(it.variants && it.variants.length > 0
-              ? {
-                  variants: it.variants.map((v) => ({
-                    label: v.label,
-                    priceCents: v.priceCents,
-                  })),
-                }
-              : {}),
-          })),
-        })),
-      }
-    }
-  }
+  const [t, tDash, locale] = await Promise.all([
+    tPromise,
+    tDashPromise,
+    localePromise,
+  ])
 
   return (
     // chrome="none" — on mobile the title block ate ~120px of vertical
@@ -152,7 +66,7 @@ export default async function RestaurantPage({
                   {t('dishCount', { count: primaryMenu.dishCount })}
                   <span aria-hidden="true"> · </span>
                   {tDash('editedAt', {
-                    when: formatEditedAt(primaryMenu.updatedAt, locale),
+                    when: formatEditedAt(new Date(primaryMenu.updatedAt), locale),
                   })}
                 </p>
               </div>
@@ -194,55 +108,6 @@ export default async function RestaurantPage({
             className="restaurant-actions"
             data-test-id="restaurant-actions"
           >
-            {patchCurrent && (
-              <section
-                className="restaurant-action-card"
-                data-test-id="restaurant-action-update"
-              >
-                <div className="restaurant-action-card__head">
-                  <h3 className="restaurant-action-card__title">
-                    {t('updateFromPhotoTitle')}
-                  </h3>
-                  <p className="restaurant-action-card__lede">
-                    {t('updateFromPhotoLede')}
-                  </p>
-                </div>
-                <div className="restaurant-action-card__cta">
-                  <UpdateMenuDialog
-                    slug={slug}
-                    restaurantId={r.id}
-                    menuId={primaryMenu.id}
-                    current={patchCurrent}
-                  />
-                </div>
-              </section>
-            )}
-
-            {canTranslate && (
-              <section
-                className="restaurant-action-card"
-                data-test-id="restaurant-action-translate"
-              >
-                <div className="restaurant-action-card__head">
-                  <h3 className="restaurant-action-card__title">
-                    {t('translateTitle')}
-                  </h3>
-                  <p className="restaurant-action-card__lede">
-                    {t('translateLede', {
-                      count: supportedLanguages.length - 1,
-                    })}
-                  </p>
-                </div>
-                <div className="restaurant-action-card__cta">
-                  <AiTranslationDialog
-                    slug={slug}
-                    defaultLanguage={defaultLanguage}
-                    supportedLanguages={supportedLanguages}
-                  />
-                </div>
-              </section>
-            )}
-
             <Link
               href={`/dashboard/r/${slug}/qr`}
               className="restaurant-action-card restaurant-action-card--link"
@@ -285,29 +150,6 @@ export default async function RestaurantPage({
               </span>
             </Link>
 
-            {canTransfer && (
-              <Link
-                href={`/menu/dashboard/r/${slug}/transfer`}
-                className="restaurant-action-card restaurant-action-card--link"
-                data-test-id="restaurant-action-transfer"
-              >
-                <div className="restaurant-action-card__head">
-                  <h3 className="restaurant-action-card__title">
-                    {t('transferTitle')}
-                  </h3>
-                  <p className="restaurant-action-card__lede">
-                    {t('transferLede')}
-                  </p>
-                </div>
-                <span
-                  className="restaurant-action-card__chevron"
-                  aria-hidden="true"
-                >
-                  ›
-                </span>
-              </Link>
-            )}
-
             <Link
               href={`/r/${r.slug}`}
               target="_blank"
@@ -334,9 +176,9 @@ export default async function RestaurantPage({
         </>
       ) : (
         // ── Empty state ────────────────────────────────────────────
-        // Hero with the two AI flows. Primary: photo. Secondary: sample.
-        // We deliberately demote "blank menu from scratch" — the
-        // operator rarely starts from nothing.
+        // Primary: seed a sample menu. Secondary: blank menu from
+        // scratch. (The AI photo-import flow is gone until the Go
+        // backend grows an import endpoint.)
         <section
           className="restaurant-empty"
           data-test-id="restaurant-empty"
@@ -344,7 +186,6 @@ export default async function RestaurantPage({
           <h2 className="restaurant-empty__title">{t('emptyTitle')}</h2>
           <p className="restaurant-empty__lede">{t('emptyLede')}</p>
           <div className="restaurant-empty__actions">
-            <ImportMenuDialog slug={slug} restaurantId={r.id} />
             <SeedSampleButton slug={slug} />
           </div>
           <div className="restaurant-empty__or">

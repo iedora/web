@@ -1,34 +1,47 @@
 'use server'
 
+import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
-import { revalidatePath } from 'next/cache'
+import { getLocale } from 'next-intl/server'
 import { z } from 'zod'
-import { getEffectiveOrganizationId, getSession } from '@iedora/product-menu/features/auth'
 import {
+  ACCESS_COOKIE,
+  ApiError,
+  REFRESH_COOKIE,
+  authCookies,
   createTenant,
-  setActiveTenant,
-  TENANT_ROLE_PRESETS,
-} from '@iedora/auth'
-import { createSubscription } from '@iedora/billing'
+  refreshTokens,
+} from '@iedora/api-client'
+import { getSession } from '@iedora/product-menu/features/auth'
 import {
-  PRODUCTS,
-  PRODUCT_ONBOARDING_STATUSES,
-  PRODUCT_ONBOARDING_STEPS,
-} from '@iedora/brand'
-import { projectProductState } from '@iedora/tenancy'
-import { nextAvailableSlug, slugify } from '@iedora/product-menu/features/restaurant-slug'
-import { signInUrl } from '@iedora/product-core/url'
+  ONBOARDING_STEPS,
+  createOnboardingRestaurant,
+} from '@iedora/product-menu/features/menu-onboarding'
+import { signInUrl } from '@iedora/product-menu/shared/auth-urls'
 import { publicUrl } from '@iedora/product-menu/shared/url'
-import { db } from '@iedora/product-menu/shared/db/client'
-import { menu, restaurant } from '@iedora/product-menu/shared/db/schema'
-import { canAddRestaurant, DEFAULT_PLAN } from '@iedora/product-menu/features/plans'
-import { enforceRateLimit } from '@iedora/product-menu/features/rate-limit'
-import { ONBOARDING_STEPS } from '@iedora/product-menu/features/menu-onboarding'
+
+/**
+ * Step-1 server action against the Go services:
+ *
+ *   1. No tenant on the session yet (first sign-in)? Provision one via
+ *      the auth service (`POST /auth/tenants`) with the access token
+ *      from the cookie jar.
+ *   2. Refresh the token pair so the new access token carries the
+ *      tenant id, and persist BOTH cookies (legal here — server
+ *      action). `serverFetch` reads `cookies()` per call, so the
+ *      restaurant call below already sees the refreshed token.
+ *   3. Create the restaurant via the Go menu service — it owns slug
+ *      derivation and the plan gate (422 over-limit → `{ error }`).
+ *   4. Redirect into step 2 of the wizard with the slug Go returned.
+ *
+ * Users who already have a tenant (e.g. "add another restaurant")
+ * skip 1–2 and go straight to the plan-gated create.
+ */
 
 const onboardingSchema = z.object({
   restaurantName: z.string().trim().min(2).max(80),
-  // Optional address-or-tagline. Persists into `restaurant.description`
-  // — the small italic line printed under the name on the public menu.
+  // Optional address-or-tagline. Persists into the restaurant's public
+  // description — the small italic line printed under the name.
   tagline: z
     .string()
     .trim()
@@ -40,33 +53,6 @@ const onboardingSchema = z.object({
 export type OnboardingFormState =
   | { error?: string; fieldErrors?: Partial<Record<keyof z.infer<typeof onboardingSchema>, string>> }
   | undefined
-
-type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
-
-async function insertRestaurantWithDefaultMenu(
-  tx: Tx,
-  tenantId: string,
-  restaurantName: string,
-  slug: string,
-  tagline: string | undefined,
-): Promise<void> {
-  const [created] = await tx
-    .insert(restaurant)
-    .values({
-      tenantId,
-      name: restaurantName,
-      slug,
-      description: tagline ?? null,
-    })
-    .returning({ id: restaurant.id })
-  if (!created) throw new Error('onboarding: restaurant insert returned no rows')
-
-  await tx.insert(menu).values({
-    restaurantId: created.id,
-    name: 'Main menu',
-    position: 0,
-  })
-}
 
 export async function completeOnboarding(
   _prev: OnboardingFormState,
@@ -87,160 +73,53 @@ export async function completeOnboarding(
   }
 
   const { restaurantName, tagline } = parsed.data
+  const signInTarget = signInUrl(
+    publicUrl(ONBOARDING_STEPS.name.path).toString(),
+  )
 
   const session = await getSession()
-  if (!session?.user) redirect(signInUrl(publicUrl(ONBOARDING_STEPS.name.path).toString()))
+  if (!session) redirect(signInTarget)
 
-  const decision = await enforceRateLimit('onboarding', `user:${session.user.id}`)
-  if (!decision.ok) {
-    return { error: `Too many attempts. Try again in ${decision.retryAfterSec}s.` }
-  }
+  if (!session.tenantId) {
+    const store = await cookies()
 
-  // Allocate the public slug HERE so the same value is consistent across
-  // the menu DB insert AND the better-auth org create call below.
-  const slug = await nextAvailableSlug(slugify(restaurantName))
-
-  // Existing org on session? Add restaurant under it (gated by plan).
-  // First-time user? Create org via better-auth + first restaurant.
-  const existingOrgId = await getEffectiveOrganizationId()
-
-  if (existingOrgId) {
-    const gate = await canAddRestaurant(existingOrgId)
-    if (!gate.ok) {
-      return {
-        error: `Your plan allows ${gate.limit} restaurant${gate.limit === 1 ? '' : 's'}. Upgrade to Casa to add more.`,
-      }
+    // 1. Provision the tenant, named after the first restaurant.
+    const accessToken = store.get(ACCESS_COOKIE)?.value
+    if (!accessToken) redirect(signInTarget)
+    try {
+      await createTenant(accessToken, restaurantName)
+    } catch (err) {
+      console.error('[onboarding] tenant creation failed', err)
+      return { error: 'Could not create tenant. Please try again.' }
     }
-    return addRestaurantToOrg(existingOrgId, restaurantName, slug, tagline)
+
+    // 2. Rotate the token pair so the access token picks up the new
+    //    tenant id, then persist both cookies. Subsequent `cookies()`
+    //    reads in this same action observe the new values.
+    const refreshToken = store.get(REFRESH_COOKIE)?.value
+    const refreshed = refreshToken ? await refreshTokens(refreshToken) : null
+    if (!refreshed) redirect(signInTarget)
+    for (const c of authCookies(refreshed.tokens, refreshed.setCookies)) {
+      store.set(c.name, c.value, c.options)
+    }
   }
 
-  return createOrgAndFirstRestaurant(restaurantName, slug, tagline)
-}
-
-async function addRestaurantToOrg(
-  tenantId: string,
-  restaurantName: string,
-  slug: string,
-  tagline: string | undefined,
-): Promise<OnboardingFormState> {
-  const session = await getSession()
-  if (!session?.user) redirect(signInUrl(publicUrl(ONBOARDING_STEPS.name.path).toString()))
+  // 3. Create the restaurant (+ optional tagline). Go owns the slug
+  //    and the plan gate — a 422 over-limit surfaces as the form error.
+  let slug: string
   try {
-    await db.transaction((tx) =>
-      insertRestaurantWithDefaultMenu(tx, tenantId, restaurantName, slug, tagline),
-    )
-  } catch (err) {
-    console.error('[onboarding] restaurant creation under existing org failed', err)
-    return { error: 'Could not create restaurant. Please try again.' }
-  }
-
-  // Cross-product projection: this tenant has a wizard in progress
-  // again (new restaurant pending step 2). Best-effort — failure
-  // doesn't block the redirect; the user can still complete the
-  // wizard, and the projection is rewritten on success.
-  await projectProductState({
-    tenantId,
-    product: PRODUCTS.menu,
-    status: PRODUCT_ONBOARDING_STATUSES.inProgress,
-    currentStep: PRODUCT_ONBOARDING_STEPS[PRODUCTS.menu].menu,
-    payload: { restaurantSlug: slug },
-    actor: { userId: session.user.id, email: session.user.email, role: null },
-  }).catch((err) => {
-    console.error('[onboarding] projectProductState (add-another) failed', err)
-  })
-
-  revalidatePath('/menu/dashboard')
-  redirect(ONBOARDING_STEPS.menu.buildPath({ slug }))
-}
-
-async function createOrgAndFirstRestaurant(
-  restaurantName: string,
-  slug: string,
-  tagline: string | undefined,
-): Promise<OnboardingFormState> {
-  const session = await getSession()
-  if (!session?.user) redirect(signInUrl(publicUrl(ONBOARDING_STEPS.name.path).toString()))
-
-  let tenantId: string
-  try {
-    // Create the tenant + add the founder as owner (all tenant scopes).
-    // Single transaction inside `createTenant`.
-    const tenant = await createTenant({
+    const restaurant = await createOnboardingRestaurant({
       name: restaurantName,
-      founder: {
-        userId: session.user.id,
-        scopes: TENANT_ROLE_PRESETS.owner,
-      },
-      actor: {
-        userId: session.user.id,
-        email: session.user.email,
-        role: null,
-      },
+      defaultLanguage: await getLocale(),
+      tagline,
     })
-    tenantId = tenant.id
+    slug = restaurant.slug
   } catch (err) {
-    console.error('[onboarding] tenant creation failed', err)
-    return { error: 'Could not create tenant. Please try again.' }
-  }
-
-  // Enrol the tenant in the menu product on the free plan. This is the
-  // cross-product signal "this tenant uses menu" — the menu landing
-  // picker + dashboard layout read from `tenant_subscription` to know.
-  try {
-    await createSubscription({
-      tenantId,
-      product: PRODUCTS.menu,
-      plan: DEFAULT_PLAN.code,
-      status: 'active',
-      actor: { userId: session.user.id, email: session.user.email },
-    })
-  } catch (err) {
-    console.error('[onboarding] subscription creation failed', err)
-    // Non-fatal — the tenant exists, plan lookups will fall back to
-    // 'free' via the registry's default. Surface as a soft warning.
-  }
-
-  // Pin the session to the new tenant so subsequent page loads find
-  // the right tenant context. `setActiveTenant` verifies membership
-  // (the founder we just added).
-  await setActiveTenant({
-    sessionId: session.session.id,
-    userId: session.user.id,
-    tenantId,
-    actor: {
-      userId: session.user.id,
-      email: session.user.email,
-      role: null,
-    },
-  }).catch((err) => {
-    console.error('[onboarding] setActiveTenant failed', err)
-  })
-
-  // Restaurant + default menu must commit together.
-  try {
-    await db.transaction((tx) =>
-      insertRestaurantWithDefaultMenu(tx, tenantId, restaurantName, slug, tagline),
-    )
-  } catch (err) {
+    if (err instanceof ApiError) return { error: err.message }
     console.error('[onboarding] restaurant creation failed', err)
     return { error: 'Could not create restaurant. Please try again.' }
   }
 
-  // Project the menu's onboarding state into core so the admin can see
-  // "this tenant is partway through menu's wizard". The product owns
-  // its real state (`restaurant.onboarding_completed_at`); this is the
-  // snapshot core reads.
-  await projectProductState({
-    tenantId,
-    product: PRODUCTS.menu,
-    status: PRODUCT_ONBOARDING_STATUSES.inProgress,
-    currentStep: PRODUCT_ONBOARDING_STEPS[PRODUCTS.menu].menu,
-    payload: { restaurantSlug: slug },
-    actor: { userId: session.user.id, email: session.user.email, role: null },
-  }).catch((err) => {
-    console.error('[onboarding] projectProductState (first) failed', err)
-  })
-
-  revalidatePath('/menu/dashboard')
+  // 4. Into step 2 of the wizard.
   redirect(ONBOARDING_STEPS.menu.buildPath({ slug }))
 }

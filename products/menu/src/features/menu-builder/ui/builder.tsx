@@ -50,14 +50,12 @@ import type { BuilderCategory } from './types'
 export function MenuBuilder({
   slug,
   menuId,
-  restaurantId,
   defaultLanguage,
   supportedLanguages,
   initialCategories,
 }: {
   slug: string
   menuId: string
-  restaurantId: string
   defaultLanguage: LanguageCode
   supportedLanguages: LanguageCode[]
   initialCategories: BuilderCategory[]
@@ -146,7 +144,6 @@ export function MenuBuilder({
                 <SortableCategory
                   key={c.id}
                   slug={slug}
-                  restaurantId={restaurantId}
                   defaultLanguage={defaultLanguage}
                   supportedLanguages={supportedLanguages}
                   category={c}

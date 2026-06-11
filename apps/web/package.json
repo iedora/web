@@ -11,15 +11,11 @@
     "test": "echo 'unit + integration tests live in products/ and packages/'"
   },
   "dependencies": {
-    "@iedora/auth": "workspace:*",
-    "@iedora/billing": "workspace:*",
+    "@iedora/api-client": "workspace:*",
     "@iedora/brand": "workspace:*",
     "@iedora/design-system": "workspace:*",
     "@iedora/observability": "workspace:*",
-    "@iedora/product-core": "workspace:*",
     "@iedora/product-menu": "workspace:*",
-    "@iedora/tenancy": "workspace:*",
-    "@toon-format/toon": "^2.3.0",
     "lucide-react": "^1.16.0",
     "next": "catalog:",
     "next-intl": "catalog:",

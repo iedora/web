@@ -1,64 +1,41 @@
-import { requireScope } from '@iedora/product-menu/features/auth'
-import { SCOPES } from '@iedora/auth/scopes'
-import { getTenantsByIds } from '@iedora/auth'
+import { requireStaff } from '@iedora/product-menu/features/auth'
 import { DashboardPage } from '@iedora/product-menu/shared/ui/dashboard-page'
-import { listRestaurantsAdmin } from '@iedora/product-menu/features/restaurant-identity'
-import Link from 'next/link'
-import { CreateRestaurantForm } from './create-restaurant-form'
+import { listRestaurantsDirectory } from '@iedora/product-menu/features/restaurant-identity'
 import { RestaurantsTable, type AdminRestaurantRow } from './restaurants-table'
 
 /**
- * Cross-tenant restaurants admin. Lists every restaurant with its
- * tenant + a transfer link, and lets admin spin up a fresh tenant +
- * restaurant from a single form. Filter / sort happen client-side
- * over the loaded set (capped at 200 rows by `listRestaurantsAdmin`).
+ * Cross-tenant restaurants directory (staff only). Lists every
+ * restaurant on the platform with usage counters from the Go menu
+ * service's staff directory. Filter / sort happen client-side over the
+ * loaded set.
  *
- * Gated on `staff:menu:restaurants:transfer` — the same scope that
- * marks "admin manages restaurants cross-tenant" (auto-included in
- * the iedora-admin preset via the staff:* wildcard).
+ * Restaurant creation always lands in the CALLER'S tenant on the Go
+ * side, so the old "create with a fresh tenant + transfer to the
+ * client" admin flow is gone — provisioning for a client now happens
+ * through the client's own onboarding.
  */
 export default async function AdminRestaurantsPage() {
-  await requireScope(SCOPES.menu.staff.restaurants.transfer)
+  await requireStaff()
 
-  const raw = await listRestaurantsAdmin()
-
-  // Hydrate tenant names in a single cross-DB round-trip (was N round-trips
-  // via getTenantById in a Promise.all). Table renders names, not raw ids.
-  const tenantIds = Array.from(new Set(raw.map((r) => r.tenantId)))
-  const tenants = await getTenantsByIds(tenantIds)
+  const raw = await listRestaurantsDirectory()
 
   const rows: AdminRestaurantRow[] = raw.map((r) => ({
     id: r.id,
     name: r.name,
     slug: r.slug,
     tenantId: r.tenantId,
-    tenantName: tenants.get(r.tenantId)?.name ?? r.tenantId,
-    createdAt:
-      r.createdAt instanceof Date
-        ? r.createdAt.toISOString()
-        : String(r.createdAt),
+    menuCount: r.menuCount,
+    dishCount: r.dishCount,
+    views30d: r.views30d,
+    updatedAt: r.updatedAt,
   }))
 
   return (
     <DashboardPage
       title="Restaurantes"
-      description="Cross-tenant. Cria um restaurante novo (com tenant próprio) ou abre/transfere os existentes."
+      description="Cross-tenant. Todos os restaurantes da plataforma, com utilização dos últimos 30 dias."
       data-test-id="admin-restaurants"
     >
-      <section
-        data-test-id="admin-restaurants-create"
-        className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start"
-      >
-        <CreateRestaurantForm />
-        <Link
-          href="/menu/dashboard/admin/restaurants/import"
-          className="w-full rounded border border-dashed border-[var(--ink-40)] px-4 py-4 text-center text-sm text-[var(--ink-55)] hover:border-[var(--ink)] hover:text-[var(--ink)] sm:w-auto"
-          data-test-id="admin-restaurants-import-link"
-        >
-          + Importar de JSON
-        </Link>
-      </section>
-
       <section
         className="space-y-3"
         aria-labelledby="admin-restaurants-list-heading"

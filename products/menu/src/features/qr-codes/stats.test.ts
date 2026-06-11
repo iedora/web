@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { computeQrStats } from './stats'
-import type { QrCodeListRow } from './ports'
+import { computeQrStats, type QrCodeListRow } from './stats'
 
 function row(overrides: Partial<QrCodeListRow> = {}): QrCodeListRow {
   const now = Date.now()
@@ -8,12 +7,14 @@ function row(overrides: Partial<QrCodeListRow> = {}): QrCodeListRow {
     code: 'aaa',
     restaurantId: null,
     label: null,
-    createdAt: new Date(now - 60_000),
+    createdAt: new Date(now - 60_000).toISOString(),
     boundAt: null,
     restaurant: null,
     ...overrides,
   }
 }
+
+const iso = (ms: number) => new Date(ms).toISOString()
 
 describe('computeQrStats', () => {
   const NOW = new Date('2026-05-21T15:00:00Z')
@@ -53,17 +54,17 @@ describe('computeQrStats', () => {
 
   it('marks codes created in the last 24h', () => {
     const rows = [
-      row({ createdAt: new Date(NOW.getTime() - 1_000) }),
-      row({ createdAt: new Date(NOW.getTime() - 23 * 3600_000) }),
-      row({ createdAt: new Date(NOW.getTime() - 25 * 3600_000) }),
+      row({ createdAt: iso(NOW.getTime() - 1_000) }),
+      row({ createdAt: iso(NOW.getTime() - 23 * 3600_000) }),
+      row({ createdAt: iso(NOW.getTime() - 25 * 3600_000) }),
     ]
     expect(computeQrStats(rows, NOW).created24h).toBe(2)
   })
 
   it('marks codes bound in the last 24h (boundAt within window)', () => {
     const rows = [
-      row({ boundAt: new Date(NOW.getTime() - 1_000) }),
-      row({ boundAt: new Date(NOW.getTime() - 25 * 3600_000) }),
+      row({ boundAt: iso(NOW.getTime() - 1_000) }),
+      row({ boundAt: iso(NOW.getTime() - 25 * 3600_000) }),
       row({ boundAt: null }),
     ]
     expect(computeQrStats(rows, NOW).boundLast24h).toBe(1)

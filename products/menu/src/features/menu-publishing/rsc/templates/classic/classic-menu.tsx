@@ -86,8 +86,7 @@ export function ClassicMenu({ restaurant: r, menus }: RenderProps) {
                               key={it.id}
                               className={
                                 'flex gap-4 py-3 ' +
-                                (hasPhoto ? 'items-start ' : 'items-baseline ') +
-                                (it.available ? '' : 'opacity-50')
+                                (hasPhoto ? 'items-start' : 'items-baseline')
                               }
                             >
                               {it.imageUrl && (
@@ -100,22 +99,7 @@ export function ClassicMenu({ restaurant: r, menus }: RenderProps) {
                               )}
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-2">
-                                  <span
-                                    className={
-                                      'font-medium ' +
-                                      (it.available ? '' : 'line-through')
-                                    }
-                                  >
-                                    {it.name}
-                                  </span>
-                                  {!it.available && (
-                                    <span
-                                      className="rounded bg-muted px-1.5 py-0.5 text-xs font-medium uppercase"
-                                      style={{ color: 'var(--menu-secondary)' }}
-                                    >
-                                      Sold out
-                                    </span>
-                                  )}
+                                  <span className="font-medium">{it.name}</span>
                                 </div>
                                 {it.description && (
                                   <p

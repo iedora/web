@@ -1,55 +1,11 @@
 import { getTranslations } from 'next-intl/server'
 import { requireRestaurantBySlug } from '@iedora/product-menu/features/auth'
 import { resolveTheme } from '@iedora/product-menu/features/menu-publishing/rsc/theme'
-import { loadMenuTree, localizeTree } from '@iedora/product-menu/features/menu-publishing'
-import type { PublicMenu, PublicMenuData } from '@iedora/product-menu/features/menu-publishing/rsc/types'
-import {
-  getThemeEditorData,
-  type ThemeEditorRestaurantRow,
-} from '@iedora/product-menu/features/restaurant-identity'
+import type { PublicRestaurant } from '@iedora/product-menu/features/menu-publishing/rsc/types'
+import { loadThemePreviewMenus } from '@iedora/product-menu/features/restaurant-identity'
 import { ThemeEditor } from '@iedora/product-menu/features/restaurant-identity/ui/theme-editor'
 import { DashboardPage } from '@iedora/product-menu/shared/ui/dashboard-page'
-import { notFound } from 'next/navigation'
-import type { RestaurantTheme } from '@iedora/product-menu/shared/db/schema'
 import type { LanguageCode, LocalizedText } from '@iedora/product-menu/features/i18n'
-
-type EditorData = PublicMenuData & {
-  rawTheme: RestaurantTheme | null
-  defaultLanguage: LanguageCode
-  supportedLanguages: LanguageCode[]
-  restaurantDescriptionI18n: LocalizedText
-}
-
-async function loadEditorData(restaurantId: string): Promise<EditorData> {
-  // Both calls keyed on the same restaurantId and independent — fan out
-  // instead of awaiting in series.
-  const [row, tree] = await Promise.all([
-    getThemeEditorData(restaurantId),
-    loadMenuTree({ restaurantId, activeOnly: true }),
-  ])
-  if (!row) notFound()
-
-  // Editor preview shows the default-language strings — the renderer doesn't
-  // know about i18n maps. Localize-to-default reuses the same helper as the
-  // public page so any future field change lives in one place.
-  const menus: PublicMenu[] = localizeTree(tree, row.defaultLanguage, row.defaultLanguage)
-
-  return {
-    restaurant: {
-      id: row.id,
-      name: row.name,
-      slug: row.slug,
-      description: row.description,
-      logoUrl: row.logoUrl,
-      bannerUrl: row.bannerUrl,
-    },
-    menus,
-    rawTheme: row.theme,
-    defaultLanguage: row.defaultLanguage,
-    supportedLanguages: row.supportedLanguages,
-    restaurantDescriptionI18n: row.descriptionI18n,
-  }
-}
 
 export default async function ThemePage({
   params,
@@ -57,11 +13,25 @@ export default async function ThemePage({
   params: Promise<{ slug: string }>
 }) {
   const { slug } = await params
-  // i18n kicks off while the auth round-trip runs.
+  // i18n kicks off while the auth round-trip runs. The guard's Go
+  // Restaurant DTO already carries everything the editor needs
+  // (identity, theme, languages); only the preview menus need a
+  // second call.
   const tPromise = getTranslations('Restaurant')
   const { restaurant: r } = await requireRestaurantBySlug(slug)
-  const [data, t] = await Promise.all([loadEditorData(r.id), tPromise])
-  const initialTheme = resolveTheme(data.rawTheme)
+  const [menus, t] = await Promise.all([loadThemePreviewMenus(slug), tPromise])
+
+  const restaurant: PublicRestaurant = {
+    name: r.name,
+    slug: r.slug,
+    description: r.description,
+    logoUrl: r.logoUrl,
+    bannerUrl: r.bannerUrl,
+  }
+
+  // The Go DTO's theme is an opaque JSON map; resolveTheme coerces
+  // partial / legacy shapes into a fully populated theme.
+  const initialTheme = resolveTheme(r.theme as Parameters<typeof resolveTheme>[0])
 
   return (
     <DashboardPage
@@ -73,13 +43,13 @@ export default async function ThemePage({
     >
       <ThemeEditor
         slug={slug}
-        restaurant={data.restaurant}
-        restaurantDescriptionI18n={data.restaurantDescriptionI18n}
-        menus={data.menus}
+        restaurant={restaurant}
+        restaurantDescriptionI18n={(r.descriptionI18n ?? {}) as LocalizedText}
+        menus={menus}
         initialTheme={initialTheme}
         initialLanguageSettings={{
-          defaultLanguage: data.defaultLanguage,
-          supportedLanguages: data.supportedLanguages,
+          defaultLanguage: r.defaultLanguage as LanguageCode,
+          supportedLanguages: r.supportedLanguages as LanguageCode[],
         }}
       />
     </DashboardPage>

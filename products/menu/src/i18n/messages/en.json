@@ -18,26 +18,37 @@
     "qrCodes": "QR Codes"
   },
   "Auth": {
-    "signupEyebrow": "at the table",
-    "signupTitle": "Create your Menu account",
-    "signupSubtitle": "Start building digital menus for your restaurant.",
-    "loginEyebrow": "welcome back",
-    "loginTitle": "Log in to Menu",
-    "loginSubtitle": "Welcome back.",
-    "name": "Name",
-    "namePlaceholder": "Ada Lovelace",
-    "email": "Email",
-    "emailPlaceholder": "you@example.com",
-    "password": "Password",
-    "passwordHint": "At least 8 characters.",
-    "signup": "Sign up",
-    "creatingAccount": "Creating account…",
-    "login": "Log in",
-    "loggingIn": "Logging in…",
-    "alreadyHaveAccount": "Already have an account?",
-    "noAccount": "Don't have an account?",
-    "couldNotCreate": "Could not create account",
-    "invalidCredentials": "Invalid email or password"
+    "signIn": {
+      "title": "Welcome back",
+      "subtitle": "Sign in to continue to iedora.",
+      "emailLabel": "Email",
+      "emailPlaceholder": "you@restaurant.com",
+      "passwordLabel": "Password",
+      "submit": "Sign in",
+      "submitting": "Signing in…",
+      "noAccount": "Don't have an account?",
+      "signUpLink": "Create one",
+      "errorGeneric": "Could not sign in. Please check your credentials."
+    },
+    "signUp": {
+      "title": "Create your account",
+      "subtitle": "It takes a minute.",
+      "nameLabel": "Name",
+      "namePlaceholder": "Your full name",
+      "emailLabel": "Email",
+      "emailPlaceholder": "you@restaurant.com",
+      "passwordLabel": "Password",
+      "passwordHint": "12 characters or more.",
+      "submit": "Create account",
+      "submitting": "Creating account…",
+      "haveAccount": "Already have an account?",
+      "signInLink": "Sign in",
+      "errorGeneric": "Could not create your account. Please try again."
+    },
+    "signOut": {
+      "title": "Signed out",
+      "body": "See you soon."
+    }
   },
   "Onboarding": {
     "eyebrow": "first course",
@@ -61,10 +72,10 @@
     "menu": {
       "eyebrow": "second course",
       "title": "Build your menu",
-      "subtitle": "Snap a photo of your existing menu — we'll read the dishes and prices in seconds.",
-      "subtitleAside": "You review and edit everything before it's saved.",
+      "subtitle": "Start with a ready-made sample menu — dishes, sections and prices you can edit freely.",
+      "subtitleAside": "Everything can be renamed, repriced or removed later.",
       "skip": "Skip — I'll add dishes manually",
-      "skipHint": "You can import a photo any time from the restaurant page."
+      "skipHint": "You can build the menu section by section from the restaurant page."
     }
   },
   "Dashboard": {
@@ -356,19 +367,6 @@
   },
   "Billing": {
     "title": "Billing",
-    "latestPayment": {
-      "heading": "Latest payment",
-      "plan": "Plan",
-      "period": "Period",
-      "paid": "You paid",
-      "listPrice": "List price",
-      "discount": "Discount",
-      "method": "Method",
-      "methodLabel": {
-        "mbway": "MB WAY",
-        "cash": "Cash"
-      }
-    },
     "currentPlanTitle": "Current plan",
     "currentPlanSubtitle": "Switch any time. Changes apply on the next invoice.",
     "upgradeCta": "Upgrade to add more",
@@ -377,53 +375,38 @@
     "monthlyViewsCount": "{count, number} monthly views",
     "unlimitedMonthlyViews": "Unlimited monthly views",
     "unlimitedTranslations": "Unlimited translations",
-    "aiMenuGenerationsPerWeek": "{count, plural, =0 {No AI menu imports} =1 {1 AI menu import per week} other {# AI menu imports per week}}",
     "exportPdf": "Export menus as printable PDF",
     "customBranding": "Remove Menu branding",
     "activePlan": "Active",
-    "switching": "Switching…",
-    "invoicesTitle": "Invoices",
-    "invoicesSubtitle": "Receipts for past billing periods.",
-    "invoicesYearAria": "Select year",
-    "invoicesEmpty": "No invoices for {year}.",
-    "colIssued": "Issued",
-    "colPlan": "Plan",
-    "colPeriod": "Period",
-    "colAmount": "Amount",
-    "colStatus": "Status",
-    "status": {
-      "paid": "Paid",
-      "pending": "Pending",
-      "void": "Void"
-    },
     "plans": {
-      "free": {
+      "menu_free": {
         "name": "Free",
-        "tagline": "Get started with one restaurant.",
-        "cta": "Switch to Free"
+        "tagline": "Get started with one restaurant."
       },
-      "casa": {
-        "name": "Casa",
+      "menu_pro": {
+        "name": "Pro",
         "tagline": "Everything in Free, plus the tools to grow.",
-        "cta": "Upgrade to Casa",
         "badge": "Recommended"
+      },
+      "menu_agency": {
+        "name": "Agency",
+        "tagline": "Unlimited restaurants for teams managing many venues."
       }
-    }
+    },
+    "changePlanHint": "To change your plan, contact the iedora team."
   },
   "Misc": {
     "title": "Misc",
     "description": "Plan-scoped usage that doesn't fit on Billing yet.",
-    "aiUsageTitle": "AI menu imports",
-    "aiUsageTagline": "Rolling 7-day window. Counts every AI-driven menu import on this organization.",
-    "usageCount": "{used} of {limit} used",
-    "remainingCount": "{count, plural, =0 {None remaining} =1 {1 remaining} other {# remaining}}",
-    "resetsAt": "Next slot frees up {when}",
     "plans": {
-      "free": {
+      "menu_free": {
         "name": "Free"
       },
-      "casa": {
-        "name": "Casa"
+      "menu_pro": {
+        "name": "Pro"
+      },
+      "menu_agency": {
+        "name": "Agency"
       }
     }
   },
@@ -498,485 +481,84 @@
     "translate": "Translate",
     "back": "Back"
   },
-  "Core": {
-    "signIn": {
-      "title": "Welcome back",
-      "subtitle": "Sign in to continue to iedora.",
-      "emailLabel": "Email",
-      "emailPlaceholder": "you@restaurant.com",
-      "passwordLabel": "Password",
-      "submit": "Sign in",
-      "submitting": "Signing in…",
-      "noAccount": "Don't have an account?",
-      "signUpLink": "Create one",
-      "errorGeneric": "Could not sign in. Please check your credentials."
+  "Imopush": {
+    "PropertyList": {
+      "title": "Properties",
+      "newProperty": "New property",
+      "emptyLabel": "No properties",
+      "emptyHint": "Add your first property above."
     },
-    "signUp": {
-      "title": "Create your account",
-      "subtitle": "It takes a minute.",
-      "nameLabel": "Name",
-      "namePlaceholder": "Your full name",
-      "emailLabel": "Email",
-      "emailPlaceholder": "you@restaurant.com",
-      "passwordLabel": "Password",
-      "passwordHint": "12 characters or more.",
-      "submit": "Create account",
-      "submitting": "Creating account…",
-      "haveAccount": "Already have an account?",
-      "signInLink": "Sign in",
-      "errorGeneric": "Could not create your account. Please try again."
-    },
-    "signOut": {
-      "title": "Signed out",
-      "body": "See you soon."
-    },
-    "admin": {
-      "title": "Admin",
-      "subtitle": "Iedora-staff surface.",
-      "tenants": {
-        "title": "Tenants",
-        "description": "{count, plural, =0 {No tenants yet.} one {# tenant in the system.} other {# tenants in the system.}}",
-        "crumbAdmin": "Admin",
-        "searchLabel": "Search",
-        "searchPlaceholder": "Filter by name…",
-        "searchSubmit": "Filter",
-        "searchClear": "Clear",
-        "listAriaLabel": "Tenants",
-        "empty": "No tenants match the current filter.",
-        "emptyLabel": "No tenants",
-        "emptyNote": "No customer organisations have signed up yet.",
-        "emptyFilteredNote": "No tenants match “{q}”.",
-        "memberCountShort": "{count, plural, =0 {0 members} one {# member} other {# members}}",
-        "createdAtLabel": "Joined",
-        "colName": "Tenant",
-        "colMembers": "Members",
-        "colCreated": "Created",
-        "paginationLabel": "Tenants pagination",
-        "paginationPosition": "Page {page} of {total}",
-        "paginationPrev": "Previous",
-        "paginationNext": "Next",
-        "detail": {
-          "crumbAdmin": "Admin",
-          "crumbTenants": "Tenants",
-          "description": "Membership, scope presets, and product subscriptions for this tenant.",
-          "identity": {
-            "heading": "Identity",
-            "id": "Id",
-            "created": "Created",
-            "members": "Members"
-          },
-          "members": {
-            "heading": "Members",
-            "empty": "No members yet. (Founder removed?)",
-            "colUser": "User",
-            "colPreset": "Authority",
-            "colJoined": "Joined",
-            "presetCustom": "Custom",
-            "scopeCount": "{count, plural, =0 {no scopes} one {# scope} other {# scopes}}"
-          },
-          "subscriptions": {
-            "heading": "Subscriptions",
-            "empty": "No product enrolments yet.",
-            "colProduct": "Product",
-            "colPlan": "Plan",
-            "colStatus": "Status",
-            "colPeriod": "Renews",
-            "willCancel": "Cancels at period end"
-          },
-          "products": {
-            "heading": "Products",
-            "empty": "No product activity recorded yet for this tenant.",
-            "label": {
-              "core": "Core",
-              "menu": "Menu"
-            },
-            "status": {
-              "pending": "Pending",
-              "in-progress": "In progress",
-              "completed": "Completed",
-              "skipped": "Skipped"
-            },
-            "col": {
-              "currentStep": "Current step",
-              "startedAt": "Started",
-              "completedAt": "Completed"
-            }
-          }
-        }
-      },
-      "sessions": {
-        "title": "Sessions",
-        "subtitle": "Active sessions across every iedora product.",
-        "columnUser": "User",
-        "columnDevice": "Device",
-        "columnIp": "IP",
-        "columnIssued": "Issued",
-        "columnExpires": "Expires",
-        "revoke": "Revoke",
-        "revoking": "Revoking…",
-        "empty": "No active sessions.",
-        "crumbAdmin": "Admin",
-        "impersonatedBadge": "Impersonated",
-        "filterQueryLabel": "Search",
-        "filterQueryPlaceholder": "Email or name",
-        "filterImpersonated": "Impersonated only",
-        "filterApply": "Apply"
-      },
-      "payments": {
-        "title": "Manual payments",
-        "description": "Offline payments (MBWay, cash) recorded by hand. Discount vs. list price is computed live from the plan registry.",
-        "crumbAdmin": "Admin",
-        "empty": "No payments recorded yet.",
-        "openForm": "+ Record payment",
-        "cancelForm": "Cancel",
-        "formHeading": "Record payment",
-        "tenantLabel": "Tenant",
-        "tenantSearchPlaceholder": "Search tenants…",
-        "planLabel": "Plan",
-        "paidAtLabel": "Paid on",
-        "validMonthsLabel": "Valid (months)",
-        "amountLabel": "Amount received (list {eur} €)",
-        "methodLabel": "Method",
-        "campaignLabel": "Campaign tag",
-        "campaignPlaceholder": "e.g. beta-user, launch-50",
-        "notesLabel": "Notes",
-        "submit": "Record",
-        "submitting": "Recording…",
-        "filterMethod": "Method",
-        "filterMethodAll": "All methods",
-        "filterCampaign": "Campaign filter",
-        "filterCampaignPlaceholder": "Filter by campaign…",
-        "searching": "Searching…",
-        "deleteAction": "Delete",
-        "deleting": "Deleting…",
-        "deleteConfirm": "Delete this payment? The audit row stays.",
-        "discountNone": "no discount",
-        "discountPreview": "{pct}% discount vs. list price.",
-        "overpaidPreview": "Overpaid by {pct}%.",
-        "listPriceMatch": "Matches list price.",
-        "errorTenant": "Pick a tenant.",
-        "errorPlan": "Pick a plan.",
-        "errorAmount": "Amount must be ≥ 0.",
-        "method": {
-          "mbway": "MB WAY",
-          "cash": "Cash"
-        }
-      },
-      "nav": {
-        "ariaLabel": "Admin navigation",
-        "openNavigation": "Open navigation",
-        "closeNavigation": "Close navigation",
-        "brandHome": "iedora home",
-        "sectionAdmin": "Admin",
-        "sectionExit": "Session",
-        "overview": "Overview",
-        "users": "Users",
-        "access": "Access",
-        "tenants": "Tenants",
-        "sessions": "Sessions",
-        "payments": "Payments",
-        "audit": "Audit",
-        "signOut": "Sign out"
-      },
-      "audit": {
-        "title": "Audit log",
-        "description": "Append-only timeline of every state change on the auth + admin surface. Gated by `staff:core:audit:read`.",
-        "crumbAdmin": "Admin",
-        "filterEventLabel": "Event",
-        "filterEventPlaceholder": "e.g. user.banned",
-        "filterActorLabel": "Actor email",
-        "filterActorPlaceholder": "Filter by actor",
-        "filterImportantOnly": "Important only",
-        "filterApply": "Apply",
-        "empty": "No audit events match the current filter.",
-        "columnAt": "When",
-        "columnEvent": "Event",
-        "columnOutcome": "Outcome",
-        "columnActor": "Actor",
-        "columnTarget": "Target",
-        "columnDetail": "Meta",
-        "actorSystem": "system",
-        "detailShow": "show",
-        "paginationPrev": "Previous",
-        "paginationNext": "Next",
-        "paginationOf": "Page {page} of {totalPages}"
-      },
-      "access": {
-        "title": "Access",
-        "description": "Features are gated by scopes. A role is just a named bundle of scopes — what's shown below is the live binding, derived from the auth taxonomy.",
-        "crumbAdmin": "Admin",
-        "rolesHeading": "Staff roles",
-        "scopesHeading": "Scopes",
-        "youBadge": "you",
-        "noScopes": "No scopes granted.",
-        "verbCount": "{count, plural, =0 {no verbs} one {# verb} other {# verbs}}",
-        "membersCount": "{count, plural, =0 {No users} one {# user} other {# users}}",
-        "membersEmpty": "Nobody currently carries this preset.",
-        "customTitle": "Custom scope sets",
-        "customDescription": "Staff users whose scope array does not match any built-in preset. Either they were granted bespoke scopes via SQL, or a preset they used to match has changed.",
-        "roles": {
-          "iedora-admin": {
-            "description": "Supreme cross-tenant role. Every scope on every resource."
-          },
-          "iedora-support": {
-            "description": "Day-to-day user lifecycle. Cannot grant roles nor impersonate."
-          }
-        },
-        "products": {
-          "core": "Core (auth + admin)",
-          "menu": "Menu (restaurants)"
-        },
-        "kinds": {
-          "staff": "Staff (cross-tenant)",
-          "tenant": "Per-tenant"
-        },
-        "scopes": {
-          "core": {
-            "staff": {
-              "admin": {
-                "read": "Enter the cross-tenant admin shell. Held by every staff role."
-              },
-              "billing": {
-                "manage": "Record / delete manual offline payments (MBWay, cash) across tenants."
-              },
-              "audit": {
-                "read": "Read the append-only audit log of every state change on the auth + admin surface."
-              },
-              "members": {
-                "remove": "Remove a member from any tenant (cross-tenant troubleshooting).",
-                "update-scopes": "Rewrite the scope set on any (tenant, user) membership. Privileged — admin-only (grants tenant owner)."
-              },
-              "sessions": {
-                "list": "List active sessions across every user.",
-                "revoke": "Kill a session (single or all-for-user)."
-              },
-              "tenants": {
-                "list": "List every tenant in the platform.",
-                "get": "View a tenant's identity, members, and subscriptions.",
-                "delete": "Drop a tenant and cascade-delete its memberships + subscriptions. Privileged — admin-only."
-              },
-              "users": {
-                "read": "List and inspect users (incl. their sessions).",
-                "ban": "Ban and unban accounts (reversible lifecycle).",
-                "set-role": "Grant or revoke staff roles. Privileged — admin-only.",
-                "impersonate": "Sign in as another user. Privileged — admin-only."
-              }
-            },
-            "tenant": {
-              "billing": {
-                "read": "View this tenant's subscriptions and invoices.",
-                "change-plan": "Change the plan on any of this tenant's product subscriptions.",
-                "update-payment": "Update the payment method backing this tenant's subscriptions."
-              },
-              "members": {
-                "read": "View this tenant's member roster.",
-                "invite": "Invite a new user to this tenant.",
-                "remove": "Remove a member from this tenant.",
-                "grant": "Adjust a member's scope set within this tenant."
-              },
-              "tenant": {
-                "delete": "Delete this tenant. Reserved for the tenant owner."
-              }
-            }
-          },
-          "menu": {
-            "staff": {
-              "ai": {
-                "unlimited": "Bypass the weekly AI-generation quota on menu imports."
-              },
-              "restaurants": {
-                "transfer": "Transfer a restaurant to a different tenant + owner."
-              },
-              "qr-codes": {
-                "manage": "Cross-tenant QR-code inventory admin (mint, bind, delete)."
-              }
-            },
-            "tenant": {
-              "restaurants": {
-                "read": "View restaurants belonging to this tenant.",
-                "create": "Add a new restaurant under this tenant.",
-                "update": "Edit a restaurant's identity, theme, or menu structure.",
-                "delete": "Delete a restaurant and its menus."
-              },
-              "qr-codes": {
-                "read": "View QR codes belonging to this tenant.",
-                "create": "Mint new QR codes (single or bulk).",
-                "update": "Bind an existing QR code to a restaurant.",
-                "delete": "Delete QR codes."
-              }
-            }
-          }
-        }
-      },
-      "overview": {
-        "title": "Admin",
-        "description": "Iedora-staff cross-tenant controls.",
-        "you": {
-          "signedInAs": "Signed in as",
-          "roleAdmin": "iedora-admin"
-        },
-        "users": {
-          "title": "Users",
-          "count": "{count} total",
-          "cta": "Manage users"
-        },
-        "tenants": {
-          "title": "Tenants",
-          "count": "{count} total",
-          "cta": "Manage tenants"
-        },
-        "sessions": {
-          "title": "Sessions",
-          "description": "Every active session across every product.",
-          "cta": "Inspect sessions"
-        },
-        "presets": {
-          "heading": "Staff role presets",
-          "description": "Every role is a named bundle of scopes. The scopes below are the cross-tenant powers each preset hands out — assign a user to a preset and they inherit the entire list. Tenant-level scopes are granted per membership and never appear on these presets.",
-          "sourceBuiltIn": "Built-in",
-          "emptyScopes": "No scopes."
-        }
-      },
-      "users": {
-        "title": "Users",
-        "description": "Every user on the platform, across every tenant.",
-        "crumbAdmin": "Admin",
-        "columnUser": "User",
-        "columnRole": "Role",
-        "columnStatus": "Status",
-        "columnCreated": "Created",
-        "roleIedoraAdmin": "Iedora admin",
-        "roleMember": "Tenant",
-        "statusActive": "Active",
-        "statusBanned": "Banned",
-        "statusUnverified": "Unverified",
-        "empty": "No users match.",
-        "paginationPrev": "Prev",
-        "paginationNext": "Next",
-        "paginationOf": "Page {page} of {totalPages}",
-        "filters": {
-          "queryLabel": "Search",
-          "queryPlaceholder": "Email or name",
-          "roleLabel": "Role",
-          "roleAny": "Any role",
-          "roleIedoraAdmin": "Iedora admin",
-          "roleMember": "Tenant",
-          "bannedLabel": "Status",
-          "bannedAny": "Any status",
-          "bannedYes": "Banned",
-          "bannedNo": "Active",
-          "apply": "Apply",
-          "applying": "Applying…"
-        },
-        "row": {
-          "view": "View",
-          "ban": "Ban",
-          "unban": "Unban",
-          "unbanning": "Unbanning…",
-          "impersonate": "Impersonate",
-          "impersonating": "Impersonating…"
-        },
-        "ban": {
-          "trigger": "Ban",
-          "title": "Ban user",
-          "description": "Ban {email}. They will be signed out of every active session.",
-          "reasonLabel": "Reason",
-          "reasonPlaceholder": "Optional — shown internally on audit log.",
-          "daysLabel": "Duration",
-          "daysPlaceholder": "Days (leave blank for permanent)",
-          "daysHint": "Leave blank to ban permanently.",
-          "cancel": "Cancel",
-          "submit": "Ban",
-          "submitting": "Banning…",
-          "errorGeneric": "Could not ban this user."
-        },
-        "role": {
-          "member": "Tenant",
-          "iedoraAdmin": "Iedora admin",
-          "updated": "Role updated.",
-          "errorGeneric": "Could not update the role."
-        },
-        "detail": {
-          "crumbAdmin": "Admin",
-          "crumbUsers": "Users",
-          "descriptionSelf": "This is you. Destructive actions are disabled.",
-          "roleTitle": "Role",
-          "roleDesc": "Cross-tenant role on the user row.",
-          "statusTitle": "Status",
-          "statusActive": "Active",
-          "statusBanned": "Banned",
-          "statusVerified": "Verified email",
-          "statusUnverified": "Unverified email",
-          "banReasonLabel": "Reason",
-          "scopesTitle": "Scopes",
-          "scopesDesc": "Cross-tenant scopes carried on this user row. Tenant-level scopes live on each tenant membership and are visible from the tenant detail page.",
-          "scopesPresetCustom": "Custom",
-          "scopesSourceBuiltIn": "Matches built-in preset",
-          "scopesSourceCustom": "Custom scope set — no preset match",
-          "scopesSourceTenant": "Tenant user — no cross-tenant scopes",
-          "scopesEmpty": "No cross-tenant scopes. This user only carries the scopes on their tenant memberships.",
-          "sessionsTitle": "Active sessions",
-          "sessionsCount": "{count} active",
-          "sessionsEmpty": "No active sessions.",
-          "sessionColumnDevice": "Device",
-          "sessionColumnIp": "IP",
-          "sessionColumnIssued": "Issued",
-          "sessionColumnExpires": "Expires",
-          "revokeAll": "Revoke all sessions"
-        }
-      },
-      "orgs": {
-        "title": "Organizations",
-        "description": "Every tenant org on the platform.",
-        "crumbAdmin": "Admin",
-        "columnOrg": "Organization",
-        "columnMembers": "Members",
-        "columnPlan": "Plan",
-        "columnCreated": "Created",
-        "view": "View",
-        "empty": "No organizations match.",
-        "paginationPrev": "Prev",
-        "paginationNext": "Next",
-        "paginationOf": "Page {page} of {totalPages}",
-        "filters": {
-          "queryLabel": "Search",
-          "queryPlaceholder": "Name or slug",
-          "apply": "Apply",
-          "applying": "Applying…"
-        },
-        "members": {
-          "role-owner": "Owner",
-          "role-admin": "Admin",
-          "role-member": "Member",
-          "remove": "Remove",
-          "confirmRemove": "Confirm remove",
-          "removing": "Removing…",
-          "cancel": "Cancel"
-        },
-        "invitations": {
-          "cancel": "Cancel",
-          "cancelling": "Cancelling…"
-        },
-        "detail": {
-          "crumbAdmin": "Admin",
-          "crumbOrgs": "Organizations",
-          "description": "{count} members.",
-          "membersTitle": "Members",
-          "membersCount": "{count} total",
-          "membersEmpty": "No members.",
-          "memberColumnUser": "User",
-          "memberColumnJoined": "Joined",
-          "memberColumnRole": "Role",
-          "invitationsTitle": "Invitations",
-          "invitationsCount": "{count} pending",
-          "invitationsEmpty": "No pending invitations.",
-          "invitationsEmptyTitle": "Invitations",
-          "inviteColumnEmail": "Email",
-          "inviteColumnRole": "Role",
-          "inviteColumnInviter": "Inviter",
-          "inviteColumnExpires": "Expires"
-        }
+    "Property": {
+      "location": "Location",
+      "data": "Details",
+      "features": "Features",
+      "description": "Description",
+      "platforms": "Platforms",
+      "statusDraft": "Draft",
+      "statusPublished": "Published",
+      "statusPublishing": "Publishing…",
+      "statusFailed": "Failed",
+      "energyCertificate": "Energy certificate",
+      "heating": "Heating",
+      "heatingIndividual": "Individual",
+      "heatingCentral": "Central",
+      "heatingNone": "No heating",
+      "yearBuilt": "Year built",
+      "delete": "Delete",
+      "deleteTitle": "Delete property",
+      "deleteDescription": "This will remove the property from every platform it was published on.",
+      "viewListing": "View listing",
+      "rooms": "{count} rooms",
+      "bathrooms": "{count} bathrooms",
+      "rooms_label": "Rooms",
+      "bathrooms_label": "Bathrooms",
+      "areaLabel": "Area",
+      "usableArea": "Usable area",
+      "lotSize": "Lot size",
+      "floors": "Floors",
+      "feature": {
+        "pool": "Pool",
+        "garden": "Garden",
+        "terrace": "Terrace",
+        "balcony": "Balcony",
+        "parking": "Parking",
+        "storage": "Storage",
+        "wardrobe": "Wardrobes",
+        "airConditioning": "Air conditioning",
+        "fireplace": "Fireplace",
+        "lift": "Lift"
       }
+    },
+    "PropertyPhotos": {
+      "noPhoto": "No photo",
+      "expandPhoto": "Expand photo",
+      "previousPhoto": "Previous photo",
+      "nextPhoto": "Next photo",
+      "closeLightbox": "Close"
+    },
+    "IdealistaPublish": {
+      "publish": "Publish on Idealista",
+      "publishing": "Publishing…",
+      "retry": "Retry"
+    },
+    "IdealistaIntegrator": {
+      "title": "Idealista",
+      "description": "Publish and manage Idealista.pt listings using the agency account.",
+      "accountLabel": "Configured account",
+      "stateLabel": "State",
+      "stateActive": "Active",
+      "note": "Publishing is driven by Chrome automation over CDP — no API key needed."
+    },
+    "Nav": {
+      "ariaLabel": "Primary navigation",
+      "properties": "Properties",
+      "integrators": "Integrators",
+      "idealista": "Idealista"
+    },
+    "Common": {
+      "edit": "Edit",
+      "delete": "Delete",
+      "cancel": "Cancel"
     }
   }
 }

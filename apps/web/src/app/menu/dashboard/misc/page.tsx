@@ -1,43 +1,22 @@
-import { getLocale, getTranslations } from 'next-intl/server'
+import { getTranslations } from 'next-intl/server'
 import { requireActiveOrganization } from '@iedora/product-menu/features/auth'
-import { canGenerateAiMenu, getOrganizationPlan } from '@iedora/product-menu/features/plans'
+import { getOrganizationPlan } from '@iedora/product-menu/features/plans'
 import { DashboardPage } from '@iedora/product-menu/shared/ui/dashboard-page'
 
-// Cached per-locale — `Intl.*` constructors are expensive and the page
-// formats once per request, but the same locale repeats across requests.
-const RESET_FMT_CACHE = new Map<string, Intl.DateTimeFormat>()
-function formatReset(date: Date, locale: string) {
-  let fmt = RESET_FMT_CACHE.get(locale)
-  if (!fmt) {
-    fmt = new Intl.DateTimeFormat(locale, {
-      day: 'numeric',
-      month: 'short',
-      hour: 'numeric',
-      minute: '2-digit',
-    })
-    RESET_FMT_CACHE.set(locale, fmt)
-  }
-  return fmt.format(date)
-}
-
+/**
+ * Misc — account odds-and-ends. The AI menu-import usage meter that
+ * used to live here was removed with the AI features; what remains is
+ * the plan eyebrow + description shell for future account widgets.
+ */
 export default async function MiscPage() {
-  // i18n is independent of auth — fan out. `plan` and `ai` chain off
-  // the same cached org promise.
+  // i18n is independent of auth — fan out. `plan` chains off the same
+  // cached org promise.
   const orgPromise = requireActiveOrganization()
-  const [{ tenantId }, t, locale] = await Promise.all([
+  const [, t, plan] = await Promise.all([
     orgPromise,
     getTranslations('Misc'),
-    getLocale(),
+    orgPromise.then(() => getOrganizationPlan()),
   ])
-  const [plan, ai] = await Promise.all([
-    getOrganizationPlan(tenantId),
-    canGenerateAiMenu(tenantId),
-  ])
-
-  const limit = ai.limit
-  const used = ai.used
-  const remaining = Math.max(0, limit - used)
-  const pct = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0
 
   return (
     <DashboardPage
@@ -46,61 +25,7 @@ export default async function MiscPage() {
       description={t('description')}
       data-test-id="misc"
     >
-      <section
-        className="misc-section"
-        aria-label={t('aiUsageTitle')}
-        data-test-id="misc-ai-usage-section"
-      >
-        <article
-          className="billing-plan-card"
-          data-test-id="misc-ai-usage-card"
-        >
-          <header className="billing-plan-card__head">
-            <h2 className="billing-plan-card__name">{t('aiUsageTitle')}</h2>
-          </header>
-          <p className="billing-plan-card__tagline">{t('aiUsageTagline')}</p>
-
-          <div
-            className="misc-usage"
-            data-test-id="misc-ai-usage-meter"
-            data-exhausted={ai.ok ? 'false' : 'true'}
-          >
-            <div className="misc-usage__row">
-              <span
-                className="misc-usage__count"
-                data-test-id="misc-ai-usage-count"
-              >
-                {t('usageCount', { used, limit })}
-              </span>
-              <span
-                className="misc-usage__remaining"
-                data-test-id="misc-ai-usage-remaining"
-              >
-                {t('remainingCount', { count: remaining })}
-              </span>
-            </div>
-            <div
-              className="misc-usage__bar"
-              role="progressbar"
-              aria-valuemin={0}
-              aria-valuemax={limit}
-              aria-valuenow={used}
-              aria-label={t('aiUsageTitle')}
-            >
-              <span
-                className="misc-usage__bar-fill"
-                style={{ width: `${pct}%` }}
-              />
-            </div>
-            <p
-              className="misc-usage__reset"
-              data-test-id="misc-ai-usage-reset"
-            >
-              {t('resetsAt', { when: formatReset(ai.resetAt, locale) })}
-            </p>
-          </div>
-        </article>
-      </section>
+      {null}
     </DashboardPage>
   )
 }

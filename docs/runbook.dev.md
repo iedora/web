@@ -6,17 +6,19 @@ Deploy → ver [`runbook.deploy.md`](./runbook.deploy.md).
 
 ```bash
 bun install
-bun run dev:up           # postgres + s3mock
-bun run dev:migrate      # schema nas 2 DBs (core, menu)
+bun run dev:up           # Go backend completo (services/docker-compose.yml)
 bun run dev              # next dev em :3000
 ```
 
-Pasta `infra/dev/` só tem `docker-compose.yml` (Postgres + s3mock, ports `:5432`/`:9090`, buckets `iedora-data`/`iedora-assets` hardcoded).
+`bun run dev:up` levanta o backend inteiro a partir de
+`services/docker-compose.yml`: os serviços Go (auth `:8080`, audit `:8081`,
+admin `:8082`, billing `:8083`, menu `:8084`), Postgres (`:55432`), NATS,
+MinIO (`:9000`) e OpenObserve (`:5080`). As migrations correm como one-shots
+dentro do compose — não há passo de migração no lado TypeScript.
 
 App env vive em `apps/web/`:
-- `.env` — defaults dev (DB URLs, S3, better-auth, `NEXT_PUBLIC_*`). Tracked, sem secrets. Next lê automaticamente; `dev:migrate` faz source pelo path.
-- `.env.local` — secrets (AI keys, real S3 creds, overrides). Gitignored. Next hot-reloada quando muda.
-- `.env.test` — E2E build env. Tracked.
+- `.env` — defaults dev (`AUTH_URL`/`MENU_URL` + `NEXT_PUBLIC_*`). Tracked, sem secrets. Next lê automaticamente.
+- `.env.local` — overrides locais. Gitignored.
 
 Reset volumes: `bun run dev:reset`. Logs: `bun run dev:logs`.
 
@@ -26,11 +28,10 @@ Reset volumes: `bun run dev:reset`. Logs: `bun run dev:logs`.
 |---|---|
 | `bun install` | Instala/refresca dependências de todos os workspaces (instala git hooks via `postinstall`). |
 | `bun run dev` | `next dev` em `:3000` (Next lê `apps/web/.env` + `.env.local`). |
-| `bun run dev:up` | Boot Postgres + s3mock (`docker compose up -d`). |
+| `bun run dev:up` | Boot do backend Go completo (`docker compose -f services/docker-compose.yml up -d --build`). |
 | `bun run dev:down` | Pára containers (mantém volumes). |
 | `bun run dev:logs` | Tail dos logs do compose stack. |
 | `bun run dev:reset` | Pára + apaga volumes (**perde dados locais**). |
-| `bun run dev:migrate` | Aplica Drizzle migrations em sequência: `auth` → `menu`. |
 | `bun run typecheck` | TS check paralelo em todos os workspaces. |
 | `bun run lint` | ESLint paralelo em todos os workspaces. |
 | `bun run test` | Vitest em todos os workspaces. |
@@ -44,14 +45,16 @@ Reset volumes: `bun run dev:reset`. Logs: `bun run dev:logs`.
 | `bun run start` | `next start` no output standalone. |
 | `bun run typecheck` | `tsgo --build`. |
 | `bun run lint` | ESLint com cache. |
-| `bun run --cwd products/menu test:integration` | Vitest integration suite (testcontainers Postgres + MinIO). |
-| `bun run db:migrate:test` | Aplica migrations nas DBs `*_test` (chama `scripts/migrate-test.mjs`). |
 
-## Comandos (`products/menu`, `packages/business/auth`)
+## Comandos (`services/` — backend Go)
 
 | Comando | O que faz |
 |---|---|
-| `bun run db:generate` | Gera nova migration Drizzle a partir do schema (`drizzle-kit generate`). |
-| `bun run db:migrate` | Aplica migrations pendentes contra a DB do produto. |
-| `bun run db:studio` | Drizzle Studio (UI para inspeccionar a DB). |
-| `bun run db:push` | (`menu` apenas) Push do schema directo, sem migration — só dev. |
+| `make test` | Unit tests (sem Docker). |
+| `make test-integration` | Integration tests (testcontainers: Postgres real). |
+| `make test-all` | Ambos. |
+| `make vet` / `make fmt` | Vet + format. |
+
+Schema changes: cada serviço Go é dono das suas migrations
+(`services/migrations/<svc>/`); aplica-as com o one-shot `<svc> migrate`
+(o compose já o faz no arranque).

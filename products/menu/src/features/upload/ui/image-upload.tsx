@@ -13,7 +13,7 @@ export function ImageUpload({
   onChange,
 }: {
   target: AssetTarget
-  currentUrl: string | null
+  currentUrl: string | null | undefined
   label: string
   onChange: (url: string | null) => void
 }) {
@@ -46,7 +46,6 @@ export function ImageUpload({
       const presign = await requestUploadUrl({
         target,
         contentType: file.type,
-        contentLengthBytes: file.size,
       })
       if (!presign.ok) {
         setError(presign.error)
@@ -66,7 +65,6 @@ export function ImageUpload({
       const commit = await commitAsset({
         target,
         key: presign.data.key,
-        publicUrl: presign.data.publicUrl,
       })
       if (!commit.ok) {
         setError(commit.error)

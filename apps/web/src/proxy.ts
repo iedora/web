@@ -1,41 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { publicUrl } from '@iedora/product-menu/shared/url'
-import { signInUrl } from '@iedora/product-core/url'
+import { signInUrl } from '@iedora/product-menu/shared/auth-urls'
+import { resolveAuth, applyCookies } from '@iedora/api-client/middleware'
 import { surfaces, surfaceByHost } from './generated/surfaces'
 
 const protectedPrefixes = ['/menu/dashboard', '/menu/onboarding']
 
 /**
- * better-auth's session cookie names. Used here only as an OPTIMISTIC
- * hint (cookie present ⇒ likely signed in) — the real session lookup
- * happens in the DAL via `auth.api.getSession()`. AGENTS.md hard rule #5.
- *
- * Two variants because better-auth auto-prepends `__Secure-` when the
- * origin is HTTPS (prod). Checking only the bare name produced a real
- * loop: optimistic check said "no session" on a signed-in request →
- * redirect to sign-in → sign-in's server-side `auth.api.getSession()`
- * sees the cookie → redirects back → loop.
- */
-import { SESSION_COOKIE_NAMES as SESSION_COOKIES } from '@iedora/auth/cookies'
-
-/**
  * Three jobs in order of precedence:
  *
  *   1. **Host-based rewrites** — for hosts whose surface has a
- *      `rewritePath` (e.g. `iedora.com → /house/*`, `core.iedora.com
- *      → /core/*`). The matched surface comes from the hand-maintained
+ *      `rewritePath` (e.g. `iedora.com → /house/*`, `menu.iedora.com
+ *      → /menu/*`). The matched surface comes from the hand-maintained
  *      registry at `./generated/surfaces.ts`.
  *
  *   2. **Cross-host guard** for namespace paths. Direct visits to
- *      another surface's namespace (`menu.iedora.com/house*`,
- *      `menu.iedora.com/core/*`) 404 — except `localhost` where every
+ *      another surface's namespace (`menu.iedora.com/house*`)
+ *      404 — except `localhost` where every
  *      surface keeps its path-based fallback for plain local dev
  *      without `*.localhost` gymnastics.
  *
- *   3. **Optimistic auth gate** for menu's protected prefixes. Real
- *      auth runs in the DAL via `verifySession()`.
+ *   3. **Auth gate + token refresh** for menu's protected prefixes.
+ *      This middleware is the ONE place that refreshes an expired
+ *      access token for page loads: RSCs can't mutate cookies, so the
+ *      refresh happens here and the request's Cookie header is
+ *      rewritten so downstream server components always read a valid
+ *      `iedora_access` cookie. Authorization proper stays with the Go
+ *      services — every API call is verified there.
  */
-export default function proxy(req: NextRequest) {
+export default async function proxy(req: NextRequest) {
   const host = (req.headers.get('host') ?? '').toLowerCase().split(':')[0] ?? ''
   const path = req.nextUrl.pathname
 
@@ -48,25 +41,17 @@ export default function proxy(req: NextRequest) {
   // we don't prepend again. Double-prefixing produced URLs that 404'd
   // in prod even though the same internal route worked.
   //
-  // Why it matters: server-side `redirect('/menu/onboarding')` calls
-  // (in app pages + menu's auth use-cases) emit the INTERNAL Next path
-  // as the browser-visible Location header. The browser then visits
-  // `menu.iedora.com/menu/onboarding`, and without idempotence the
-  // proxy turned it into `/menu/menu/onboarding` → 404. Now both
-  // `menu.iedora.com/onboarding` and `menu.iedora.com/menu/onboarding`
-  // resolve to the same internal `/menu/onboarding` route.
-  //
-  // Note: when the path is already prefixed we DON'T early-return —
-  // we just skip the rewrite. Rules 2 (cross-host guard) and 3 (auth
-  // gate) still need to evaluate for `/menu/dashboard` direct visits.
+  // The rewrite target is computed here but the response is built at
+  // the END, so the auth gate below also covers rewritten paths
+  // (`menu.iedora.com/dashboard` → internal `/menu/dashboard`).
+  let internalPath = path
+  let rewrite = false
   if (here && here.rewritePath) {
     const alreadyPrefixed =
       path === here.rewritePath || path.startsWith(`${here.rewritePath}/`)
     if (!alreadyPrefixed) {
-      const target = path === '/' ? here.rewritePath : `${here.rewritePath}${path}`
-      const url = req.nextUrl.clone()
-      url.pathname = target
-      return NextResponse.rewrite(url)
+      internalPath = path === '/' ? here.rewritePath : `${here.rewritePath}${path}`
+      rewrite = true
     }
   }
 
@@ -75,7 +60,7 @@ export default function proxy(req: NextRequest) {
   //     the rewritePath prefix, because they run under a subdomain in
   //     prod and rely on rule 1 to add the prefix). On bare `localhost`
   //     no surface matches, so without this branch those paths 404.
-  //     Subdomain hosts (`menu.localhost`, `core.localhost`, …) go
+  //     Subdomain hosts (`menu.localhost`, …) go
   //     through rule 1 above and never reach here.
   if (!here && host === 'localhost') {
     for (const s of surfaces) {
@@ -84,9 +69,9 @@ export default function proxy(req: NextRequest) {
         (p) => path === p || path.startsWith(`${p}/`),
       )
       if (!match) continue
-      const url = req.nextUrl.clone()
-      url.pathname = `${s.rewritePath}${path}`
-      return NextResponse.rewrite(url)
+      internalPath = `${s.rewritePath}${path}`
+      rewrite = true
+      break
     }
   }
 
@@ -102,24 +87,44 @@ export default function proxy(req: NextRequest) {
     return new NextResponse('Not Found', { status: 404 })
   }
 
-  // 3. Menu's optimistic auth check.
-  const isProtected = protectedPrefixes.some((p) => path.startsWith(p))
-  if (!isProtected) return NextResponse.next()
-
-  const hasSession = SESSION_COOKIES.some((name) => req.cookies.has(name))
-  if (!hasSession) {
-    // Cross-origin redirect to the core product's sign-in. `next` is an
-    // absolute URL on THIS host (built via publicUrl) so after auth the
-    // user lands back on the protected route they tried to reach.
-    return NextResponse.redirect(signInUrl(publicUrl(path).toString()))
+  // 3. Auth gate on the INTERNAL path (covers rewritten visits too).
+  const isProtected = protectedPrefixes.some((p) => internalPath.startsWith(p))
+  if (!isProtected) {
+    return respond(req, internalPath, rewrite)
   }
 
-  return NextResponse.next()
+  const auth = await resolveAuth(req)
+  if (!auth.session) {
+    // Redirect to the menu surface's sign-in. `next` is an
+    // absolute URL on THIS host (built via publicUrl) so after auth the
+    // user lands back on the protected route they tried to reach.
+    const res = NextResponse.redirect(signInUrl(publicUrl(path).toString()))
+    return applyCookies(res, auth.cookieWrites) // clears dead cookies
+  }
+
+  const res = respond(req, internalPath, rewrite, auth.requestHeaders)
+  return applyCookies(res, auth.cookieWrites)
+}
+
+/** Builds the pass-through/rewrite response, optionally swapping the
+ *  request headers (used to forward a just-refreshed access cookie). */
+function respond(
+  req: NextRequest,
+  internalPath: string,
+  rewrite: boolean,
+  requestHeaders?: Headers,
+): NextResponse {
+  const request = requestHeaders ? { headers: requestHeaders } : undefined
+  if (!rewrite) return NextResponse.next({ request })
+  const url = req.nextUrl.clone()
+  url.pathname = internalPath
+  return NextResponse.rewrite(url, { request })
 }
 
 export const config = {
-  // `up` is excluded alongside `api` — both serve every host without
-  // rewrite (infra plumbing: better-auth catch-all + container
-  // healthcheck). Routes for them live at apps/web/src/app/{api,up}/.
-  matcher: ['/((?!api|up|_next/static|_next/image|.*\\.png$).*)'],
+  // `up` and `track` are excluded alongside `api` — they serve every
+  // host without rewrite (infra plumbing: container healthcheck + the
+  // public-menu view beacon, which next.config.ts rewrites straight to
+  // the Go menu service).
+  matcher: ['/((?!api|up|track|_next/static|_next/image|.*\\.png$).*)'],
 }

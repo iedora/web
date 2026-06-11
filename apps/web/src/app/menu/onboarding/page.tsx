@@ -1,11 +1,7 @@
 import { redirect } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { DottedStepper, Masthead, OrnamentRule, PaperCard, Stage } from '@iedora/design-system'
-import { isStaffRole } from '@iedora/auth/role-presets'
-import {
-  getEffectiveOrganizationId,
-  getSession,
-} from '@iedora/product-menu/features/auth'
+import { getSession, isStaff } from '@iedora/product-menu/features/auth'
 import {
   ADD_ANOTHER_QUERY_KEY,
   ADD_ANOTHER_QUERY_VALUE,
@@ -13,7 +9,7 @@ import {
   findPendingOnboardingRestaurant,
   tenantHasRestaurant,
 } from '@iedora/product-menu/features/menu-onboarding'
-import { signInUrl } from '@iedora/product-core/url'
+import { signInUrl } from '@iedora/product-menu/shared/auth-urls'
 import { publicUrl } from '@iedora/product-menu/shared/url'
 import { OnboardingForm } from './onboarding-form'
 import './onboarding.css'
@@ -26,12 +22,11 @@ export default async function OnboardingPage({
   searchParams?: SearchParams
 }) {
   const session = await getSession()
-  if (!session?.user) redirect(signInUrl(publicUrl(ONBOARDING_STEPS.name.path).toString()))
+  if (!session) redirect(signInUrl(publicUrl(ONBOARDING_STEPS.name.path).toString()))
 
   // Staff bypass: iedora-admin / iedora-support never need to onboard
   // a tenant of their own — the dashboard is cross-tenant for them.
-  const role = (session.user as { role?: string | null }).role ?? null
-  if (isStaffRole(role)) redirect('/menu/dashboard')
+  if (isStaff(session)) redirect('/menu/dashboard')
 
   const sp = (await searchParams) ?? {}
   const addAnotherRaw = sp[ADD_ANOTHER_QUERY_KEY]
@@ -39,18 +34,17 @@ export default async function OnboardingPage({
     (Array.isArray(addAnotherRaw) ? addAnotherRaw[0] : addAnotherRaw) ===
     ADD_ANOTHER_QUERY_VALUE
 
-  // Tier the gate by the active tenant's state:
-  //   - no tenant pinned             → first-time user, render step 1
+  // Tier the gate by the session's tenant state:
+  //   - no tenant on the token       → first sign-in, render step 1
   //   - tenant has a pending wizard  → resume into step 2
   //   - tenant has only completions  → bounce to dashboard unless the
   //                                    operator opted in via the
   //                                    dashboard CTA (`?addAnother=1`)
-  const tenantId = await getEffectiveOrganizationId()
-  if (tenantId) {
-    const pending = await findPendingOnboardingRestaurant(tenantId)
+  if (session.tenantId) {
+    const pending = await findPendingOnboardingRestaurant()
     if (pending)
       redirect(ONBOARDING_STEPS.menu.buildPath({ slug: pending.slug }))
-    if (!addAnother && (await tenantHasRestaurant(tenantId))) {
+    if (!addAnother && (await tenantHasRestaurant())) {
       redirect('/menu/dashboard')
     }
   }

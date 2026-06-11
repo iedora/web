@@ -42,9 +42,9 @@ export default async function AnalyticsPage({
   // searchParams + i18n are independent of auth — fan out. `plan` chains
   // off the same cached `requireActiveOrganization` promise.
   const orgPromise = requireActiveOrganization()
-  const [{ tenantId }, plan, sp, t, tDash, locale] = await Promise.all([
+  const [, plan, sp, t, tDash, locale] = await Promise.all([
     orgPromise,
-    orgPromise.then((o) => getOrganizationPlan(o.tenantId)),
+    orgPromise.then(() => getOrganizationPlan()),
     searchParams,
     getTranslations('Analytics'),
     getTranslations('Dashboard'),
@@ -58,7 +58,7 @@ export default async function AnalyticsPage({
   const range: AnalyticsRange =
     sp.range && isAnalyticsRange(sp.range) ? sp.range : DEFAULT_RANGE
 
-  const analytics = await getOrganizationAnalytics(tenantId, range)
+  const analytics = await getOrganizationAnalytics(range)
   const numberFmt = numberFormat(locale)
 
   const peakValue = analytics.dailyBreakdown.reduce(
@@ -117,7 +117,7 @@ export default async function AnalyticsPage({
             value={numberFmt.format(analytics.menus.total)}
             caption={tDash('analytics.menusCaption', {
               active: analytics.menus.active,
-              paused: analytics.menus.paused,
+              paused: analytics.menus.total - analytics.menus.active,
             })}
           />
           <KpiCard
@@ -127,7 +127,7 @@ export default async function AnalyticsPage({
             caption={
               analytics.dishes.lastAddedAt
                 ? tDash('analytics.dishesCaption', {
-                    time: timeFormat(locale).format(analytics.dishes.lastAddedAt),
+                    time: timeFormat(locale).format(new Date(analytics.dishes.lastAddedAt)),
                   })
                 : tDash('analytics.dishesNone')
             }
@@ -135,10 +135,10 @@ export default async function AnalyticsPage({
           <KpiCard
             testId="analytics-languages"
             eyebrow={tDash('analytics.languagesLabel')}
-            value={numberFmt.format(analytics.languageCodes.length)}
+            value={numberFmt.format(analytics.languages.length)}
             caption={
-              analytics.languageCodes.length > 0
-                ? analytics.languageCodes
+              analytics.languages.length > 0
+                ? analytics.languages
                     .map((c) => c.toUpperCase())
                     .join(' · ')
                 : tDash('analytics.noData')

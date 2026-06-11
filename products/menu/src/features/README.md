@@ -4,55 +4,48 @@ Vertical slices. One folder per business capability.
 
 ## Slice shape
 
-Each slice is self-contained:
+Each slice is self-contained UI + thin server glue over the Go menu
+service (`services/cmd/menu`). There is no data layer here — the Go
+side owns validation, tenancy and persistence.
 
-- `use-cases/` — pure async functions with explicit port arguments
-- `ports.ts` — interfaces the slice depends on (DB, storage, auth, …)
-- `adapters/` — implementations of those ports (Drizzle, S3, better-auth, …)
-- `actions.ts` — `'use server'` shim that wires Next's request to a use-case
+- `index.ts` — the slice's public API: `React.cache()`-wrapped read loaders over `shared/api.ts` + types
+- `actions.ts` — `'use server'` shells: typed API call → `ApiError` → `{ error }` → revalidate
 - `ui/` — client components for the slice
-- `<slice>.test.ts` — Vitest + PGLite tests for the use-cases
-- `index.ts` — the slice's public API (only what other slices/app import)
-- `testing/` (optional) — server-only test surface (profile + seeds + routes + barrel) reused by the product integration suite
+- `<pure-helper>.ts` + `.test.ts` — pure domain helpers with co-located Vitest suites
 
 Full contract in [`docs/agents/slice-pattern.md`](../../../../docs/agents/slice-pattern.md).
 
 ## Cross-slice rules
 
-- Intra-slice imports use relative paths (`./use-cases/...`).
+- Intra-slice imports use relative paths.
 - Inter-slice imports go through `@/features/<slice>` (the barrel
-  `index.ts`). Reaching `@/features/auth/use-cases/...` is a boundary
-  violation flagged by `eslint-plugin-boundaries`.
-- Slices may import from `@/shared/*` freely (db / ui / testing /
-  url / utils / env / log).
+  `index.ts`) or the sanctioned `actions` / `ui/**` / `rsc/**` subpaths.
+- Slices may import from `@/shared/*` freely (api / ui / url / utils / env).
 
 ## Current inventory
 
 | Slice | What |
 |---|---|
-| **`auth`** | DAL guards + role/scope taxonomy over `@iedora/auth`. `verifySession`, `requireRestaurantAccess`, `requireRestaurantBySlug`, `requireActiveOrganization`, `requireScope`. `scopes.ts` maps `qr-codes:read|write|update|delete` to better-auth's `{qrCodes: ['read']}` shape; `requireScope` short-circuits when `session.user.role === 'iedora-admin'`. |
-| **`billing`** | Invoice ledger (read-only today). |
-| **`dashboard-home`** | Restaurants-with-counts aggregate query for the dashboard root. |
+| **`auth`** | Session guards over `@iedora/api-client`: `getSession`, `verifySession`, `requireActiveOrganization`, `requireRestaurantBySlug`, `requireStaff`, `isStaff`. Decide where to send the visitor; authorization is the Go service's. |
+| **`dashboard-home`** | Restaurants-with-counts loader + dashboard chrome UI (analytics cards, logout, locale switcher). |
 | **`i18n`** | Per-language registry (en, pt, es, fr) + format helpers + `LocalizedFields` editor UI. |
-| **`menu-builder`** | dnd-kit admin builder. Menu / category / item CRUD + reorder (positions recomputed in a single transaction). |
-| **`menu-import`** | AI-assisted import of an existing menu (image / PDF → categories + items + variants). |
-| **`menu-onboarding`** | First-org-creation + add-another-restaurant flows. |
-| **`menu-publishing`** | Public-side render path. `loadRestaurantSnapshot` / `loadRestaurantAdminMenus` cache wrappers, template registry, sample-data seed. |
-| **`menu-translation`** | AI translation pass over a menu's localised fields. |
-| **`metrics`** | Daily-view counters + analytics range helpers (driven by the beacon route). |
-| **`plans`** | Plan registry (free, casa). `canAddRestaurant(orgId)` gate. |
-| **`qr-codes`** | Physical-sticker registry (cross-tenant, iedora-admin only). |
-| **`rate-limit`** | Sliding-window rate limiter backed by Postgres (advisory locks + `READ COMMITTED`). |
-| **`restaurant-identity`** | Restaurant CRUD + theme/identity settings. |
-| **`restaurant-slug`** | Owner of `restaurant.slug`. `slugify`, `nextAvailableSlug`, `rename` (race-safe). |
-| **`upload`** | S3-compatible uploads. Presign + commit + clear, `r/{restaurantId}/...` key prefix verified twice. |
+| **`menu-builder`** | dnd-kit admin builder. Menu / category / item CRUD + reorder, one thin action per Go endpoint. |
+| **`menu-onboarding`** | Tenant + first-restaurant flow (POST /auth/tenants → refresh → POST /api/restaurants) + seed-or-skip step 2. |
+| **`menu-publishing`** | Public-side render path: `loadPublicMenu` over `GET /public/r/{slug}` (pre-localized), template registry, the `/track/{slug}` view beacon. |
+| **`metrics`** | Analytics loaders over `GET /api/analytics` + `/api/views/month`. |
+| **`plans`** | Plan loader over `GET /api/plan` + static display registry (codes mirror Go's `PlanRegistry`). |
+| **`qr-codes`** | Physical-sticker registry (cross-tenant, staff only). Thin wrappers over `/api/staff/qr-codes` + pure code/stats/print helpers. |
+| **`restaurant-identity`** | Theme/identity/language settings actions over the identity PATCH + staff directory loader. |
+| **`restaurant-slug`** | Pure `slugify` / `isValidSlugShape` helpers. Allocation + rename live in the Go menu service. |
+| **`upload`** | Presign → browser PUT → commit against the Go menu service. Client-side constraint hints only. |
 
 ## Anti-patterns
 
-- A Repository class per entity — slices have ports, not per-table repos.
-- A DI container — use-cases take their port as the first arg; `index.ts` binds production.
-- A `domain/` or `entities/` folder — Drizzle row types are domain-enough.
+- A data layer in TypeScript — no ORMs, repositories, ports/adapters.
+  Backend behaviour changes are Go work (`services/`).
+- Re-validating business rules in actions — the Go service 422s;
+  actions only translate errors for the UI.
 - A `lib/` folder for new code — we migrated away from that.
 - A barrel inside a slice — only the slice root `index.ts` is a barrel.
 - A Server Action in a non-`actions.ts` file — `'use server'` doesn't traverse barrels reliably.
-- Reaching into a sibling slice's internals — `@/features/auth/use-cases/...` bypasses the barrel.
+- Reaching into a sibling slice's internals — bypasses the barrel.

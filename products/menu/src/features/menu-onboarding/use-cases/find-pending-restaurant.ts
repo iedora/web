@@ -1,11 +1,9 @@
 import 'server-only'
-import { and, asc, eq, isNull } from 'drizzle-orm'
-import { db } from '../../../shared/db/client'
-import { restaurant } from '../../../shared/db/schema'
+import { getRestaurant, listRestaurants } from '../../../shared/api'
 
 /**
- * Locate the oldest restaurant belonging to `tenantId` whose
- * post-create wizard never finished (`onboarding_completed_at IS NULL`).
+ * Locate a restaurant of the caller's tenant whose post-create wizard
+ * never finished (`onboardingCompletedAt` unset on the Go side).
  *
  * Used by `/menu/onboarding` to bounce a back-navigation back into
  * step 2 instead of letting the operator silently create a duplicate
@@ -13,23 +11,16 @@ import { restaurant } from '../../../shared/db/schema'
  * pending — the caller is free to render the "create another
  * restaurant" form.
  *
- * "Oldest" because if a tenant ever ends up with multiple pending
- * rows (an aborted flow + a second submit), we resume the earliest
- * — finishing it first keeps the timeline coherent.
+ * Tenant scoping comes from the access token (the Go service lists
+ * only the caller's restaurants), so no tenantId parameter is needed.
  */
-export async function findPendingOnboardingRestaurant(
-  tenantId: string,
-): Promise<{ slug: string } | null> {
-  const rows = await db
-    .select({ slug: restaurant.slug })
-    .from(restaurant)
-    .where(
-      and(
-        eq(restaurant.tenantId, tenantId),
-        isNull(restaurant.onboardingCompletedAt),
-      ),
-    )
-    .orderBy(asc(restaurant.createdAt))
-    .limit(1)
-  return rows[0] ?? null
+export async function findPendingOnboardingRestaurant(): Promise<{
+  slug: string
+} | null> {
+  const { restaurants } = await listRestaurants()
+  for (const summary of restaurants) {
+    const { restaurant } = await getRestaurant(summary.slug)
+    if (!restaurant.onboardingCompletedAt) return { slug: restaurant.slug }
+  }
+  return null
 }

@@ -8,11 +8,13 @@ export type AdminRestaurantRow = {
   name: string
   slug: string
   tenantId: string
-  tenantName: string
-  createdAt: string // ISO
+  menuCount: number
+  dishCount: number
+  views30d: number
+  updatedAt: string // ISO
 }
 
-type SortKey = 'createdAt' | 'name' | 'tenant'
+type SortKey = 'updatedAt' | 'name' | 'views30d'
 type SortDir = 'asc' | 'desc'
 
 const DATE_FMT = new Intl.DateTimeFormat('pt-PT', {
@@ -25,7 +27,7 @@ const DATE_FMT = new Intl.DateTimeFormat('pt-PT', {
 })
 
 // Hoist Collator — `localeCompare` allocates one per call, this is
-// invoked ~N·log(N) times per sort over 200 rows.
+// invoked ~N·log(N) times per sort.
 const PT_COLLATOR = new Intl.Collator('pt-PT')
 const compareStr = PT_COLLATOR.compare
 
@@ -42,61 +44,51 @@ function formatStamp(iso: string): { date: string; time: string } {
 
 export function RestaurantsTable({ rows }: { rows: AdminRestaurantRow[] }) {
   const [query, setQuery] = useState('')
-  const [tenantFilter, setTenantFilter] = useState<string>('')
-  const [sortKey, setSortKey] = useState<SortKey>('createdAt')
+  const [sortKey, setSortKey] = useState<SortKey>('updatedAt')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   // Keep the input snappy while the table re-filters — deferred value
   // ignores the latest keystroke if React is still working on the
   // previous one.
   const deferredQuery = useDeferredValue(query)
 
-  const tenantOptions = useMemo(() => {
-    const seen = new Map<string, string>()
-    for (const r of rows) seen.set(r.tenantId, r.tenantName)
-    return Array.from(seen.entries())
-      .map(([id, name]) => ({ id, name }))
-      .sort((a, b) => compareStr(a.name, b.name))
-  }, [rows])
-
   const filtered = useMemo(() => {
     const q = deferredQuery.trim().toLowerCase()
     const filteredRows = rows.filter((r) => {
-      if (tenantFilter && r.tenantId !== tenantFilter) return false
       if (!q) return true
       return (
         r.name.toLowerCase().includes(q) ||
         r.slug.toLowerCase().includes(q) ||
-        r.tenantName.toLowerCase().includes(q)
+        r.tenantId.toLowerCase().includes(q)
       )
     })
     const cmp = (a: AdminRestaurantRow, b: AdminRestaurantRow) => {
       let v = 0
       switch (sortKey) {
-        case 'createdAt':
-          v = a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0
+        case 'updatedAt':
+          v = a.updatedAt < b.updatedAt ? -1 : a.updatedAt > b.updatedAt ? 1 : 0
           break
         case 'name':
           v = compareStr(a.name, b.name)
           break
-        case 'tenant':
-          v = compareStr(a.tenantName, b.tenantName)
+        case 'views30d':
+          v = a.views30d - b.views30d
           break
       }
       return sortDir === 'asc' ? v : -v
     }
     return [...filteredRows].sort(cmp)
-  }, [rows, deferredQuery, tenantFilter, sortKey, sortDir])
+  }, [rows, deferredQuery, sortKey, sortDir])
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) {
       setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
     } else {
       setSortKey(key)
-      setSortDir(key === 'createdAt' ? 'desc' : 'asc')
+      setSortDir(key === 'name' ? 'asc' : 'desc')
     }
   }
 
-  const hasFilters = query.length > 0 || tenantFilter !== ''
+  const hasFilters = query.length > 0
 
   return (
     <div className="space-y-3" data-test-id="admin-restaurants-table">
@@ -113,27 +105,10 @@ export function RestaurantsTable({ rows }: { rows: AdminRestaurantRow[] }) {
             data-test-id="admin-restaurants-search"
           />
         </div>
-        <select
-          value={tenantFilter}
-          onChange={(e) => setTenantFilter(e.target.value)}
-          aria-label="Filtrar por tenant"
-          className="rounded border border-[var(--ink-14)] bg-[var(--paper)] text-[var(--ink)] px-3 py-2.5 text-sm focus:border-[var(--ink)] focus:outline-none sm:max-w-[200px]"
-          data-test-id="admin-restaurants-tenant-filter"
-        >
-          <option value="">Todos os tenants</option>
-          {tenantOptions.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name}
-            </option>
-          ))}
-        </select>
         {hasFilters ? (
           <button
             type="button"
-            onClick={() => {
-              setQuery('')
-              setTenantFilter('')
-            }}
+            onClick={() => setQuery('')}
             className="rounded border border-[var(--ink-14)] px-3 py-2.5 text-xs uppercase tracking-[0.18em] text-[var(--ink-55)] hover:border-[var(--ink)] hover:text-[var(--ink)]"
             data-test-id="admin-restaurants-clear-filters"
           >
@@ -160,19 +135,23 @@ export function RestaurantsTable({ rows }: { rows: AdminRestaurantRow[] }) {
                 onClick={() => toggleSort('name')}
                 testId="admin-restaurants-sort-name"
               />
+              <th className="px-3 py-2 text-left text-[10.5px] font-[family-name:var(--mono)] font-normal uppercase tracking-[0.18em] text-[var(--ink-55)]">
+                Conteúdo
+              </th>
               <SortableTh
-                label="Tenant"
-                active={sortKey === 'tenant'}
+                label="Views 30d"
+                active={sortKey === 'views30d'}
                 dir={sortDir}
-                onClick={() => toggleSort('tenant')}
-                testId="admin-restaurants-sort-tenant"
+                onClick={() => toggleSort('views30d')}
+                testId="admin-restaurants-sort-views"
+                align="right"
               />
               <SortableTh
-                label="Criado"
-                active={sortKey === 'createdAt'}
+                label="Atualizado"
+                active={sortKey === 'updatedAt'}
                 dir={sortDir}
-                onClick={() => toggleSort('createdAt')}
-                testId="admin-restaurants-sort-created"
+                onClick={() => toggleSort('updatedAt')}
+                testId="admin-restaurants-sort-updated"
                 align="right"
               />
               <th className="px-3 py-2 text-right">
@@ -184,7 +163,7 @@ export function RestaurantsTable({ rows }: { rows: AdminRestaurantRow[] }) {
             {filtered.length === 0 ? (
               <tr>
                 <td
-                  colSpan={4}
+                  colSpan={5}
                   className="px-3 py-8 text-center text-sm text-[var(--ink-55)]"
                   data-test-id="admin-restaurants-empty"
                 >
@@ -195,7 +174,7 @@ export function RestaurantsTable({ rows }: { rows: AdminRestaurantRow[] }) {
               </tr>
             ) : (
               filtered.map((r) => {
-                const stamp = formatStamp(r.createdAt)
+                const stamp = formatStamp(r.updatedAt)
                 return (
                   <tr
                     key={r.id}
@@ -207,33 +186,32 @@ export function RestaurantsTable({ rows }: { rows: AdminRestaurantRow[] }) {
                       <div className="font-[family-name:var(--mono)] text-[11px] text-[var(--ink-55)]">
                         /{r.slug}
                       </div>
-                    </td>
-                    <td className="px-3 py-2.5 align-top text-[13px] text-[var(--ink-70)] max-w-[180px]">
-                      <div className="truncate" title={r.tenantName}>
-                        {r.tenantName}
+                      <div
+                        className="max-w-[180px] truncate font-[family-name:var(--mono)] text-[10px] text-[var(--ink-40)]"
+                        title={r.tenantId}
+                      >
+                        {r.tenantId}
                       </div>
+                    </td>
+                    <td className="px-3 py-2.5 align-top text-[13px] text-[var(--ink-70)] whitespace-nowrap">
+                      {r.menuCount} menu{r.menuCount === 1 ? '' : 's'} ·{' '}
+                      {r.dishCount} prato{r.dishCount === 1 ? '' : 's'}
+                    </td>
+                    <td className="px-3 py-2.5 text-right align-top font-[family-name:var(--mono)] text-[11.5px] text-[var(--ink-55)] whitespace-nowrap tabular-nums">
+                      {r.views30d}
                     </td>
                     <td className="px-3 py-2.5 text-right align-top font-[family-name:var(--mono)] text-[11.5px] text-[var(--ink-55)] whitespace-nowrap tabular-nums">
                       <div>{stamp.date}</div>
                       <div className="text-[var(--ink-40)]">{stamp.time}</div>
                     </td>
                     <td className="px-3 py-2.5 align-top text-right whitespace-nowrap">
-                      <div className="inline-flex gap-1.5">
-                        <Link
-                          href={`/menu/dashboard/r/${r.slug}`}
-                          className="rounded border border-[var(--ink-14)] px-2.5 py-1.5 text-[11px] uppercase tracking-[0.12em] hover:border-[var(--ink)]"
-                          data-test-id={`admin-restaurants-open-${r.slug}`}
-                        >
-                          Abrir
-                        </Link>
-                        <Link
-                          href={`/menu/dashboard/r/${r.slug}/transfer`}
-                          className="rounded bg-[var(--ink)] px-2.5 py-1.5 text-[11px] uppercase tracking-[0.12em] text-[var(--paper)] hover:bg-[var(--cinnabar)]"
-                          data-test-id={`admin-restaurants-transfer-${r.slug}`}
-                        >
-                          Transferir
-                        </Link>
-                      </div>
+                      <Link
+                        href={`/menu/dashboard/r/${r.slug}`}
+                        className="rounded border border-[var(--ink-14)] px-2.5 py-1.5 text-[11px] uppercase tracking-[0.12em] hover:border-[var(--ink)]"
+                        data-test-id={`admin-restaurants-open-${r.slug}`}
+                      >
+                        Abrir
+                      </Link>
                     </td>
                   </tr>
                 )

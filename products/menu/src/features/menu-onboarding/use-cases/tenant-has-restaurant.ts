@@ -1,25 +1,17 @@
 import 'server-only'
-import { eq, sql } from 'drizzle-orm'
-import { db } from '../../../shared/db/client'
-import { restaurant } from '../../../shared/db/schema'
+import { listRestaurants } from '../../../shared/api'
 
 /**
- * Fast yes/no — does the tenant own at least one restaurant row,
+ * Fast yes/no — does the caller's tenant own at least one restaurant,
  * regardless of onboarding state. Used by `/menu/onboarding` to
  * decide whether the page is a legitimate first-time landing
  * (tenant has zero) or a navigation slip (tenant has restaurants,
  * route should bounce to the dashboard).
  *
- * `SELECT 1 ... LIMIT 1` keeps the query cheap on tenants with many
- * restaurants.
+ * Tenant scoping comes from the access token, so no tenantId
+ * parameter is needed.
  */
-export async function tenantHasRestaurant(
-  tenantId: string,
-): Promise<boolean> {
-  const rows = await db
-    .select({ one: sql<number>`1` })
-    .from(restaurant)
-    .where(eq(restaurant.tenantId, tenantId))
-    .limit(1)
-  return rows.length > 0
+export async function tenantHasRestaurant(): Promise<boolean> {
+  const { restaurants } = await listRestaurants()
+  return restaurants.length > 0
 }

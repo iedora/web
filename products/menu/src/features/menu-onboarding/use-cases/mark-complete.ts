@@ -1,20 +1,15 @@
 import 'server-only'
-import { eq } from 'drizzle-orm'
-import { db } from '../../../shared/db/client'
-import { restaurant } from '../../../shared/db/schema'
+import { completeOnboarding } from '../../../shared/api'
 
 /**
- * Flip `restaurant.onboarding_completed_at` to now for the given
- * slug. Idempotent — re-running on an already-completed row simply
- * overwrites the timestamp, which is harmless. Tenancy is enforced
- * by the caller (route handler runs `requireRestaurantBySlug` first);
- * this helper trusts the slug.
+ * Flip the restaurant's onboarding-completed flag via the Go menu
+ * service. Idempotent — re-running on an already-completed restaurant
+ * simply re-stamps the timestamp, which is harmless. Tenancy and
+ * ownership are enforced by the Go service through the caller's
+ * Bearer token; a foreign or unknown slug 404s there.
  */
 export async function markRestaurantOnboardingComplete(
   slug: string,
 ): Promise<void> {
-  await db
-    .update(restaurant)
-    .set({ onboardingCompletedAt: new Date() })
-    .where(eq(restaurant.slug, slug))
+  await completeOnboarding(slug)
 }

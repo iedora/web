@@ -1,0 +1,28 @@
+{
+  "name": "@iedora/api-client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Server-only HTTP client for the Go backend (BFF-lite): auth cookie handling, access-token session decode, and a Bearer-attaching fetch with one-shot refresh. Edge-compatible — importable from Next middleware, RSCs, server actions, and route handlers. The browser never calls the Go services directly.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./middleware": "./src/middleware.ts"
+  },
+  "scripts": {
+    "typecheck": "tsgo --noEmit",
+    "lint": "eslint src --cache --cache-location node_modules/.cache/.eslintcache",
+    "test": "vitest run --passWithNoTests"
+  },
+  "peerDependencies": {
+    "next": "^16.2.6"
+  },
+  "devDependencies": {
+    "@iedora/eslint-config": "workspace:*",
+    "@types/node": "^22.19.19",
+    "eslint": "catalog:",
+    "next": "catalog:",
+    "typescript": "catalog:",
+    "typescript-eslint": "catalog:",
+    "vitest": "catalog:"
+  }
+}

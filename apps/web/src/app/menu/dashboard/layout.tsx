@@ -33,14 +33,10 @@ import {
   SidebarTrigger,
   Wordmark,
 } from '@iedora/design-system'
-import { signInUrl } from '@iedora/product-core/url'
+import { signInUrl } from '@iedora/product-menu/shared/auth-urls'
 import { publicUrl } from '@iedora/product-menu/shared/url'
 import { ONBOARDING_STEPS } from '@iedora/product-menu/features/menu-onboarding'
-import {
-  getEffectiveOrganizationId,
-  getSession,
-  IEDORA_ADMIN_ROLE,
-} from '@iedora/product-menu/features/auth'
+import { getSession, isStaff } from '@iedora/product-menu/features/auth'
 import { listRestaurantsWithCounts } from '@iedora/product-menu/features/dashboard-home'
 import { DEFAULT_PLAN, getOrganizationPlan, planHas } from '@iedora/product-menu/features/plans'
 import { LogoutButton } from '@iedora/product-menu/features/dashboard-home/ui/logout-button'
@@ -61,24 +57,20 @@ export default async function DashboardLayout({
   // the page's `requireActiveOrganization()` redirect fires — flash of
   // empty dashboard chrome on the way to /menu/onboarding. Reported
   // by eduvhc 2026-05-29.
-  // Translations + session + tenant lookup all run concurrently — none
-  // depend on each other. Auth dedupes via React.cache so getSession +
-  // getEffectiveOrganizationId share the same wire call.
+  // Translations + session run concurrently — neither depends on the
+  // other. The session read dedupes via React.cache, so the pages'
+  // own guards share the same cookie parse.
   const tPromise = getTranslations('AppHeader')
   const navPromise = getTranslations('DashboardNav')
-  const [session, tenantId] = await Promise.all([
-    getSession(),
-    getEffectiveOrganizationId(),
-  ])
+  const session = await getSession()
 
-  if (!session?.user) {
+  if (!session) {
     redirect(signInUrl(publicUrl('/menu/dashboard').toString()))
   }
   // Staff (iedora-admin / iedora-support) are cross-tenant operators;
   // they don't need to belong to a tenant to land on the dashboard.
-  const sessionRole =
-    (session?.user as { role?: string | null } | undefined)?.role ?? null
-  const isStaffAdmin = sessionRole === IEDORA_ADMIN_ROLE
+  const tenantId = session.tenantId
+  const isStaffAdmin = isStaff(session)
   const showAdminLink = isStaffAdmin
 
   if (!tenantId && !isStaffAdmin) {
@@ -92,9 +84,9 @@ export default async function DashboardLayout({
   const [t, nav, plan, restaurants] = await Promise.all([
     tPromise,
     navPromise,
-    tenantId ? getOrganizationPlan(tenantId) : Promise.resolve(DEFAULT_PLAN),
+    tenantId ? getOrganizationPlan() : Promise.resolve(DEFAULT_PLAN),
     tenantId
-      ? listRestaurantsWithCounts(tenantId)
+      ? listRestaurantsWithCounts()
       : Promise.resolve(
           [] as Awaited<ReturnType<typeof listRestaurantsWithCounts>>,
         ),
@@ -113,7 +105,7 @@ export default async function DashboardLayout({
   //   ── Account ──                ← billing + AI usage live under here
   //   Billing / Misc
   //   ── Admin ──                  ← only for cross-tenant tools
-  //   QR Codes                       (sessions / users live under core)
+  //   QR Codes                       (sessions / users live in the Go admin BFF)
   //
   // No "Home" entry — the wordmark in the sidebar header already routes
   // to /dashboard and the dashboard's own role is now the org overview,
@@ -187,15 +179,13 @@ export default async function DashboardLayout({
 
           <SidebarFooter>
             <UserLocaleSwitcher />
-            {session?.user && (
-              <span
-                className="min-w-0 truncate font-[family-name:var(--mono)] text-[10.5px] uppercase tracking-[0.18em] text-[var(--ink-40)]"
-                title={session.user.email}
-                data-test-id="dashboard-user-email"
-              >
-                {session.user.email}
-              </span>
-            )}
+            <span
+              className="min-w-0 truncate font-[family-name:var(--mono)] text-[10.5px] uppercase tracking-[0.18em] text-[var(--ink-40)]"
+              title={session.email ?? undefined}
+              data-test-id="dashboard-user-email"
+            >
+              {session.email}
+            </span>
             <LogoutButton />
           </SidebarFooter>
         </Sidebar>

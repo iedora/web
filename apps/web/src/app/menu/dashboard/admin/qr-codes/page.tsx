@@ -1,35 +1,31 @@
 import { headers } from 'next/headers'
-import { requireScope } from '@iedora/product-menu/features/auth'
-import { SCOPES } from '@iedora/auth/scopes'
-import { listQrCodesForAdmin } from '@iedora/product-menu/features/qr-codes'
+import { requireStaff } from '@iedora/product-menu/features/auth'
+import {
+  listQrCodesForAdmin,
+  listRestaurantsForBinding,
+} from '@iedora/product-menu/features/qr-codes'
 import { computeQrStats } from '@iedora/product-menu/features/qr-codes/stats'
 import { QrCodesAdmin } from '@iedora/product-menu/features/qr-codes/ui/qr-codes-admin'
-import { listRestaurantsCrossTenant } from '@iedora/product-menu/features/restaurant-identity'
 import { DashboardPage } from '@iedora/product-menu/shared/ui/dashboard-page'
 
 /**
  * Cross-tenant admin surface for binding QR codes to restaurants.
  *
- * Gating order matters: `requireScope` (cookie + role) FIRST, before
- * any DB read. Without the role the route 404s — we don't want to leak the
- * existence of this surface to tenant users.
+ * Gating order matters: `requireStaff` (session + role) FIRST, before
+ * any service read — non-staff bounce to the dashboard without ever
+ * seeing this surface. The Go menu service re-checks the staff role on
+ * every call, so the guard here is UX, not the security boundary.
  *
- * The restaurant dropdown lists ALL restaurants across every org, which is
- * the whole point of the admin role; tenant scoping deliberately does not
- * apply here.
+ * The restaurant dropdown lists ALL restaurants across every tenant,
+ * which is the whole point of the staff role; tenant scoping
+ * deliberately does not apply here.
  */
 export default async function QrCodesAdminPage() {
-  // Staff-only cross-tenant surface — gated by the dedicated
-  // `staff:menu:qr-codes:manage` (auto-included in the iedora-admin
-  // preset via the staff:* wildcard). The tenant-scope variant
-  // (`tenant:menu:qr-codes:read`) doesn't fit here: staff have no
-  // tenant pinned, so that gate would 404 every admin.
-  // Mutations inside each server action add their own narrower gate.
-  await requireScope(SCOPES.menu.staff.qrCodes.manage)
+  await requireStaff()
 
   const [rows, restaurants] = await Promise.all([
     listQrCodesForAdmin(),
-    listRestaurantsCrossTenant(),
+    listRestaurantsForBinding(),
   ])
 
   const h = await headers()

@@ -14,19 +14,18 @@ import type { PublicMenuData } from './types'
  * source of truth, no fork).
  *
  * Lives in a separate file from `public-menu-view.tsx` because the
- * latter pulls `loadRestaurantSnapshot` (server-only) for the loader;
- * we want this rendering code importable from client surfaces too.
+ * latter pulls the Go-API loader (server-only); we want this rendering
+ * code importable from client surfaces too.
  *
  * Two optional knobs for non-default consumers (e.g. the import IDE):
  *   - `onLanguageChange`: when set, the switcher renders local buttons
  *     that call back instead of `<Link>`-navigating. Lets the preview
  *     swap languages in-place without changing the URL.
  *   - `showBeacon`: defaults to true. The preview turns it off so we
- *     don't hammer `/api/track/preview`.
+ *     don't hammer the Go track endpoint with preview renders.
  */
 
 export type PublicMenuLoaded = PublicMenuData & {
-  tenantId: string
   theme: ResolvedTheme
   defaultLanguage: LanguageCode
   supportedLanguages: LanguageCode[]
@@ -101,17 +100,19 @@ export function PublicMenuView({
         theme={data.theme}
       />
       {showBeacon && (
-        // Pixel beacon — survives any future edge cache layer in front of the
-        // page. The CDN may serve the HTML from cache, but the browser still
-        // loads this image from the origin, so `/api/track/[slug]` runs on
-        // every real visit. See features/menu-publishing/cache.ts.
+        // Pixel beacon — `/track/:slug` is rewritten by next.config.ts to the
+        // Go menu service's `GET /public/track/:slug` 1×1 gif. Survives any
+        // future edge cache layer in front of the page: the CDN may serve the
+        // HTML from cache, but the browser still loads this image from the
+        // origin, so the view is counted on every real visit.
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={`/api/track/${data.restaurant.slug}?lang=${data.currentLanguage}`}
+          src={`/track/${data.restaurant.slug}`}
           alt=""
           aria-hidden="true"
           width={1}
           height={1}
+          loading="eager"
           data-testid="view-beacon"
           style={{
             position: 'absolute',

@@ -24,8 +24,7 @@ import {
   unbindCodeAction,
   updateLabelAction,
 } from '../actions'
-import type { QrCodeListRow } from '../ports'
-import type { QrStats } from '../stats'
+import type { QrCodeListRow, QrStats } from '../stats'
 import { QrPrintSheetDialog } from '../qr-generation/qr-print-sheet-dialog'
 
 type RestaurantOption = { id: string; name: string; slug: string }
@@ -220,7 +219,7 @@ function BulkGenerateForm() {
       // Show a small mono-caps confirmation only. The codes themselves
       // land in the Registry table below via the action's revalidate —
       // no need for an inline list + copy block here.
-      setGeneratedCount(res.data.codes.length)
+      setGeneratedCount(res.data.count)
     })
   }
 
@@ -365,7 +364,7 @@ function CodeRow({
         <div className="flex items-baseline gap-3">
           <span className="font-mono text-sm text-[var(--ink)] break-all">{row.code}</span>
           <time
-            dateTime={row.createdAt instanceof Date ? row.createdAt.toISOString() : String(row.createdAt)}
+            dateTime={row.createdAt}
             className="font-[family-name:var(--mono)] text-[10px] uppercase tracking-[0.18em] text-[var(--ink-40)]"
             data-test-id={`qr-codes-row-created-${row.code}`}
           >
@@ -528,8 +527,8 @@ function InlineLabelField({
 // Short relative date — "today", "yesterday", "Nd ago", or "DD MMM" if
 // more than a week. Mono-caps short so it sits next to the code without
 // fighting for attention.
-function formatRelative(input: Date | string): string {
-  const d = input instanceof Date ? input : new Date(input)
+function formatRelative(input: string): string {
+  const d = new Date(input)
   const ms = Date.now() - d.getTime()
   const day = 24 * 60 * 60 * 1000
   if (ms < day) return 'today'

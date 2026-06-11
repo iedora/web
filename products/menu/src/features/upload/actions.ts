@@ -1,70 +1,65 @@
 'use server'
 
-import { z } from 'zod'
-import { requireRestaurantAccess } from '../auth'
-import { enforceRateLimit } from '../rate-limit'
-import { getStorage } from './adapters/factory'
-import { clearAsset as runClearAsset } from './use-cases/clear-asset'
-import { commitAsset as runCommitAsset } from './use-cases/commit-asset'
-import { presignAsset as runPresignAsset } from './use-cases/presign-asset'
-import type { PresignedUpload } from './types'
+import { ApiError } from '@iedora/api-client'
+import * as api from '../../shared/api'
+import type { PresignedUpload } from '../../shared/api'
+import type { AssetTarget } from './types'
 
 /**
- * Server action shells — authenticate the caller, then delegate to the
- * use-case with the production storage adapter. Keep these thin so the
- * testable surface stays in `./use-cases/*`.
+ * Server action shells over the Go menu service's upload endpoints.
+ * Flow: presign (server) → browser PUTs the file straight to storage →
+ * commit (server) persists the public URL on the restaurant / item.
  *
- * AGENTS.md hard rule #9: `requireRestaurantAccess` runs first, then the
- * use-case re-validates the key (`assertKeyBelongsToTarget`) as
- * defense-in-depth against a stale presign being redirected.
+ * The Go service owns ALL authorization (Bearer token + slug scope),
+ * key derivation, size/content-type limits, and the head-check on
+ * commit — these only translate `ApiError` into the `{ ok, error }`
+ * shape the `<ImageUpload>` component renders.
  */
-
-// Minimal upfront parse so we can pull `restaurantId` out before calling the
-// auth guard. The use-case re-parses with the full schema.
-const restaurantIdShape = z.object({
-  target: z.object({ restaurantId: z.string().min(1) }).passthrough(),
-})
 
 type Result<T> = { ok: true; data: T } | { ok: false; error: string }
 
-function pickRestaurantId(raw: unknown): string | null {
-  const parsed = restaurantIdShape.safeParse(raw)
-  return parsed.success ? parsed.data.target.restaurantId : null
+function errorMessage(err: unknown): string {
+  return err instanceof ApiError ? err.message : 'Something went wrong'
 }
 
-async function gate(
-  input: unknown,
-  policy: 'presign' | 'commit' | 'clear',
-): Promise<{ ok: true; tenantId: string; restaurantId: string } | { ok: false; error: string }> {
-  const restaurantId = pickRestaurantId(input)
-  if (!restaurantId) return { ok: false, error: 'Invalid input' }
-  const { tenantId } = await requireRestaurantAccess(restaurantId)
-  const decision = await enforceRateLimit(policy, `org:${tenantId}`)
-  if (!decision.ok) {
-    return { ok: false, error: `Too many requests. Try again in ${decision.retryAfterSec}s.` }
+function itemId(target: AssetTarget): string | undefined {
+  return target.kind === 'item-photo' ? target.itemId : undefined
+}
+
+export async function requestUploadUrl(input: {
+  target: AssetTarget
+  contentType: string
+}): Promise<Result<PresignedUpload>> {
+  const { target, contentType } = input
+  try {
+    const data = await api.presignUpload(target.slug, target.kind, contentType, itemId(target))
+    return { ok: true, data }
+  } catch (err) {
+    return { ok: false, error: errorMessage(err) }
   }
-  return { ok: true, tenantId: tenantId, restaurantId }
 }
 
-export async function requestUploadUrl(
-  input: unknown,
-): Promise<Result<PresignedUpload>> {
-  const guarded = await gate(input, 'presign')
-  if (!guarded.ok) return guarded
-  const storage = await getStorage()
-  return runPresignAsset({ storage }, input)
+export async function commitAsset(input: {
+  target: AssetTarget
+  key: string
+}): Promise<Result<{ url: string }>> {
+  const { target, key } = input
+  try {
+    const data = await api.commitUpload(target.slug, target.kind, key, itemId(target))
+    return { ok: true, data }
+  } catch (err) {
+    return { ok: false, error: errorMessage(err) }
+  }
 }
 
-export async function commitAsset(input: unknown): Promise<Result<{ url: string }>> {
-  const guarded = await gate(input, 'commit')
-  if (!guarded.ok) return guarded
-  const storage = await getStorage()
-  return runCommitAsset({ storage }, input)
-}
-
-export async function clearAsset(input: unknown): Promise<Result<null>> {
-  const guarded = await gate(input, 'clear')
-  if (!guarded.ok) return guarded
-  const storage = await getStorage()
-  return runClearAsset({ storage }, input)
+export async function clearAsset(input: {
+  target: AssetTarget
+}): Promise<Result<null>> {
+  const { target } = input
+  try {
+    await api.clearUpload(target.slug, target.kind, itemId(target))
+    return { ok: true, data: null }
+  } catch (err) {
+    return { ok: false, error: errorMessage(err) }
+  }
 }

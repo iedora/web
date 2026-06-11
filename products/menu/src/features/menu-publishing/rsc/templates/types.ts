@@ -1,5 +1,5 @@
 import type { ComponentType } from 'react'
-import type { RestaurantTheme } from '../../../../shared/db/schema'
+import type { RestaurantTheme } from '../theme'
 import type { RenderProps } from '../types'
 
 export type TemplateId = NonNullable<RestaurantTheme['layout']>

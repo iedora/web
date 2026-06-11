@@ -18,26 +18,37 @@
     "qrCodes": "Códigos QR"
   },
   "Auth": {
-    "signupEyebrow": "à mesa",
-    "signupTitle": "Criar a tua conta no Menu",
-    "signupSubtitle": "Começa a construir menus digitais para o teu restaurante.",
-    "loginEyebrow": "bem-vindo de volta",
-    "loginTitle": "Entrar no Menu",
-    "loginSubtitle": "Bem-vindo de volta.",
-    "name": "Nome",
-    "namePlaceholder": "Ada Lovelace",
-    "email": "Email",
-    "emailPlaceholder": "tu@exemplo.com",
-    "password": "Palavra-passe",
-    "passwordHint": "Pelo menos 8 caracteres.",
-    "signup": "Criar conta",
-    "creatingAccount": "A criar conta…",
-    "login": "Entrar",
-    "loggingIn": "A entrar…",
-    "alreadyHaveAccount": "Já tens conta?",
-    "noAccount": "Ainda não tens conta?",
-    "couldNotCreate": "Não foi possível criar a conta",
-    "invalidCredentials": "Email ou palavra-passe inválidos"
+    "signIn": {
+      "title": "Bem-vindo de volta",
+      "subtitle": "Inicie sessão para continuar na iedora.",
+      "emailLabel": "Email",
+      "emailPlaceholder": "voce@restaurante.com",
+      "passwordLabel": "Palavra-passe",
+      "submit": "Entrar",
+      "submitting": "A entrar…",
+      "noAccount": "Ainda não tem conta?",
+      "signUpLink": "Crie uma",
+      "errorGeneric": "Não foi possível iniciar sessão. Verifique as credenciais."
+    },
+    "signUp": {
+      "title": "Crie a sua conta",
+      "subtitle": "Demora um minuto.",
+      "nameLabel": "Nome",
+      "namePlaceholder": "O seu nome completo",
+      "emailLabel": "Email",
+      "emailPlaceholder": "voce@restaurante.com",
+      "passwordLabel": "Palavra-passe",
+      "passwordHint": "12 caracteres ou mais.",
+      "submit": "Criar conta",
+      "submitting": "A criar conta…",
+      "haveAccount": "Já tem conta?",
+      "signInLink": "Iniciar sessão",
+      "errorGeneric": "Não foi possível criar a conta. Tente novamente."
+    },
+    "signOut": {
+      "title": "Sessão terminada",
+      "body": "Até breve."
+    }
   },
   "Onboarding": {
     "eyebrow": "primeiro prato",
@@ -61,10 +72,10 @@
     "menu": {
       "eyebrow": "segundo prato",
       "title": "Monta o teu menu",
-      "subtitle": "Tira uma foto ao menu que já tens — lemos pratos e preços em segundos.",
-      "subtitleAside": "Revês e editas tudo antes de guardar.",
+      "subtitle": "Começa com um menu de exemplo — pratos, secções e preços que podes editar à vontade.",
+      "subtitleAside": "Tudo pode ser renomeado, alterado ou removido depois.",
       "skip": "Saltar — adiciono pratos manualmente",
-      "skipHint": "Podes importar uma foto a qualquer altura na página do restaurante."
+      "skipHint": "Podes montar o menu secção a secção na página do restaurante."
     }
   },
   "Dashboard": {
@@ -356,19 +367,6 @@
   },
   "Billing": {
     "title": "Faturação",
-    "latestPayment": {
-      "heading": "Último pagamento",
-      "plan": "Plano",
-      "period": "Período",
-      "paid": "Pagaste",
-      "listPrice": "Preço de tabela",
-      "discount": "Desconto",
-      "method": "Método",
-      "methodLabel": {
-        "mbway": "MB WAY",
-        "cash": "Dinheiro"
-      }
-    },
     "currentPlanTitle": "Plano atual",
     "currentPlanSubtitle": "Muda quando quiseres. Aplica-se na próxima fatura.",
     "upgradeCta": "Faz upgrade para adicionar mais",
@@ -377,53 +375,38 @@
     "monthlyViewsCount": "{count, number} visualizações mensais",
     "unlimitedMonthlyViews": "Visualizações ilimitadas",
     "unlimitedTranslations": "Traduções ilimitadas",
-    "aiMenuGenerationsPerWeek": "{count, plural, =0 {Sem importações AI de menus} =1 {1 importação AI de menu por semana} other {# importações AI de menus por semana}}",
     "exportPdf": "Exportar menus como PDF para impressão",
     "customBranding": "Remover branding Menu",
     "activePlan": "Ativo",
-    "switching": "A mudar…",
-    "invoicesTitle": "Faturas",
-    "invoicesSubtitle": "Recibos de períodos anteriores.",
-    "invoicesYearAria": "Selecionar ano",
-    "invoicesEmpty": "Sem faturas em {year}.",
-    "colIssued": "Emitida",
-    "colPlan": "Plano",
-    "colPeriod": "Período",
-    "colAmount": "Valor",
-    "colStatus": "Estado",
-    "status": {
-      "paid": "Paga",
-      "pending": "Pendente",
-      "void": "Anulada"
-    },
     "plans": {
-      "free": {
+      "menu_free": {
         "name": "Free",
-        "tagline": "Começa com um restaurante.",
-        "cta": "Mudar para Free"
+        "tagline": "Começa com um restaurante."
       },
-      "casa": {
-        "name": "Casa",
+      "menu_pro": {
+        "name": "Pro",
         "tagline": "Tudo no Free, mais as ferramentas para crescer.",
-        "cta": "Subir para Casa",
         "badge": "Recomendado"
+      },
+      "menu_agency": {
+        "name": "Agency",
+        "tagline": "Restaurantes ilimitados para equipas com várias casas."
       }
-    }
+    },
+    "changePlanHint": "Para mudar de plano, contacta a equipa iedora."
   },
   "Misc": {
     "title": "Outros",
     "description": "Uso ligado ao plano que ainda não encaixa na Faturação.",
-    "aiUsageTitle": "Importações de menu com IA",
-    "aiUsageTagline": "Janela de 7 dias. Conta cada importação de menu por IA nesta organização.",
-    "usageCount": "{used} de {limit} usadas",
-    "remainingCount": "{count, plural, =0 {Nenhuma restante} =1 {1 restante} other {# restantes}}",
-    "resetsAt": "Próximo slot liberta a {when}",
     "plans": {
-      "free": {
+      "menu_free": {
         "name": "Free"
       },
-      "casa": {
-        "name": "Casa"
+      "menu_pro": {
+        "name": "Pro"
+      },
+      "menu_agency": {
+        "name": "Agency"
       }
     }
   },
@@ -498,397 +481,84 @@
     "translate": "Traduzir",
     "back": "Voltar"
   },
-  "Core": {
-    "signIn": {
-      "title": "Bem-vindo de volta",
-      "subtitle": "Inicie sessão para continuar na iedora.",
-      "emailLabel": "Email",
-      "emailPlaceholder": "voce@restaurante.com",
-      "passwordLabel": "Palavra-passe",
-      "submit": "Entrar",
-      "submitting": "A entrar…",
-      "noAccount": "Ainda não tem conta?",
-      "signUpLink": "Crie uma",
-      "errorGeneric": "Não foi possível iniciar sessão. Verifique as credenciais."
+  "Imopush": {
+    "PropertyList": {
+      "title": "Propriedades",
+      "newProperty": "Nova propriedade",
+      "emptyLabel": "Sem propriedades",
+      "emptyHint": "Adiciona a primeira propriedade acima."
     },
-    "signUp": {
-      "title": "Crie a sua conta",
-      "subtitle": "Demora um minuto.",
-      "nameLabel": "Nome",
-      "namePlaceholder": "O seu nome completo",
-      "emailLabel": "Email",
-      "emailPlaceholder": "voce@restaurante.com",
-      "passwordLabel": "Palavra-passe",
-      "passwordHint": "12 caracteres ou mais.",
-      "submit": "Criar conta",
-      "submitting": "A criar conta…",
-      "haveAccount": "Já tem conta?",
-      "signInLink": "Iniciar sessão",
-      "errorGeneric": "Não foi possível criar a conta. Tente novamente."
-    },
-    "signOut": {
-      "title": "Sessão terminada",
-      "body": "Até breve."
-    },
-    "admin": {
-      "title": "Admin",
-      "subtitle": "Superfície de staff iedora.",
-      "sessions": {
-        "title": "Sessões",
-        "subtitle": "Sessões ativas em todos os produtos iedora.",
-        "columnUser": "Utilizador",
-        "columnDevice": "Dispositivo",
-        "columnIp": "IP",
-        "columnIssued": "Emitida",
-        "columnExpires": "Expira",
-        "revoke": "Revogar",
-        "revoking": "A revogar…",
-        "empty": "Sem sessões ativas.",
-        "crumbAdmin": "Admin",
-        "impersonatedBadge": "Personificada",
-        "filterQueryLabel": "Pesquisar",
-        "filterQueryPlaceholder": "Email ou nome",
-        "filterImpersonated": "Apenas personificadas",
-        "filterApply": "Aplicar"
-      },
-      "payments": {
-        "title": "Pagamentos manuais",
-        "description": "Pagamentos offline (MBWay, dinheiro) registados à mão. O desconto vs. preço de tabela é calculado em runtime a partir do registry de planos.",
-        "crumbAdmin": "Admin",
-        "empty": "Ainda não há pagamentos registados.",
-        "openForm": "+ Registar pagamento",
-        "cancelForm": "Cancelar",
-        "formHeading": "Registar pagamento",
-        "tenantLabel": "Tenant",
-        "tenantSearchPlaceholder": "Pesquisar tenants…",
-        "planLabel": "Plano",
-        "paidAtLabel": "Data de pagamento",
-        "validMonthsLabel": "Válido (meses)",
-        "amountLabel": "Valor recebido (tabela {eur} €)",
-        "methodLabel": "Método",
-        "campaignLabel": "Tag de campanha",
-        "campaignPlaceholder": "ex.: beta-user, launch-50",
-        "notesLabel": "Notas",
-        "submit": "Registar",
-        "submitting": "A registar…",
-        "filterMethod": "Método",
-        "filterMethodAll": "Todos os métodos",
-        "filterCampaign": "Filtro de campanha",
-        "filterCampaignPlaceholder": "Filtrar por campanha…",
-        "searching": "A pesquisar…",
-        "deleteAction": "Apagar",
-        "deleting": "A apagar…",
-        "deleteConfirm": "Apagar este pagamento? O audit log mantém-se.",
-        "discountNone": "sem desconto",
-        "discountPreview": "{pct}% de desconto vs. preço de tabela.",
-        "overpaidPreview": "Pagou {pct}% acima do tabela.",
-        "listPriceMatch": "Igual ao preço de tabela.",
-        "errorTenant": "Escolhe um tenant.",
-        "errorPlan": "Escolhe um plano.",
-        "errorAmount": "Valor tem que ser ≥ 0.",
-        "method": {
-          "mbway": "MB WAY",
-          "cash": "Dinheiro"
-        }
-      },
-      "nav": {
-        "ariaLabel": "Navegação de admin",
-        "openNavigation": "Abrir navegação",
-        "closeNavigation": "Fechar navegação",
-        "brandHome": "Início iedora",
-        "sectionAdmin": "Admin",
-        "sectionExit": "Sessão",
-        "overview": "Visão geral",
-        "users": "Utilizadores",
-        "access": "Acessos",
-        "organizations": "Organizações",
-        "sessions": "Sessões",
-        "payments": "Pagamentos",
-        "audit": "Auditoria",
-        "signOut": "Terminar sessão"
-      },
-      "audit": {
-        "title": "Log de auditoria",
-        "description": "Timeline append-only de cada mudança de estado em auth + admin. Gateado por `staff:core:audit:read`.",
-        "crumbAdmin": "Admin",
-        "filterEventLabel": "Evento",
-        "filterEventPlaceholder": "ex.: user.banned",
-        "filterActorLabel": "Email do actor",
-        "filterActorPlaceholder": "Filtrar por actor",
-        "filterImportantOnly": "Só importantes",
-        "filterApply": "Aplicar",
-        "empty": "Sem eventos para o filtro atual.",
-        "columnAt": "Quando",
-        "columnEvent": "Evento",
-        "columnOutcome": "Outcome",
-        "columnActor": "Actor",
-        "columnTarget": "Alvo",
-        "columnDetail": "Meta",
-        "actorSystem": "sistema",
-        "detailShow": "ver",
-        "paginationPrev": "Anterior",
-        "paginationNext": "Seguinte",
-        "paginationOf": "Página {page} de {totalPages}"
-      },
-      "access": {
-        "title": "Acessos",
-        "description": "Cada funcionalidade é gateada por scopes. Um role é apenas um pacote nomeado de scopes — o que se mostra abaixo é o binding em tempo real, derivado da taxonomia de auth.",
-        "crumbAdmin": "Admin",
-        "rolesHeading": "Roles de staff",
-        "scopesHeading": "Scopes",
-        "youBadge": "tu",
-        "noScopes": "Sem scopes atribuídos.",
-        "verbCount": "{count, plural, =0 {sem verbos} one {# verbo} other {# verbos}}",
-        "roles": {
-          "iedora-admin": {
-            "description": "Role supremo cross-tenant. Todos os scopes em todos os recursos."
-          },
-          "iedora-support": {
-            "description": "Lifecycle de users no dia-a-dia. Não pode atribuir roles nem fazer impersonate."
-          }
-        },
-        "products": {
-          "core": "Core (auth + admin)",
-          "menu": "Menu (restaurantes)"
-        },
-        "kinds": {
-          "staff": "Staff (cross-tenant)",
-          "tenant": "Por tenant"
-        },
-        "scopes": {
-          "core": {
-            "staff": {
-              "admin": {
-                "read": "Entrar no shell admin cross-tenant. Todos os roles de staff têm-no."
-              },
-              "billing": {
-                "manage": "Registar / apagar pagamentos manuais offline (MBWay, dinheiro) cross-tenant."
-              },
-              "audit": {
-                "read": "Ler o log de auditoria append-only de todas as mudanças de estado em auth + admin."
-              },
-              "members": {
-                "remove": "Remover um membro de qualquer tenant (troubleshooting cross-tenant).",
-                "update-scopes": "Reescrever os scopes numa membership (tenant, user). Privilegiado — só admin (dá owner do tenant)."
-              },
-              "sessions": {
-                "list": "Listar sessões ativas de todos os users.",
-                "revoke": "Matar uma sessão (singular ou todas-do-user)."
-              },
-              "tenants": {
-                "list": "Listar todos os tenants da plataforma.",
-                "get": "Ver identidade, membros e subscriptions de um tenant.",
-                "delete": "Apagar um tenant com cascade nas memberships + subscriptions. Privilegiado — só admin."
-              },
-              "users": {
-                "read": "Listar e ver detalhes de users (incl. sessões).",
-                "ban": "Bloquear e desbloquear contas (lifecycle reversível).",
-                "set-role": "Atribuir ou revogar roles de staff. Privilegiado — só admin.",
-                "impersonate": "Entrar como outro user. Privilegiado — só admin."
-              }
-            },
-            "tenant": {
-              "billing": {
-                "read": "Ver subscriptions e faturas deste tenant.",
-                "change-plan": "Mudar o plano de qualquer subscription deste tenant.",
-                "update-payment": "Atualizar o método de pagamento das subscriptions deste tenant."
-              },
-              "members": {
-                "read": "Ver a lista de membros deste tenant.",
-                "invite": "Convidar um novo user para este tenant.",
-                "remove": "Remover um membro deste tenant.",
-                "grant": "Ajustar os scopes de um membro dentro deste tenant."
-              },
-              "tenant": {
-                "delete": "Apagar este tenant. Reservado ao owner."
-              }
-            }
-          },
-          "menu": {
-            "staff": {
-              "ai": {
-                "unlimited": "Ignorar a quota semanal de geração de IA nos imports de menu."
-              },
-              "restaurants": {
-                "transfer": "Transferir um restaurante para outro tenant + owner."
-              },
-              "qr-codes": {
-                "manage": "Gerir o inventário cross-tenant de QR codes (mint, bind, apagar)."
-              }
-            },
-            "tenant": {
-              "restaurants": {
-                "read": "Ver restaurantes deste tenant.",
-                "create": "Adicionar um restaurante novo a este tenant.",
-                "update": "Editar identidade, tema ou estrutura de menu de um restaurante.",
-                "delete": "Apagar um restaurante e os seus menus."
-              },
-              "qr-codes": {
-                "read": "Ver QR codes deste tenant.",
-                "create": "Gerar QR codes novos (singular ou em bulk).",
-                "update": "Ligar um QR code existente a um restaurante.",
-                "delete": "Eliminar QR codes."
-              }
-            }
-          }
-        }
-      },
-      "overview": {
-        "title": "Admin",
-        "description": "Controlos cross-tenant para a equipa iedora.",
-        "you": {
-          "signedInAs": "Sessão iniciada como",
-          "roleAdmin": "iedora-admin"
-        },
-        "users": {
-          "title": "Utilizadores",
-          "count": "{count} no total",
-          "cta": "Gerir utilizadores"
-        },
-        "orgs": {
-          "title": "Organizações",
-          "count": "{count} no total",
-          "cta": "Gerir organizações"
-        },
-        "sessions": {
-          "title": "Sessões",
-          "description": "Todas as sessões ativas em todos os produtos.",
-          "cta": "Inspecionar sessões"
-        }
-      },
-      "users": {
-        "title": "Utilizadores",
-        "description": "Todos os utilizadores na plataforma, em todos os tenants.",
-        "crumbAdmin": "Admin",
-        "columnUser": "Utilizador",
-        "columnRole": "Papel",
-        "columnStatus": "Estado",
-        "columnCreated": "Criado",
-        "roleIedoraAdmin": "Admin iedora",
-        "roleMember": "Tenant",
-        "statusActive": "Ativo",
-        "statusBanned": "Banido",
-        "statusUnverified": "Não verificado",
-        "empty": "Nenhum utilizador corresponde.",
-        "paginationPrev": "Anterior",
-        "paginationNext": "Próximo",
-        "paginationOf": "Página {page} de {totalPages}",
-        "filters": {
-          "queryLabel": "Pesquisar",
-          "queryPlaceholder": "Email ou nome",
-          "roleLabel": "Papel",
-          "roleAny": "Qualquer papel",
-          "roleIedoraAdmin": "Admin iedora",
-          "roleMember": "Tenant",
-          "bannedLabel": "Estado",
-          "bannedAny": "Qualquer estado",
-          "bannedYes": "Banido",
-          "bannedNo": "Ativo",
-          "apply": "Aplicar",
-          "applying": "A aplicar…"
-        },
-        "row": {
-          "view": "Ver",
-          "ban": "Banir",
-          "unban": "Desbanir",
-          "unbanning": "A desbanir…",
-          "impersonate": "Personificar",
-          "impersonating": "A personificar…"
-        },
-        "ban": {
-          "trigger": "Banir",
-          "title": "Banir utilizador",
-          "description": "Banir {email}. Todas as sessões ativas serão encerradas.",
-          "reasonLabel": "Motivo",
-          "reasonPlaceholder": "Opcional — apenas para auditoria interna.",
-          "daysLabel": "Duração",
-          "daysPlaceholder": "Dias (em branco = permanente)",
-          "daysHint": "Em branco = banimento permanente.",
-          "cancel": "Cancelar",
-          "submit": "Banir",
-          "submitting": "A banir…",
-          "errorGeneric": "Não foi possível banir este utilizador."
-        },
-        "role": {
-          "member": "Tenant",
-          "iedoraAdmin": "Admin iedora",
-          "updated": "Papel atualizado.",
-          "errorGeneric": "Não foi possível atualizar o papel."
-        },
-        "detail": {
-          "crumbAdmin": "Admin",
-          "crumbUsers": "Utilizadores",
-          "descriptionSelf": "És tu. Ações destrutivas estão desativadas.",
-          "roleTitle": "Papel",
-          "roleDesc": "Papel cross-tenant na linha do utilizador.",
-          "statusTitle": "Estado",
-          "statusActive": "Ativo",
-          "statusBanned": "Banido",
-          "statusVerified": "Email verificado",
-          "statusUnverified": "Email não verificado",
-          "banReasonLabel": "Motivo",
-          "sessionsTitle": "Sessões ativas",
-          "sessionsCount": "{count} ativas",
-          "sessionsEmpty": "Sem sessões ativas.",
-          "sessionColumnDevice": "Dispositivo",
-          "sessionColumnIp": "IP",
-          "sessionColumnIssued": "Emitida",
-          "sessionColumnExpires": "Expira",
-          "revokeAll": "Revogar todas as sessões"
-        }
-      },
-      "orgs": {
-        "title": "Organizações",
-        "description": "Todas as orgs tenant na plataforma.",
-        "crumbAdmin": "Admin",
-        "columnOrg": "Organização",
-        "columnMembers": "Membros",
-        "columnPlan": "Plano",
-        "columnCreated": "Criada",
-        "view": "Ver",
-        "empty": "Nenhuma organização corresponde.",
-        "paginationPrev": "Anterior",
-        "paginationNext": "Próximo",
-        "paginationOf": "Página {page} de {totalPages}",
-        "filters": {
-          "queryLabel": "Pesquisar",
-          "queryPlaceholder": "Nome ou slug",
-          "apply": "Aplicar",
-          "applying": "A aplicar…"
-        },
-        "members": {
-          "role-owner": "Proprietário",
-          "role-admin": "Admin",
-          "role-member": "Membro",
-          "remove": "Remover",
-          "confirmRemove": "Confirmar remoção",
-          "removing": "A remover…",
-          "cancel": "Cancelar"
-        },
-        "invitations": {
-          "cancel": "Cancelar",
-          "cancelling": "A cancelar…"
-        },
-        "detail": {
-          "crumbAdmin": "Admin",
-          "crumbOrgs": "Organizações",
-          "description": "{count} membros.",
-          "membersTitle": "Membros",
-          "membersCount": "{count} no total",
-          "membersEmpty": "Sem membros.",
-          "memberColumnUser": "Utilizador",
-          "memberColumnJoined": "Entrou",
-          "memberColumnRole": "Papel",
-          "invitationsTitle": "Convites",
-          "invitationsCount": "{count} pendentes",
-          "invitationsEmpty": "Sem convites pendentes.",
-          "invitationsEmptyTitle": "Convites",
-          "inviteColumnEmail": "Email",
-          "inviteColumnRole": "Papel",
-          "inviteColumnInviter": "Convidador",
-          "inviteColumnExpires": "Expira"
-        }
+    "Property": {
+      "location": "Localização",
+      "data": "Dados",
+      "features": "Características",
+      "description": "Descrição",
+      "platforms": "Plataformas",
+      "statusDraft": "Por publicar",
+      "statusPublished": "Publicado",
+      "statusPublishing": "A publicar…",
+      "statusFailed": "Falha",
+      "energyCertificate": "Certificado energético",
+      "heating": "Aquecimento",
+      "heatingIndividual": "Individual",
+      "heatingCentral": "Central",
+      "heatingNone": "Sem aquecimento",
+      "yearBuilt": "Ano de construção",
+      "delete": "Eliminar",
+      "deleteTitle": "Eliminar propriedade",
+      "deleteDescription": "Esta ação irá remover a propriedade de todas as plataformas onde foi publicada.",
+      "viewListing": "Ver anúncio",
+      "rooms": "T{count}",
+      "bathrooms": "{count} WC",
+      "rooms_label": "Quartos",
+      "bathrooms_label": "Casas de banho",
+      "areaLabel": "Área",
+      "usableArea": "Área útil",
+      "lotSize": "Terreno",
+      "floors": "Pisos",
+      "feature": {
+        "pool": "Piscina",
+        "garden": "Jardim",
+        "terrace": "Terraço",
+        "balcony": "Varanda",
+        "parking": "Estacionamento",
+        "storage": "Arrecadação",
+        "wardrobe": "Roupeiros",
+        "airConditioning": "Ar condicionado",
+        "fireplace": "Lareira",
+        "lift": "Elevador"
       }
+    },
+    "PropertyPhotos": {
+      "noPhoto": "Sem foto",
+      "expandPhoto": "Expandir foto",
+      "previousPhoto": "Foto anterior",
+      "nextPhoto": "Próxima foto",
+      "closeLightbox": "Fechar"
+    },
+    "IdealistaPublish": {
+      "publish": "Publicar no Idealista",
+      "publishing": "A publicar…",
+      "retry": "Tentar novamente"
+    },
+    "IdealistaIntegrator": {
+      "title": "Idealista",
+      "description": "Publica e gere anúncios no Idealista.pt usando a conta da agência.",
+      "accountLabel": "Conta configurada",
+      "stateLabel": "Estado",
+      "stateActive": "Ativo",
+      "note": "As publicações são feitas por automação do Chrome com CDP — sem API Key necessária."
+    },
+    "Nav": {
+      "ariaLabel": "Navegação principal",
+      "properties": "Propriedades",
+      "integrators": "Integradores",
+      "idealista": "Idealista"
+    },
+    "Common": {
+      "edit": "Editar",
+      "delete": "Eliminar",
+      "cancel": "Cancelar"
     }
   }
 }

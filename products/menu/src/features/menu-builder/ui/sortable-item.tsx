@@ -69,13 +69,11 @@ function variantsToEditable(
 
 export function SortableItem({
   slug,
-  restaurantId,
   defaultLanguage,
   supportedLanguages,
   item,
 }: {
   slug: string
-  restaurantId: string
   defaultLanguage: LanguageCode
   supportedLanguages: LanguageCode[]
   item: BuilderItem
@@ -323,7 +321,7 @@ export function SortableItem({
               <Field>
                 <FieldLabel>{t('itemPhoto')}</FieldLabel>
                 <ImageUpload
-                  target={{ kind: 'item-photo', restaurantId, itemId: item.id }}
+                  target={{ kind: 'item-photo', slug, itemId: item.id }}
                   currentUrl={imageUrl}
                   label={t('itemPhoto')}
                   onChange={(url) => {

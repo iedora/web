@@ -23,7 +23,6 @@ import {
 
 const ENV_KEYS = {
   menu: 'NEXT_PUBLIC_MENU_URL',
-  core: 'NEXT_PUBLIC_CORE_URL',
 } as const satisfies Record<ProductId, string>
 
 afterEach(() => {
@@ -43,7 +42,7 @@ describe('PRODUCTS registry', () => {
     // The type is structural, but the runtime keys should match the
     // declared ProductId members. Touch each id so a future addition
     // requires updating this list.
-    const ids: ProductId[] = ['menu', 'core']
+    const ids: ProductId[] = ['menu']
     expect(new Set(ids)).toEqual(new Set(Object.values(PRODUCTS)))
   })
 })
@@ -51,15 +50,12 @@ describe('PRODUCTS registry', () => {
 describe('productUrl()', () => {
   it('falls back to https://<id>.iedora.com when env is unset', () => {
     expect(productUrl(PRODUCTS.menu)).toBe(`https://menu.${BRAND_DOMAIN}`)
-    expect(productUrl(PRODUCTS.core)).toBe(`https://core.${BRAND_DOMAIN}`)
   })
 
   it('returns the env var when set', () => {
     process.env.NEXT_PUBLIC_MENU_URL = 'http://localhost:3000/menu'
-    process.env.NEXT_PUBLIC_CORE_URL = 'http://localhost:3000/core'
 
     expect(productUrl(PRODUCTS.menu)).toBe('http://localhost:3000/menu')
-    expect(productUrl(PRODUCTS.core)).toBe('http://localhost:3000/core')
   })
 
   it('every PRODUCTS entry resolves through productUrl', () => {
@@ -74,10 +70,4 @@ describe('productUrl()', () => {
     }
   })
 
-  it('env var override does not leak across ids', () => {
-    process.env.NEXT_PUBLIC_MENU_URL = 'http://menu-override'
-    // core still hits the default
-    expect(productUrl(PRODUCTS.menu)).toBe('http://menu-override')
-    expect(productUrl(PRODUCTS.core)).toBe(`https://core.${BRAND_DOMAIN}`)
-  })
 })

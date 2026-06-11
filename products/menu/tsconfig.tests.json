@@ -15,18 +15,7 @@
   "include": [
     "src/**/*.test.ts",
     "src/**/*.test.tsx",
-    "src/**/*.integration.test.ts",
-    "src/**/testing/**/*.ts",
-    "src/**/testing/**/*.tsx",
-    "src/**/*.live.test.ts",
-    "tests/**/*.ts",
-    "scripts/**/*.ts",
-    "instrumentation.ts",
-    "instrumentation.node.ts",
-    "vitest.config.ts",
-    "vitest.config.live.ts",
-    "vitest.integration.config.ts",
-    "drizzle.config.ts"
+    "vitest.config.ts"
   ],
   "exclude": ["node_modules", "dist", ".next"]
 }

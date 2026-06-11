@@ -87,7 +87,6 @@ export function ThemeEditor({
         <div className="settings-card" data-test-id="settings-card-identity">
           <IdentitySection
             slug={slug}
-            restaurantId={restaurant.id}
             defaultLanguage={initialLanguageSettings.defaultLanguage}
             supportedLanguages={initialLanguageSettings.supportedLanguages}
             initial={initialIdentity}
@@ -144,13 +143,6 @@ function PreviewLabel() {
   )
 }
 
-/** Promote-on-switch result surfaced as a one-shot banner. Cleared on
- *  dismiss or on the next save. */
-type SwitchOutcome = {
-  rowsPromoted: number
-  rowsNeedingAttention: number
-}
-
 function LanguagesSection({
   slug,
   initial,
@@ -171,9 +163,6 @@ function LanguagesSection({
   const [pending, startTransition] = useTransition()
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [switchOutcome, setSwitchOutcome] = useState<SwitchOutcome | null>(
-    null,
-  )
   const t = useTranslations('Settings.Languages')
   const tc = useTranslations('Common')
 
@@ -212,8 +201,6 @@ function LanguagesSection({
   function onSave() {
     setError(null)
     setSaved(false)
-    // A fresh save means any prior banner is now stale.
-    setSwitchOutcome(null)
     startTransition(async () => {
       const result = await updateLanguageSettings(slug, {
         defaultLanguage: defaultLang,
@@ -224,14 +211,6 @@ function LanguagesSection({
         return
       }
       setSaved(true)
-      // Only show the banner on an actual default-switch save — toggling
-      // supportedLanguages alone doesn't rotate any rows.
-      if (result.defaultChanged) {
-        setSwitchOutcome({
-          rowsPromoted: result.rowsPromoted,
-          rowsNeedingAttention: result.rowsNeedingAttention,
-        })
-      }
       onSaved()
     })
   }
@@ -318,20 +297,12 @@ function LanguagesSection({
           <span className="text-sm text-[var(--cinnabar)]">{error}</span>
         )}
       </div>
-
-      {switchOutcome && (
-        <DefaultSwitchedBanner
-          outcome={switchOutcome}
-          onDismiss={() => setSwitchOutcome(null)}
-        />
-      )}
     </form>
   )
 }
 
 function IdentitySection({
   slug,
-  restaurantId,
   defaultLanguage,
   supportedLanguages,
   initial,
@@ -340,7 +311,6 @@ function IdentitySection({
   onSaved,
 }: {
   slug: string
-  restaurantId: string
   defaultLanguage: LanguageCode
   supportedLanguages: LanguageCode[]
   initial: Identity
@@ -449,11 +419,11 @@ function IdentitySection({
       <Field>
         <FieldLabel>{t('logo')}</FieldLabel>
         <ImageUpload
-          target={{ kind: 'restaurant-logo', restaurantId }}
+          target={{ kind: 'restaurant-logo', slug }}
           currentUrl={value.logoUrl}
           label={t('logo')}
           onChange={(url) => {
-            patch('logoUrl', url)
+            patch('logoUrl', url ?? undefined)
             onSaved()
           }}
         />
@@ -462,11 +432,11 @@ function IdentitySection({
       <Field>
         <FieldLabel>{t('banner')}</FieldLabel>
         <ImageUpload
-          target={{ kind: 'restaurant-banner', restaurantId }}
+          target={{ kind: 'restaurant-banner', slug }}
           currentUrl={value.bannerUrl}
           label={t('banner')}
           onChange={(url) => {
-            patch('bannerUrl', url)
+            patch('bannerUrl', url ?? undefined)
             onSaved()
           }}
         />
@@ -791,69 +761,5 @@ function ColorField({
         {hint}
       </FieldHint>
     </div>
-  )
-}
-
-/**
- * One-shot banner shown after a save that actually flipped the default
- * language. Two visual states:
- *
- *   - Promotion happy-path (rowsNeedingAttention === 0): quiet ink
- *     border, short "X translations promoted" line.
- *   - Some rows couldn't promote: cinnabar border, the count + the
- *     instruction ("Open each one to retranslate").
- *
- * Dismiss via the Button; no auto-hide — operators are working in a
- * settings flow, the signal is too important to flash away.
- */
-function DefaultSwitchedBanner({
-  outcome,
-  onDismiss,
-}: {
-  outcome: SwitchOutcome
-  onDismiss: () => void
-}) {
-  const t = useTranslations('Settings.Languages')
-  const needsAttention = outcome.rowsNeedingAttention > 0
-  const borderClass = needsAttention
-    ? 'border-[var(--cinnabar)]'
-    : 'border-[var(--ink-40)]'
-
-  return (
-    <aside
-      role="status"
-      data-test-id="languages-switched-banner"
-      data-needs-attention={needsAttention ? 'true' : 'false'}
-      className={
-        'mt-3 flex flex-col gap-2 border bg-[var(--paper-2)] p-3 ' +
-        borderClass
-      }
-    >
-      <div className="flex flex-col gap-1">
-        <span className="font-[family-name:var(--serif)] text-sm font-medium text-[var(--ink)]">
-          {needsAttention ? t('switchedAttentionTitle') : t('switchedTitle')}
-        </span>
-        {outcome.rowsPromoted > 0 && (
-          <span className="text-xs text-[var(--ink-55)]">
-            {t('switchedSummary', { count: outcome.rowsPromoted })}
-          </span>
-        )}
-        {needsAttention && (
-          <span className="text-xs text-[var(--cinnabar)]">
-            {t('switchedAttention', { count: outcome.rowsNeedingAttention })}
-          </span>
-        )}
-      </div>
-      <div className="flex justify-end">
-        <Button
-          type="button"
-          variant="ghost"
-          onClick={onDismiss}
-          data-test-id="languages-switched-banner-dismiss"
-        >
-          {t('switchedDismiss')}
-        </Button>
-      </div>
-    </aside>
   )
 }

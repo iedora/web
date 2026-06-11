@@ -24,13 +24,14 @@ export default async function QrPage({
   const publicOrigin = `${proto}://${host}`
   const brandedUrl = `${publicOrigin}/r/${r.slug}`
 
-  // Bound stickers, in boundAt-desc order. Date serialises to ISO so the
-  // client component renders without a hydration mismatch.
+  // Bound stickers for this restaurant. Note: the Go service only
+  // exposes the staff-wide QR list, so this is empty for non-staff
+  // operators (the shelf section simply doesn't render).
   const stickerRows = await listQrCodesForRestaurant(r.id)
   const stickers = stickerRows.map((row) => ({
     code: row.code,
     label: row.label,
-    boundAt: row.boundAt ? row.boundAt.toISOString() : null,
+    boundAt: row.boundAt,
   }))
 
   return (

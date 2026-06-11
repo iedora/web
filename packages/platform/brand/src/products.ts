@@ -7,8 +7,8 @@
  * workspace dependency: the registry lives in `brand`, not in the
  * product itself.
  *
- * Per-product PATH BUILDERS (e.g. `signInUrl()` for `core`) still
- * live inside that product's package (`@iedora/product-core/url`).
+ * Per-product PATH BUILDERS (e.g. `signInUrl()`) still live inside
+ * that product's package (`@iedora/product-menu/shared/auth-urls`).
  * Split:
  *
  *   - this file        → "which products exist? where do they live?"
@@ -37,7 +37,6 @@ import { BRAND_DOMAIN } from './index'
  */
 export const PRODUCTS = {
   menu: 'menu',
-  core: 'core',
 } as const
 
 export type ProductId = (typeof PRODUCTS)[keyof typeof PRODUCTS]
@@ -46,7 +45,5 @@ export function productUrl(id: ProductId): string {
   switch (id) {
     case PRODUCTS.menu:
       return process.env.NEXT_PUBLIC_MENU_URL ?? `https://menu.${BRAND_DOMAIN}`
-    case PRODUCTS.core:
-      return process.env.NEXT_PUBLIC_CORE_URL ?? `https://core.${BRAND_DOMAIN}`
   }
 }

@@ -35,17 +35,6 @@ import {
   type PrintGrid,
 } from './print-layout'
 
-// SSR-safe "are we on the client?" without a setState-in-effect: the
-// server snapshot is false, the client snapshot true, so the portal
-// (which needs `document`) only renders after hydration.
-const subscribeNoop = () => () => {}
-const useMounted = () =>
-  useSyncExternalStore(
-    subscribeNoop,
-    () => true,
-    () => false,
-  )
-
 export function QrPrintSheetDialog({
   open,
   onOpenChange,
@@ -63,7 +52,16 @@ export function QrPrintSheetDialog({
   const [gutterInput, setGutterInput] = useState<number>(DEFAULT_GUTTER_MM)
   const [pageMarginInput, setPageMarginInput] = useState<number>(DEFAULT_PAGE_MARGIN_MM)
   const [svgMarkup, setSvgMarkup] = useState<string | null>(null)
-  const mounted = useMounted()
+  // Hydration gate for the print-sheet portal: false during SSR and
+  // the hydration render, true on the client ever after. The
+  // useSyncExternalStore form expresses this without a setState-in-
+  // effect cascade (the store never changes; only the server/client
+  // snapshots differ).
+  const mounted = useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false,
+  )
 
   // margin: 0 — the print sheet's gutter supplies the QR's quiet zone.
   useEffect(() => {
@@ -321,4 +319,10 @@ function PrintSheet({
       </div>
     </div>
   )
+}
+
+// Inert subscription for the hydration gate above — the value never
+// changes after mount, so there is nothing to subscribe to.
+function emptySubscribe() {
+  return () => {}
 }

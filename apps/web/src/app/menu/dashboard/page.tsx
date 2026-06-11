@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation'
 import { getLocale, getTranslations } from 'next-intl/server'
 import {
   getSession,
-  IEDORA_ADMIN_ROLE,
+  isStaff,
   requireActiveOrganization,
 } from '@iedora/product-menu/features/auth'
 import { listRestaurantsWithCounts } from '@iedora/product-menu/features/dashboard-home'
@@ -28,29 +28,28 @@ export default async function DashboardPage() {
   const tBillingPromise = getTranslations('Billing')
   const localePromise = getLocale()
 
-  // Admins manage everything via Admin → Restaurantes; the per-tenant
+  // Staff manage everything via Admin → Restaurantes; the per-tenant
   // home view (view-meter, restaurant cards) is meaningless for them.
   // Short-circuit to the cross-tenant admin list before the tenant gate.
   const session = await getSession()
-  const role = (session?.user as { role?: string | null } | undefined)?.role ?? null
-  if (role === IEDORA_ADMIN_ROLE) {
+  if (isStaff(session)) {
     redirect('/menu/dashboard/admin/restaurants')
   }
-  const { tenantId } = await requireActiveOrganization()
+  await requireActiveOrganization()
 
-  const [t, tBilling, locale, restaurants, gate, plan, viewCount] =
+  const [t, tBilling, locale, restaurants, canAdd, plan, viewCount] =
     await Promise.all([
       tPromise,
       tBillingPromise,
       localePromise,
-      listRestaurantsWithCounts(tenantId),
-      canAddRestaurant(tenantId),
-      getOrganizationPlan(tenantId),
-      getOrganizationMonthlyViews(tenantId),
+      listRestaurantsWithCounts(),
+      canAddRestaurant(),
+      getOrganizationPlan(),
+      getOrganizationMonthlyViews(),
     ])
 
-  const viewLimit = plan.limits.monthlyViews
-  const isUnlimitedViews = !Number.isFinite(viewLimit)
+  const viewLimit = plan.monthlyViews
+  const isUnlimitedViews = viewLimit === -1
   const viewsNearLimit =
     !isUnlimitedViews && viewCount / viewLimit >= VIEW_NUDGE_RATIO
   const numberFmt = new Intl.NumberFormat(locale)
@@ -65,7 +64,7 @@ export default async function DashboardPage() {
       <>
         <span className="text-muted-foreground">/r/{r.slug}</span>
         <span aria-hidden="true">·</span>
-        <span>{t('editedAt', { when: formatEditedAt(r.updatedAt, locale) })}</span>
+        <span>{t('editedAt', { when: formatEditedAt(new Date(r.updatedAt), locale) })}</span>
       </>
     ),
     metadata: `${t('menuCount', { count: r.menuCount })} · ${t('dishCount', { count: r.dishCount })}`,
@@ -119,7 +118,7 @@ export default async function DashboardPage() {
     </>
   )
 
-  const actions = gate.ok ? (
+  const actions = canAdd ? (
     <Link
       href={addAnotherRestaurantHref()}
       data-test-id="dashboard-new-restaurant"

@@ -8,7 +8,7 @@
     "jsx": "preserve",
     "plugins": [{ "name": "next" }],
     // No `paths` mapping needed. Apps/web routes import via package
-    // names (`@iedora/product-menu/...`, `@iedora/product-core`, etc.);
+    // names (`@iedora/product-menu/...`, etc.);
     // every workspace package uses relative imports internally so
     // no per-product path entries pollute this file as products
     // accumulate.

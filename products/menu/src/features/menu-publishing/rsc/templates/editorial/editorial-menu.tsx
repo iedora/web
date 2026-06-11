@@ -138,27 +138,10 @@ export function EditorialMenu({ restaurant: r, menus }: RenderProps) {
                           return (
                             <li key={it.id}>
                               <div className="flex flex-wrap items-baseline gap-x-2">
-                                <span
-                                  className={
-                                    'text-base ' +
-                                    (it.available
-                                      ? 'font-medium'
-                                      : 'italic opacity-60')
-                                  }
-                                >
+                                <span className="text-base font-medium">
                                   {it.name}
                                 </span>
-                                {!it.available && (
-                                  <span
-                                    className="text-xs italic"
-                                    style={{
-                                      color: 'var(--menu-secondary)',
-                                    }}
-                                  >
-                                    (esgotado)
-                                  </span>
-                                )}
-                                {variants.length === 0 && it.available && (
+                                {variants.length === 0 && (
                                   <>
                                     <span
                                       aria-hidden

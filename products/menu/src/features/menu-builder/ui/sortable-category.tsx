@@ -49,13 +49,11 @@ import type { BuilderCategory, BuilderItem } from './types'
  */
 export function SortableCategory({
   slug,
-  restaurantId,
   defaultLanguage,
   supportedLanguages,
   category,
 }: {
   slug: string
-  restaurantId: string
   defaultLanguage: LanguageCode
   supportedLanguages: LanguageCode[]
   category: BuilderCategory
@@ -119,7 +117,14 @@ export function SortableCategory({
       return
     }
     startTransition(async () => {
-      const res = await updateCategoryName(slug, category.id, trimmed)
+      // The Go update replaces the full text set — carry the untouched
+      // fields so a rename doesn't wipe description/translations.
+      const res = await updateCategoryName(slug, category.id, {
+        name: trimmed,
+        description: category.description ?? undefined,
+        nameI18n: category.nameI18n ?? undefined,
+        descriptionI18n: category.descriptionI18n ?? undefined,
+      })
       if (res && 'error' in res) setName(category.name)
       setEditingName(false)
       router.refresh()
@@ -224,7 +229,6 @@ export function SortableCategory({
                 <SortableItem
                   key={it.id}
                   slug={slug}
-                  restaurantId={restaurantId}
                   defaultLanguage={defaultLanguage}
                   supportedLanguages={supportedLanguages}
                   item={it}

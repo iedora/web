@@ -1,36 +1,91 @@
 import 'server-only'
 import { cache } from 'react'
-import { drizzleQrCodesGateway } from './adapters/drizzle'
-import { listCodes as runListCodes } from './use-cases/list-codes'
-import { listForRestaurant as runListForRestaurant } from './use-cases/list-for-restaurant'
-import { resolveCode as runResolveCode } from './use-cases/resolve'
+import { ApiError } from '@iedora/api-client'
+import * as api from '../../shared/api'
+import { isValidQrCodeShape, normalizeQrCode } from './code'
+import type { QrCodeListRow } from './stats'
 
 /**
  * Public API of the qr-codes slice. Mutations live in `./actions.ts`
  * ('use server' doesn't traverse barrels — see AGENTS.md rule #14).
- *
- * `resolveQrCode` is the public-path lookup used by `/q/[code]`. It must
- * stay cheap (single indexed query) — anything we add here is on the hot
- * path of every sticker scan.
- *
- * `listQrCodesForAdmin` is the admin-page reader. Caller MUST have already
- * called `requireScope` — this function doesn't re-check, by design
- * (the page-level guard is the single source of truth).
+ * The QR registry itself lives in the Go menu service; these loaders
+ * are thin, `cache()`-wrapped projections of its endpoints.
  */
 
-export const resolveQrCode = cache((code: string) =>
-  runResolveCode(drizzleQrCodesGateway, code),
-)
+export type { QrCodeListRow, QrStats } from './stats'
 
-export const listQrCodesForAdmin = cache(() => runListCodes(drizzleQrCodesGateway))
+export type QrCodeResolved = {
+  code: string
+  restaurantSlug: string
+}
+
+function toRow(c: api.QRCode): QrCodeListRow {
+  return {
+    code: c.code,
+    restaurantId: c.restaurantId ?? null,
+    label: c.label ?? null,
+    createdAt: c.createdAt,
+    boundAt: c.boundAt ?? null,
+    restaurant:
+      c.restaurantId && c.restaurantName && c.restaurantSlug
+        ? { id: c.restaurantId, name: c.restaurantName, slug: c.restaurantSlug }
+        : null,
+  }
+}
 
 /**
- * Tenant-scoped reader for the restaurant dashboard's QR page. Caller
- * MUST have already gated by `requireRestaurantBySlug` — this returns
- * raw rows scoped to the given restaurant id.
+ * Public-path lookup used by `/q/[code]`. Cheap shape gate first so
+ * garbage URLs never hit the service; unknown / unbound codes resolve
+ * to null and the route 404s.
  */
-export const listQrCodesForRestaurant = cache((restaurantId: string) =>
-  runListForRestaurant(drizzleQrCodesGateway, restaurantId),
-)
+export const resolveQrCode = cache(async (rawCode: string): Promise<QrCodeResolved | null> => {
+  const code = normalizeQrCode(rawCode)
+  if (!isValidQrCodeShape(code)) return null
+  try {
+    const { slug } = await api.resolveQRCode(code)
+    return { code, restaurantSlug: slug }
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) return null
+    throw err
+  }
+})
 
-export type { QrCodeListRow, QrCodeResolved, QrCodeRow } from './ports'
+/**
+ * Full registry for the staff admin surface. The Go service enforces
+ * the staff role on the token; the page gates with `requireStaff`
+ * first so the surface stays hidden from tenant users.
+ */
+export const listQrCodesForAdmin = cache(async (): Promise<QrCodeListRow[]> => {
+  const { codes } = await api.listQRCodes()
+  return codes.map(toRow)
+})
+
+/**
+ * Cross-tenant restaurant refs for the admin bind dropdown (staff
+ * only) — the whole point of the surface is binding stickers to any
+ * restaurant regardless of tenant.
+ */
+export const listRestaurantsForBinding = cache(async () => {
+  const { restaurants } = await api.listRestaurantRefs()
+  return restaurants
+})
+
+/**
+ * Bound stickers for one restaurant (tenant dashboard QR page). The Go
+ * service has no per-restaurant QR endpoint — only the staff-wide list
+ * — so we filter that list by restaurantId. Tenant operators don't hold
+ * the staff role and get a 403 from the service; we surface that as an
+ * empty shelf (the section simply doesn't render) rather than erroring
+ * the page.
+ */
+export const listQrCodesForRestaurant = cache(
+  async (restaurantId: string): Promise<QrCodeListRow[]> => {
+    try {
+      const { codes } = await api.listQRCodes()
+      return codes.filter((c) => c.restaurantId === restaurantId).map(toRow)
+    } catch (err) {
+      if (err instanceof ApiError && (err.status === 403 || err.status === 404)) return []
+      throw err
+    }
+  },
+)

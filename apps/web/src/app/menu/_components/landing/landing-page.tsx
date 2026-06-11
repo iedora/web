@@ -4,12 +4,12 @@ import * as React from "react";
 import Link from "next/link";
 import { Badge, LangSwitcher, type LangOption, Nav, NavActions, NavBrand, PageProgress, Wordmark } from "@iedora/design-system";
 import { BRAND_NAME, brandUrl, CONTACT_EMAIL, PRODUCTS, productUrl } from '@iedora/brand';
-import { signInUrl, signUpUrl } from '@iedora/product-core/url';
+import { signInUrl, signUpUrl } from '@iedora/product-menu/shared/auth-urls';
 import "./landing.css";
 
 /**
- * Sign-in / sign-up cross-navigate to the `core` product's auth pages
- * (`https://core.iedora.com/sign-in` in prod, `http://localhost:3000/core/
+ * Sign-in / sign-up navigate to the menu surface's auth pages
+ * (`https://menu.iedora.com/sign-in` in prod, `http://localhost:3000/menu/
  * sign-in` in dev). The pages call better-auth via `authClient.signIn.email`
  * / `signUp.email` and set the cookie on the parent `.iedora.com` domain
  * so SSO across iedora products works transparently.

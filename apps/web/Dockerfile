@@ -1,17 +1,17 @@
 # syntax=docker/dockerfile:1.24
 # Multi-stage build for the `apps/web` Next.js shell inside the Bun
-# workspaces monorepo. The shell hosts every logical product (menu,
-# core, house) via host-based rewrites in src/proxy.ts.
+# workspaces monorepo. The shell hosts every logical surface (menu,
+# house) via host-based rewrites in src/proxy.ts.
 #
-# Build context is the REPO ROOT. Built + deployed by Coolify on every
-# push to `main` (GitHub webhook → Coolify runner). Bun installs the
+# Build context is the REPO ROOT. Built by CI on every push to `main`;
+# deploy is owned by the iedora-infra repo. Bun installs the
 # workspace deps; Node executes the build (Bun + next build is unstable
 # per AGENTS.md); final image runs server.js on Node over Next's
 # standalone output.
 #
 # All three stages are glibc (Debian) — no musl→glibc handoff between
-# install/build/runtime keeps native-module prebuilts (postgres-js, sharp,
-# argon2 …) consistent end-to-end.
+# install/build/runtime keeps native-module prebuilts (sharp …)
+# consistent end-to-end.
 #
 # Node version is declared once via ARG at the top (Next.js 16 official
 # pattern). Bump the ARG value periodically to track the latest LTS.
@@ -31,8 +31,8 @@ WORKDIR /workspace
 COPY --link package.json bun.lock tsconfig.base.json ./
 # Every workspace referenced from apps/web's package.json must be
 # present so `bun install` can resolve workspace:* specifiers:
-#   - packages/* → @iedora/{auth,design-system,observability,brand,eslint-config}
-#   - products/* → @iedora/product-{menu,core,house}
+#   - packages/* → @iedora/{api-client,design-system,observability,brand,eslint-config}
+#   - products/* → @iedora/product-menu
 # Without products/, bun fails fast with:
 #   "Workspace dependency @iedora/product-menu not found, Searched in ./*"
 COPY --link packages packages
@@ -129,32 +129,14 @@ COPY --from=builder --chown=nextjs:nextjs /workspace/apps/web/.next/standalone .
 COPY --from=builder --chown=nextjs:nextjs /workspace/apps/web/.next/static ./apps/web/.next/static
 COPY --from=builder --chown=nextjs:nextjs /workspace/apps/web/public ./apps/web/public
 
-# Drizzle migrations — fora do Next bundle. Cada workspace traz o seu
-# migrate.mjs (thin wrapper) + drizzle/ SQL. O helper canónico vive em
-# @iedora/db (packages/platform/db/src/migrate.mjs), partilhado por todos.
-# Wrappers usam import relativo para o helper (sem dependência de
-# node_modules entre workspaces).
-COPY --from=builder --chown=nextjs:nextjs /workspace/packages/platform/db/src/migrate.mjs ./packages/platform/db/src/migrate.mjs
-COPY --from=builder --chown=nextjs:nextjs /workspace/packages/business/auth/drizzle     ./packages/business/auth/drizzle
-COPY --from=builder --chown=nextjs:nextjs /workspace/packages/business/auth/migrate.mjs ./packages/business/auth/migrate.mjs
-COPY --from=builder --chown=nextjs:nextjs /workspace/products/menu/drizzle     ./products/menu/drizzle
-COPY --from=builder --chown=nextjs:nextjs /workspace/products/menu/migrate.mjs ./products/menu/migrate.mjs
-
-# Drizzle + postgres devem ser bundled via outputFileTracingIncludes em
-# next.config.ts. Empiricamente nft falha (silently skips conditional
-# exports), pacotes não acabam em standalone/node_modules. npm install
-# fresh aqui como fallback robusto. ~20MB extra, deploys "just work".
-RUN cd /app && npm install --omit=dev --no-package-lock --no-fund --no-audit \
-    drizzle-orm@0.45.2 postgres@3.4.9 2>&1 | tail -3 && \
-    chown -R nextjs:nextjs /app/node_modules /app/package*.json 2>/dev/null || true
+# No database client and no migrations ship in this image — the Go
+# services (services/) own every schema; each one migrates itself via
+# its `<svc> migrate` one-shot. This image only serves the UI.
 
 # Next writes prerender + optimized-image caches under .next/cache at first
 # request. The standalone copy doesn't create that path; pre-create it
 # owned by the runtime user so the very first request doesn't EPERM.
 RUN mkdir -p ./apps/web/.next/cache && chown nextjs:nextjs ./apps/web/.next/cache
-
-# Migrations no longer ship in this image. See DOCKER-2 in
-# docs/tech-debt.md — Stage 3 runs the dedicated migrate image instead.
 
 USER nextjs
 WORKDIR /app/apps/web

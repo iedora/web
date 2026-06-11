@@ -1,26 +1,21 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { requireScope } from '../auth'
-import { SCOPES } from '@iedora/auth/scopes'
-import { drizzleQrCodesGateway } from './adapters/drizzle'
-import { bindCode as runBind } from './use-cases/bind'
-import { bulkGenerate as runBulkGenerate } from './use-cases/bulk-generate'
-import { createCode as runCreateCode } from './use-cases/create-code'
-import { deleteCode as runDeleteCode } from './use-cases/delete-code'
-import { unbindCode as runUnbind } from './use-cases/unbind'
-import { updateLabel as runUpdateLabel } from './use-cases/update-label'
+import { ApiError } from '@iedora/api-client'
+import * as api from '../../shared/api'
+import { generateQrCode, isValidQrCodeShape, normalizeQrCode } from './code'
 
 /**
- * Server actions for the admin QR-binding surface. Each action gates on
- * the scope that matches its verb — write for create/generate,
- * update for (un)bind, delete for removal. The slice has no tenant
- * scoping; the scope check is the only barrier between a logged-in
- * tenant user and the cross-tenant registry.
+ * Server actions for the staff QR-binding surface — thin wrappers over
+ * the Go menu service's `/api/staff/qr-codes` endpoints. The service
+ * enforces the staff role on the Bearer token (a tenant user gets a
+ * 403 translated into `{ ok: false }`); the only client-side logic
+ * kept here is code normalisation + shape validation so typos fail
+ * fast with a friendly message.
  *
- * Revalidation: the admin page is dynamic (it reads the gateway directly),
- * so we revalidate the admin route after every mutation. Public `/q/[code]`
- * isn't cached — no public revalidation needed.
+ * Revalidation: the admin page is dynamic, so we revalidate the admin
+ * route after every mutation. Public `/q/[code]` isn't cached — no
+ * public revalidation needed.
  */
 
 const ADMIN_PATH = '/menu/dashboard/admin/qr-codes'
@@ -29,23 +24,8 @@ type ActionResult<T = undefined> =
   | (T extends undefined ? { ok: true } : { ok: true; data: T })
   | { ok: false; error: string }
 
-function errMsg(code: string): string {
-  switch (code) {
-    case 'invalid_shape':
-      return 'Code must be 1–64 chars, letters/digits/_/- only.'
-    case 'duplicate':
-      return 'A code with that value already exists.'
-    case 'invalid_count':
-      return 'Count must be between 1 and 500.'
-    case 'code_not_found':
-      return 'No such code.'
-    case 'restaurant_not_found':
-      return 'No such restaurant.'
-    case 'invalid_label':
-      return 'Label must be 200 chars or fewer.'
-    default:
-      return 'Action failed.'
-  }
+function errorMessage(err: unknown): string {
+  return err instanceof ApiError ? err.message : 'Action failed.'
 }
 
 export async function createCodeAction(input: {
@@ -53,38 +33,68 @@ export async function createCodeAction(input: {
   restaurantId?: string
   label?: string
 }): Promise<ActionResult<{ code: string }>> {
-  await requireScope(SCOPES.menu.staff.qrCodes.manage)
-  const res = await runCreateCode(drizzleQrCodesGateway, input)
-  if (!res.ok) return { ok: false, error: errMsg(res.error) }
+  // Generate client-side when no code is supplied — the Go endpoint
+  // reports only an inserted count, and the form wants to echo the
+  // created code back to the operator.
+  let code: string
+  if (input.code !== undefined) {
+    code = normalizeQrCode(input.code)
+    if (!isValidQrCodeShape(code)) {
+      return { ok: false, error: 'Code must be 1–64 chars, letters/digits/_/- only.' }
+    }
+  } else {
+    code = generateQrCode()
+  }
+  try {
+    const { inserted } = await api.createQRCodes({
+      code,
+      restaurantId: input.restaurantId,
+      label: input.label?.trim() || undefined,
+    })
+    if (inserted === 0) {
+      return { ok: false, error: 'A code with that value already exists.' }
+    }
+  } catch (err) {
+    return { ok: false, error: errorMessage(err) }
+  }
   revalidatePath(ADMIN_PATH)
-  return { ok: true, data: { code: res.code } }
+  return { ok: true, data: { code } }
 }
 
 export async function bulkGenerateAction(
   count: number,
-): Promise<ActionResult<{ codes: string[] }>> {
-  await requireScope(SCOPES.menu.staff.qrCodes.manage)
-  const res = await runBulkGenerate(drizzleQrCodesGateway, { count })
-  if (!res.ok) return { ok: false, error: errMsg(res.error) }
-  revalidatePath(ADMIN_PATH)
-  return { ok: true, data: { codes: res.codes } }
+): Promise<ActionResult<{ count: number }>> {
+  if (!Number.isInteger(count) || count < 1 || count > 500) {
+    return { ok: false, error: 'Count must be between 1 and 500.' }
+  }
+  try {
+    const { inserted } = await api.createQRCodes({ count })
+    revalidatePath(ADMIN_PATH)
+    return { ok: true, data: { count: inserted } }
+  } catch (err) {
+    return { ok: false, error: errorMessage(err) }
+  }
 }
 
 export async function bindCodeAction(input: {
   code: string
   restaurantId: string
 }): Promise<ActionResult> {
-  await requireScope(SCOPES.menu.staff.qrCodes.manage)
-  const res = await runBind(drizzleQrCodesGateway, input)
-  if (!res.ok) return { ok: false, error: errMsg(res.error) }
+  try {
+    await api.bindQRCode(normalizeQrCode(input.code), input.restaurantId)
+  } catch (err) {
+    return { ok: false, error: errorMessage(err) }
+  }
   revalidatePath(ADMIN_PATH)
   return { ok: true }
 }
 
 export async function unbindCodeAction(code: string): Promise<ActionResult> {
-  await requireScope(SCOPES.menu.staff.qrCodes.manage)
-  const res = await runUnbind(drizzleQrCodesGateway, code)
-  if (!res.ok) return { ok: false, error: errMsg(res.error) }
+  try {
+    await api.unbindQRCode(normalizeQrCode(code))
+  } catch (err) {
+    return { ok: false, error: errorMessage(err) }
+  }
   revalidatePath(ADMIN_PATH)
   return { ok: true }
 }
@@ -93,17 +103,25 @@ export async function updateLabelAction(input: {
   code: string
   label: string
 }): Promise<ActionResult> {
-  await requireScope(SCOPES.menu.staff.qrCodes.manage)
-  const res = await runUpdateLabel(drizzleQrCodesGateway, input)
-  if (!res.ok) return { ok: false, error: errMsg(res.error) }
+  const label = input.label.trim()
+  if (label.length > 200) {
+    return { ok: false, error: 'Label must be 200 chars or fewer.' }
+  }
+  try {
+    await api.labelQRCode(normalizeQrCode(input.code), label)
+  } catch (err) {
+    return { ok: false, error: errorMessage(err) }
+  }
   revalidatePath(ADMIN_PATH)
   return { ok: true }
 }
 
 export async function deleteCodeAction(code: string): Promise<ActionResult> {
-  await requireScope(SCOPES.menu.staff.qrCodes.manage)
-  const res = await runDeleteCode(drizzleQrCodesGateway, code)
-  if (!res.ok) return { ok: false, error: errMsg(res.error) }
+  try {
+    await api.deleteQRCode(normalizeQrCode(code))
+  } catch (err) {
+    return { ok: false, error: errorMessage(err) }
+  }
   revalidatePath(ADMIN_PATH)
   return { ok: true }
 }

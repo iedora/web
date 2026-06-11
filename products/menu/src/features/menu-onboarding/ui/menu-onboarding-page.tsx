@@ -1,55 +1,53 @@
 'use client'
 
+import { useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { DottedStepper, Masthead, OrnamentRule, PaperCard, Stage } from '@iedora/design-system'
-import { MenuImportWizard } from '../../menu-import/ui/menu-import-wizard'
+import {
+  Button,
+  DottedStepper,
+  Masthead,
+  OrnamentRule,
+  PaperCard,
+  Stage,
+} from '@iedora/design-system'
+import { seedSampleMenu } from '../../menu-builder/actions'
 
 /**
  * Step 2 chrome — paper-card masthead + dotted stepper + ornament,
- * then the AI import wizard inline plus a Skip escape hatch.
+ * then the first-menu choice: seed a sample menu (primary) or skip
+ * straight to the dashboard and build by hand.
  *
  * All page chrome (Stage, PaperCard, Masthead, OrnamentRule,
  * DottedStepper) comes from @iedora/design-system primitives so the
  * onboarding flow stays in lockstep with every other paper-card
- * surface. What's left here is the slice's own composition: the lede
- * copy, the wizard mount with its CSS override, the Skip linkbtn,
- * and the undernote.
+ * surface.
  *
  * Form-specific classes (`onb-lede`, `onb-wizard-mount`, `onb-linkbtn`,
  * `onb-undernote`) live in `apps/web/src/app/menu/onboarding/onboarding.css`
  * — imported by the route entry that renders this component.
- *
- * Success path: `<MenuImportWizard onImported />` fires once the menu
- * has been persisted; we redirect straight to `/dashboard` (instead of
- * the menu builder, which would push the operator into a chrome they
- * haven't seen yet).
  */
 export function MenuOnboardingPage({
   slug,
-  restaurantId,
-  initialQuota,
-  unlimited,
   onComplete,
 }: {
   slug: string
-  restaurantId: string
-  initialQuota?: { used: number; limit: number }
-  unlimited?: boolean
   /**
-   * Fired before the dashboard redirect on both completion paths
-   * (Skip + AI import). The route entry passes the server action
-   * that flips `restaurant.onboarding_completed_at` so the resume
-   * gate at `/menu/onboarding` stops bouncing this user back into
-   * the wizard. Optional so unit tests keep working without a fake.
+   * Fired before the redirect on both completion paths (Seed + Skip).
+   * The route entry passes the server action that flips
+   * `restaurant.onboarding_completed_at` so the resume gate at
+   * `/menu/onboarding` stops bouncing this user back into the wizard.
+   * Optional so unit tests keep working without a fake.
    */
   onComplete?: () => Promise<void>
 }) {
   const t = useTranslations('Onboarding')
   const tMenu = useTranslations('Onboarding.menu')
+  const tRestaurant = useTranslations('Restaurant')
   const router = useRouter()
+  const [pending, startTransition] = useTransition()
 
-  async function goToDashboard() {
+  async function complete() {
     if (onComplete) {
       try {
         await onComplete()
@@ -60,8 +58,27 @@ export function MenuOnboardingPage({
         console.error('[menu-onboarding] markComplete failed', err)
       }
     }
-    router.push('/menu/dashboard')
-    router.refresh()
+  }
+
+  function seed() {
+    startTransition(async () => {
+      const res = await seedSampleMenu(slug)
+      await complete()
+      if ('ok' in res) {
+        router.push(`/menu/dashboard/r/${slug}/m/${res.menuId}`)
+      } else {
+        router.push('/menu/dashboard')
+      }
+      router.refresh()
+    })
+  }
+
+  function skip() {
+    startTransition(async () => {
+      await complete()
+      router.push('/menu/dashboard')
+      router.refresh()
+    })
   }
 
   return (
@@ -89,24 +106,24 @@ export function MenuOnboardingPage({
         </div>
 
         <div className="onb-wizard-mount">
-          <MenuImportWizard
-            slug={slug}
-            restaurantId={restaurantId}
-            initialQuota={initialQuota}
-            unlimited={unlimited}
-            offerSetDefaultLanguage
-            onImported={goToDashboard}
-            extraActions={
-              <button
-                type="button"
-                className="onb-linkbtn"
-                onClick={goToDashboard}
-                data-test-id="menu-onboarding-skip"
-              >
-                {tMenu('skip')}
-              </button>
-            }
-          />
+          <Button
+            type="button"
+            variant="primary"
+            disabled={pending}
+            onClick={seed}
+            data-test-id="menu-onboarding-seed"
+          >
+            {tRestaurant('sampleMenu')}
+          </Button>
+          <button
+            type="button"
+            className="onb-linkbtn"
+            onClick={skip}
+            disabled={pending}
+            data-test-id="menu-onboarding-skip"
+          >
+            {tMenu('skip')}
+          </button>
         </div>
 
         <p

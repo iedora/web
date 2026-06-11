@@ -148,10 +148,7 @@ function ItemCard({ item: it }: { item: PublicItem }) {
   const variants = it.variants ?? []
   return (
     <li
-      className={
-        'group overflow-hidden rounded-3xl bg-white shadow-[0_1px_3px_rgba(0,0,0,0.05),0_8px_24px_-8px_rgba(0,0,0,0.08)] transition-shadow hover:shadow-[0_2px_6px_rgba(0,0,0,0.08),0_16px_40px_-12px_rgba(0,0,0,0.15)] ' +
-        (it.available ? '' : 'opacity-60')
-      }
+      className="group overflow-hidden rounded-3xl bg-white shadow-[0_1px_3px_rgba(0,0,0,0.05),0_8px_24px_-8px_rgba(0,0,0,0.08)] transition-shadow hover:shadow-[0_2px_6px_rgba(0,0,0,0.08),0_16px_40px_-12px_rgba(0,0,0,0.15)]"
     >
       <div className="relative aspect-[4/3] overflow-hidden">
         {it.imageUrl ? (
@@ -175,13 +172,6 @@ function ItemCard({ item: it }: { item: PublicItem }) {
                 {t}
               </span>
             ))}
-          </div>
-        )}
-        {!it.available && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/30 backdrop-blur-sm">
-            <span className="rounded-full bg-white px-4 py-1.5 text-xs font-semibold uppercase tracking-wider text-neutral-800">
-              Esgotado
-            </span>
           </div>
         )}
       </div>

@@ -56,19 +56,9 @@ export function MinimalMenu({ restaurant: r, menus }: RenderProps) {
                         // flush them; this guard is the second layer.
                         const variants = it.variants ?? []
                         return (
-                        <li
-                          key={it.id}
-                          className={it.available ? '' : 'opacity-50'}
-                        >
+                        <li key={it.id}>
                           <div className="flex items-baseline gap-2">
-                            <span
-                              className={
-                                'font-normal ' +
-                                (it.available ? '' : 'line-through')
-                              }
-                            >
-                              {it.name}
-                            </span>
+                            <span className="font-normal">{it.name}</span>
                             {variants.length === 0 && (
                               <>
                                 <span

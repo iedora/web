@@ -1,20 +1,19 @@
 import 'server-only'
-import {
-  type LanguageCode,
-  localizedNullable,
-  pickLanguage,
-} from '../../i18n'
-import { loadRestaurantSnapshot, localizeTree } from '..'
+import { ApiError } from '@iedora/api-client'
+import type { LanguageCode } from '../../i18n'
+import { getPublicMenu } from '../../../shared/api'
 import { resolveTheme } from './theme'
 import { PublicMenuView, type PublicMenuLoaded } from './public-menu-view-ui'
 
 /**
- * Server entrypoint: snapshot loader + view re-export. The JSX lives in
- * `./public-menu-view-ui.tsx` (no `server-only`) so client surfaces
- * (admin import IDE live preview) can mount the exact same component.
+ * Server entrypoint: public-payload loader + view re-export. The JSX
+ * lives in `./public-menu-view-ui.tsx` (no `server-only`) so client
+ * surfaces (admin import IDE live preview) can mount the exact same
+ * component.
  *
- * Both /q/[code] and /r/[slug] call `loadPublicMenu(slug, …)` and then
- * render `<PublicMenuView data={loaded} />`.
+ * The Go menu service owns language negotiation (`?lang=` beats
+ * `Accept-Language` beats the restaurant default) and returns the tree
+ * already localized — no client-side i18n fallback happens here.
  */
 
 export { PublicMenuView, type PublicMenuLoaded }
@@ -24,37 +23,24 @@ export async function loadPublicMenu(
   requestedLang: string | null | undefined,
   acceptLanguage: string | null | undefined,
 ): Promise<PublicMenuLoaded | null> {
-  const snap = await loadRestaurantSnapshot(slug)
-  if (!snap) return null
-
-  const currentLanguage: LanguageCode = pickLanguage({
-    requested: requestedLang,
-    acceptLanguage,
-    supported: snap.supportedLanguages,
-    defaultLanguage: snap.defaultLanguage,
-  })
-
-  const menus = localizeTree(snap.tree, currentLanguage, snap.defaultLanguage)
+  let payload
+  try {
+    payload = await getPublicMenu(
+      slug,
+      requestedLang ?? undefined,
+      acceptLanguage ?? undefined,
+    )
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) return null
+    throw err
+  }
 
   return {
-    restaurant: {
-      id: snap.id,
-      name: snap.name,
-      slug: snap.slug,
-      description: localizedNullable(
-        snap.description,
-        snap.descriptionI18n,
-        currentLanguage,
-        snap.defaultLanguage,
-      ),
-      logoUrl: snap.logoUrl,
-      bannerUrl: snap.bannerUrl,
-    },
-    tenantId: snap.tenantId,
-    menus,
-    theme: resolveTheme(snap.theme),
-    defaultLanguage: snap.defaultLanguage,
-    supportedLanguages: snap.supportedLanguages,
-    currentLanguage,
+    restaurant: payload.restaurant,
+    menus: payload.menus,
+    theme: resolveTheme(payload.restaurant.theme),
+    defaultLanguage: payload.defaultLanguage as LanguageCode,
+    supportedLanguages: payload.supportedLanguages as LanguageCode[],
+    currentLanguage: payload.currentLanguage as LanguageCode,
   }
 }

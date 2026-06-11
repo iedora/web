@@ -1,66 +1,94 @@
 import 'server-only'
 import { cache } from 'react'
-import { drizzleAuthGateway } from './adapters/drizzle'
-import { verifySession as _verifySession } from './use-cases/verify-session'
-import { getEffectiveOrganizationId as _getEffectiveOrganizationId } from './use-cases/get-effective-organization-id'
-import { requireActiveOrganization as _requireActiveOrganization } from './use-cases/require-active-organization'
-import { requireRestaurantAccess as _requireRestaurantAccess } from './use-cases/require-restaurant-access'
-import { requireRestaurantBySlug as _requireRestaurantBySlug } from './use-cases/require-restaurant-by-slug'
-import { requireScope as _requireScope } from './use-cases/require-scope'
-import type { Scope } from '@iedora/auth/scopes'
+import { notFound, redirect } from 'next/navigation'
+import { ApiError, getSession as readSession, type Session } from '@iedora/api-client'
+import { signInUrl } from '../../shared/auth-urls'
+import { publicUrl } from '../../shared/url'
+import { getRestaurant, type MenuSummary, type Restaurant } from '../../shared/api'
 
 /**
- * Public API of the auth slice. Convenience wrappers bind the production
- * AuthGateway (better-auth session + Drizzle restaurant lookup) and wrap
- * each call in React's `cache()` so a guard called repeatedly during a
- * single render hits the wire once.
+ * Auth slice — thin guards over the access-token session.
  *
- * For unit tests, import the use-case functions directly from
- * `./use-cases/*` and pass a fake `AuthGateway`.
+ * Authorization proper lives in the Go menu service: every API call is
+ * verified there (tenant scoping, restaurant ownership, staff role).
+ * These guards only decide WHERE to send an unauthenticated /
+ * tenant-less visitor; they never query data.
  */
+
+/** Operator roles minted by the Go auth service (internal/authz). */
+const STAFF_ROLES = ['iedora-admin', 'iedora-support'] as const
+
+export type { Session }
+
+/** True when the session holds a cross-tenant operator role. */
+export function isStaff(session: Session | null): boolean {
+  return !!session?.roles.some((r) => (STAFF_ROLES as readonly string[]).includes(r))
+}
 
 /**
  * Non-redirecting read of the session. Returns null when there's no
  * cookie / it's expired. Use for chrome that should render signed-in
- * vs signed-out without forcing a redirect (dashboard layout, public
- * landing). Real gating uses `verifySession()` / `requireRestaurantAccess()`
- * close to the data fetch — layouts in Next 16 don't re-render on
- * navigation, so `redirect()` in a layout would leak across pages.
+ * vs signed-out without forcing a redirect.
  */
-export const getSession = cache(() => drizzleAuthGateway.getSession())
-
-export const verifySession = cache(() => _verifySession(drizzleAuthGateway))
+export const getSession = cache(() => readSession())
 
 /**
- * Returns the caller's active organization id (`session.activeTenantId`
- * from better-auth's organization plugin), or null when none is set / no
- * session. Cached per render via React's `cache()`.
+ * Redirecting session guard: bounces anonymous visitors to sign-in
+ * with a `next` back to the given internal path (default: dashboard).
  */
-export const getEffectiveOrganizationId = cache(() =>
-  _getEffectiveOrganizationId(drizzleAuthGateway),
-)
+export const verifySession = cache(async (nextPath = '/menu/dashboard'): Promise<Session> => {
+  const session = await getSession()
+  if (!session) {
+    redirect(signInUrl(publicUrl(nextPath).toString()))
+  }
+  return session
+})
 
-export const requireActiveOrganization = cache(() =>
-  _requireActiveOrganization(drizzleAuthGateway),
-)
-
-export const requireRestaurantAccess = cache((restaurantId: string) =>
-  _requireRestaurantAccess(drizzleAuthGateway, restaurantId),
-)
-
-export const requireRestaurantBySlug = cache((slug: string) =>
-  _requireRestaurantBySlug(drizzleAuthGateway, slug),
+/**
+ * Guarantees an authenticated session AND a tenant id. Tenant users
+ * without one get bounced into /menu/onboarding (first sign-in before
+ * they've created a tenant); staff get bounced to the dashboard — the
+ * onboarding flow doesn't apply to them.
+ */
+export const requireActiveOrganization = cache(
+  async (): Promise<{ session: Session; tenantId: string }> => {
+    const session = await verifySession()
+    if (!session.tenantId) {
+      redirect(isStaff(session) ? '/menu/dashboard' : '/menu/onboarding')
+    }
+    return { session, tenantId: session.tenantId }
+  },
 )
 
 /**
- * Capability-based guard. Resolves the caller's permissions through
- * better-auth's organization plugin (per-org `member.role` evaluated
- * against the @iedora/auth statement). `iedora-admin` short-circuits to
- * allowed.
+ * Session + ownership guard keyed by restaurant slug. The ownership
+ * check is the Go service's: a foreign or unknown slug 404s there
+ * (staff tokens read cross-tenant), which we surface as `notFound()`.
+ * Returns the full restaurant + its menu summaries so pages don't
+ * re-fetch for the header.
  */
-export const requireScope = cache((scope: Scope) =>
-  _requireScope(drizzleAuthGateway, scope),
+export const requireRestaurantBySlug = cache(
+  async (slug: string): Promise<{ restaurant: Restaurant; menus: MenuSummary[] }> => {
+    await verifySession(`/menu/dashboard/r/${slug}`)
+    try {
+      return await getRestaurant(slug)
+    } catch (err) {
+      if (err instanceof ApiError && (err.status === 404 || err.status === 403)) {
+        notFound()
+      }
+      throw err
+    }
+  },
 )
 
-export type { AuthGateway, Session } from './ports'
-export { IEDORA_ADMIN_ROLE } from '@iedora/auth'
+/**
+ * Staff-only guard for the cross-tenant admin surfaces (directory,
+ * QR codes). Hides the surface from non-staff via the dashboard.
+ */
+export const requireStaff = cache(async (): Promise<Session> => {
+  const session = await verifySession()
+  if (!isStaff(session)) {
+    redirect('/menu/dashboard')
+  }
+  return session
+})

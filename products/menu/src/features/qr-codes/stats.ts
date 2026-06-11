@@ -1,14 +1,31 @@
-import type { QrCodeListRow } from './ports'
-
 /**
- * Pure-function summariser for the QR admin overview strip. Same
- * shape as the sessions slice's `computeSessionStats` — small,
- * serialisable, framework-free. The admin page calls it with the full
- * registry; for 10k+ codes a future paginated view would compute
- * stats DB-side, but for the current scale the round-trip + map is
- * fine.
+ * Row shapes + pure stats for the QR slice. Kept out of `index.ts`
+ * (which is `server-only`) so the client admin UI can import the types
+ * and the stats math without dragging server modules into the bundle.
+ *
+ * `QrCodeListRow` is the Go `QRCode` DTO (shared/api.ts) normalised for
+ * rendering: ISO-string dates, explicit nulls, and the bound restaurant
+ * folded into a nested object like the old Drizzle join produced.
  */
 
+export type QrCodeListRow = {
+  code: string
+  restaurantId: string | null
+  label: string | null
+  /** ISO timestamp. */
+  createdAt: string
+  /** ISO timestamp, null while unbound. */
+  boundAt: string | null
+  restaurant: { id: string; name: string; slug: string } | null
+}
+
+/**
+ * Pure-function summariser for the QR admin overview strip. Small,
+ * serialisable, framework-free. The admin page calls it with the full
+ * registry; for 10k+ codes a future paginated view would compute
+ * stats server-side, but for the current scale the round-trip + map is
+ * fine.
+ */
 export type QrStats = {
   /** Total rows in the registry. */
   total: number
@@ -46,8 +63,8 @@ export function computeQrStats(
       restaurantCounts.set(name, (restaurantCounts.get(name) ?? 0) + 1)
     }
     if (r.label && r.label.trim()) withLabel++
-    if (nowMs - r.createdAt.getTime() <= FRESH_WINDOW_MS) created24h++
-    if (r.boundAt && nowMs - r.boundAt.getTime() <= FRESH_WINDOW_MS) {
+    if (nowMs - Date.parse(r.createdAt) <= FRESH_WINDOW_MS) created24h++
+    if (r.boundAt && nowMs - Date.parse(r.boundAt) <= FRESH_WINDOW_MS) {
       boundLast24h++
     }
   }

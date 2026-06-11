@@ -1,53 +1,23 @@
+import type {
+  PublicCategory,
+  PublicItem,
+  PublicMenu,
+  PublicMenuPayload,
+  PublicVariant,
+} from '../../../shared/api'
 import type { ResolvedTheme } from './theme'
 
-export type PublicRestaurant = {
-  id: string
-  name: string
-  slug: string
-  description: string | null
-  logoUrl: string | null
-  bannerUrl: string | null
-}
-
 /**
- * One alternate price for a dish — "Meia dose", "Imperial", "Jarra 1L".
- * Operator-authored; render label as-written.
+ * Render shapes for the public-menu templates. These are the Go menu
+ * service's public read model (`GET /public/r/{slug}`) — already
+ * localized server-side, so no i18n fallback logic lives in the
+ * renderer. Type-only re-exports keep this module client-safe (the
+ * `server-only` marker in shared/api is erased with the types).
  */
-export type PublicVariant = {
-  label: string
-  priceCents: number
-}
 
-export type PublicItem = {
-  id: string
-  name: string
-  description: string | null
-  priceCents: number
-  currency: string
-  available: boolean
-  tags: string[]
-  imageUrl: string | null
-  /**
-   * Ad-hoc price variants alongside the primary `priceCents`. Empty
-   * array (not null) when the item has a single price — keeps the
-   * templates' iteration code branch-free.
-   */
-  variants: PublicVariant[]
-}
+export type PublicRestaurant = PublicMenuPayload['restaurant']
 
-export type PublicCategory = {
-  id: string
-  name: string
-  description: string | null
-  items: PublicItem[]
-}
-
-export type PublicMenu = {
-  id: string
-  name: string
-  description: string | null
-  categories: PublicCategory[]
-}
+export type { PublicCategory, PublicItem, PublicMenu, PublicVariant }
 
 export type PublicMenuData = {
   restaurant: PublicRestaurant

@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Iedora brand constants + cross-origin URL helpers shared across every product (apex, menu, core, future). Pure strings + URL builders \u2014 no runtime, no env validation, safe to import from server and client.",
+  "description": "Iedora brand constants + cross-origin URL helpers shared across every product (apex, menu, future). Pure strings + URL builders \u2014 no runtime, no env validation, safe to import from server and client.",
   "exports": {
     ".": "./src/index.ts"
   },

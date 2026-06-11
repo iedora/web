@@ -15,34 +15,23 @@ const nextConfig: NextConfig = {
   transpilePackages: [
     '@iedora/design-system',
     '@iedora/observability',
-    '@iedora/product-core',
     '@iedora/product-menu',
   ],
-  // Força drizzle-orm + postgres-js a ficarem em node_modules do
-  // standalone bundle (em vez de inlined nos webpack chunks). É
-  // necessário para os `<workspace>/migrate.mjs` (pre-deploy hook)
-  // os conseguirem resolver via Node's resolution standard.
-  serverExternalPackages: ['drizzle-orm', 'postgres'],
-  // serverExternalPackages só controla bundler. Para garantir que
-  // os pacotes são copiados para .next/standalone/node_modules
-  // (nft trace pode falhar com conditional/dynamic exports do drizzle),
-  // forçamos inclusão explícita aqui. Substitui o hack anterior de
-  // `npm install` no Dockerfile runtime stage.
-  outputFileTracingIncludes: {
-    '/*': [
-      '../../node_modules/drizzle-orm/**/*',
-      '../../node_modules/postgres/**/*',
-    ],
-  },
-  // No `outputFileTracingIncludes` for migrate scripts — they're
-  // bundled in apps/web/Dockerfile's `migrate-bundler` stage (single
-  // ESM file each, all deps inlined). The Next standalone output is
-  // for the request-serving path only.
   // Version skew protection — forces hard navigation when the client
   // holds assets from a previous deployment. Passed as
   // DEPLOYMENT_VERSION build-arg from CI (typically commit SHA).
   deploymentId: process.env.DEPLOYMENT_VERSION,
   allowedDevOrigins: ['menu.733113.xyz'],
+  // The public-menu view beacon. The page renders <img src="/track/:slug">;
+  // the Go menu service answers with a 1×1 gif and counts the view.
+  async rewrites() {
+    return [
+      {
+        source: '/track/:slug',
+        destination: `${process.env.MENU_URL ?? 'http://localhost:8084'}/public/track/:slug`,
+      },
+    ]
+  },
 }
 
 // next-intl's request config lives with the messages catalogues in

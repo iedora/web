@@ -2,7 +2,7 @@
 
 import { useTranslations } from 'next-intl'
 import { Button } from '@iedora/design-system'
-import { signOutUrl } from '@iedora/product-core/url'
+import { signOutUrl } from '../../../shared/auth-urls'
 
 export function LogoutButton() {
   const t = useTranslations('AppHeader')
@@ -11,8 +11,8 @@ export function LogoutButton() {
       variant="ghost"
       data-test-id="dashboard-logout"
       onClick={() => {
-        // Cross-origin redirect to the `core` product's sign-out flow.
-        // core clears the cookie on `.iedora.com` (so every iedora
+        // Redirect to the menu surface's sign-out flow, which
+        // clears the auth cookies (so every iedora
         // product loses the session) and bounces the browser back to
         // the brand landing. Plain href navigation (no fetch) — the
         // top-level Set-Cookie response gets to the browser unwrapped.

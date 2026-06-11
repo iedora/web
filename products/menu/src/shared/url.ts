@@ -25,7 +25,7 @@ import { env } from './env'
  * Build an absolute URL anchored at NEXT_PUBLIC_MENU_URL.
  *
  * Rejects absolute or protocol-relative inputs as a defence — callers
- * that want to redirect off-host (e.g. to `core.iedora.com`) pass
+ * that want to redirect off-host (e.g. to the apex) pass
  * the upstream URL directly to `NextResponse.redirect` or use the
  * `signInUrl()`/`signOutUrl()` helpers from `@iedora/brand`; this
  * helper is for OUR origin only.

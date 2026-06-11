@@ -1,7 +1,12 @@
-import type { AssetTarget, AssetTargetKind, UploadConstraints } from './types'
+import type { AssetTargetKind, UploadConstraints } from './types'
 
 const IMAGE_MIME = ['image/jpeg', 'image/png', 'image/webp'] as const
 
+/**
+ * Client-side constraint hints per target. Mirrors the Go menu service's
+ * upload policy (services/internal/menu) — the server re-validates on
+ * presign, so drift here only costs an extra round-trip, never a hole.
+ */
 export const TARGET_CONSTRAINTS: Record<AssetTargetKind, UploadConstraints> = {
   'restaurant-logo': {
     maxBytes: 2 * 1024 * 1024,
@@ -18,39 +23,4 @@ export const TARGET_CONSTRAINTS: Record<AssetTargetKind, UploadConstraints> = {
     acceptedMimeTypes: IMAGE_MIME,
     recommended: { width: 800, height: 800, aspectLabel: 'square' },
   },
-  'menu-import-photo': {
-    maxBytes: 10 * 1024 * 1024,
-    acceptedMimeTypes: IMAGE_MIME,
-    recommended: { width: 2000, height: 1500, aspectLabel: 'landscape' },
-  },
-}
-
-const MIME_EXT: Record<string, string> = {
-  'image/jpeg': 'jpg',
-  'image/png': 'png',
-  'image/webp': 'webp',
-}
-
-export function extensionForMime(mime: string): string {
-  return MIME_EXT[mime] ?? 'bin'
-}
-
-// Random suffix avoids browser/CDN caching the previous logo at the same URL.
-function randomSlug(): string {
-  return crypto.randomUUID().replace(/-/g, '').slice(0, 12)
-}
-
-export function buildKey(target: AssetTarget, mime: string): string {
-  const ext = extensionForMime(mime)
-  const slug = randomSlug()
-  switch (target.kind) {
-    case 'restaurant-logo':
-      return `r/${target.restaurantId}/logo-${slug}.${ext}`
-    case 'restaurant-banner':
-      return `r/${target.restaurantId}/banner-${slug}.${ext}`
-    case 'item-photo':
-      return `r/${target.restaurantId}/items/${target.itemId}/${slug}.${ext}`
-    case 'menu-import-photo':
-      return `r/${target.restaurantId}/imports/${slug}.${ext}`
-  }
 }

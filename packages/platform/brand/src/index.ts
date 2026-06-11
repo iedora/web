@@ -8,10 +8,11 @@
  * on a sibling product just to learn where it lives.
  *
  * Per-product PATH BUILDERS still live inside each product
- * (`@iedora/product-core/url` exports `signInUrl`, etc.). The split:
+ * (`@iedora/product-menu/shared/auth-urls` exports `signInUrl`, etc.).
+ * The split:
  *
  *   - brand           → "where is product X?"  (productUrl(id))
- *   - product-X/url   → "how do I build /foo on X?" (xFooUrl(...))
+ *   - product-X/…     → "how do I build /foo on X?" (xFooUrl(...))
  *
  * Pure: no env reads at module init, no I/O, safe to import from
  * server AND client components.
@@ -35,24 +36,13 @@ export function brandUrl(): string {
 }
 
 export { PRODUCTS, productUrl, type ProductId } from './products'
-export {
-  PRODUCT_ONBOARDING_STATUSES,
-  PRODUCT_ONBOARDING_STATUS_LIST,
-  PRODUCT_ONBOARDING_STEPS,
-  PRODUCT_ONBOARDING_STEP_LIST,
-  isProductOnboardingStatus,
-  type ProductOnboardingStatus,
-  type AnyOnboardingStepKey,
-  type OnboardingStepKeyFor,
-  type OnboardingStepValueFor,
-} from './product-onboarding'
 
 // ─── URL validators (no env, no I/O) ────────────────────────────────────
 
 /**
  * Returns true iff `raw` parses as an absolute URL on the iedora apex
  * or any of its subdomains (`iedora.com`, `menu.iedora.com`,
- * `core.iedora.com`, ...). `localhost` (any port) is also accepted so
+ * `admin.iedora.com`, ...). `localhost` (any port) is also accepted so
  * the same validator works in dev.
  */
 export function isSameIedoraOrigin(raw: string | undefined | null): boolean {
