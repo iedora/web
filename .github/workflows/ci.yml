@@ -1,4 +1,4 @@
-# Pipeline — 5 jobs with path-based change detection.
+# Pipeline — 6 jobs with path-based change detection.
 #
 #   changes      → detects what changed (code / docker)
 #   correctness  → typecheck + lint + test (only if code changed)
@@ -11,6 +11,8 @@
 #   ci-ok        → fan-in gate; the ONLY job to mark as a required status check
 #                  (it always runs, tolerates legitimately skipped legs, fails
 #                  on any failure/cancellation).
+#   notify-infra → on a main publish, dispatch image-published to iedora/infra
+#                  so it bumps the pinned digest and redeploys (event-driven CD).
 #
 # The weekly cron runs only `security` (changes/correctness/image skip via `if:`)
 # — catches new CVEs without needing a push. workflow_dispatch force-publishes
@@ -175,6 +177,8 @@ jobs:
       attestations: write   # write the provenance attestation
     env:
       IMAGE: ghcr.io/iedora/frontend
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}   # consumed by notify-infra
     steps:
       - uses: actions/checkout@9f698171ed81b15d1823a05fc7211befd50c8ae0 # v6.0.3
 
@@ -250,3 +254,37 @@ jobs:
           RESULTS: ${{ toJSON(needs) }}
         run: |
           echo "$RESULTS" | jq -e 'all(.[]; .result == "success" or .result == "skipped")'
+
+  # Tell iedora/infra a new frontend image exists, so infra bumps the pinned
+  # digest and redeploys — event-driven, within seconds of the build rather than
+  # at the next Renovate poll. Not part of ci-ok (it's a post-publish side effect,
+  # never a PR gate). Skips cleanly (warning, not failure) if the PAT is unset.
+  notify-infra:
+    needs: image
+    if: ${{ github.event_name == 'push' && needs.image.result == 'success' && needs.image.outputs.digest != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Gate on the dispatch token
+        id: gate
+        env:
+          TOKEN: ${{ secrets.IEDORA_GITOPS_PAT }}
+        run: |
+          if [ -n "$TOKEN" ]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::IEDORA_GITOPS_PAT not set — skipping infra dispatch (image still published)"
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Dispatch image-published to iedora/infra
+        if: steps.gate.outputs.ok == 'true'
+        uses: peter-evans/repository-dispatch@ff45666b9427631e3450c54a1bcbee4d9ff4d7c0 # v3.0.0
+        with:
+          token: ${{ secrets.IEDORA_GITOPS_PAT }}
+          repository: iedora/infra
+          event-type: image-published
+          client-payload: |
+            {"repo": "${{ github.repository }}", "sha": "${{ github.sha }}", "bumps": [{"role": "frontend", "key": "frontend", "digest": "${{ needs.image.outputs.digest }}"}]}
