@@ -177,8 +177,6 @@ jobs:
       attestations: write   # write the provenance attestation
     env:
       IMAGE: ghcr.io/iedora/frontend
-    outputs:
-      digest: ${{ steps.build.outputs.digest }}   # consumed by notify-infra
     steps:
       - uses: actions/checkout@9f698171ed81b15d1823a05fc7211befd50c8ae0 # v6.0.3
 
@@ -261,11 +259,12 @@ jobs:
   # never a PR gate). Skips cleanly (warning, not failure) if the PAT is unset.
   notify-infra:
     needs: image
-    if: ${{ github.event_name != 'pull_request' && needs.image.result == 'success' && needs.image.outputs.digest != '' }}
+    if: ${{ github.event_name != 'pull_request' && needs.image.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       contents: read
+      packages: read   # imagetools inspect reads the just-pushed image
     steps:
       - name: Gate on the dispatch token
         id: gate
@@ -279,6 +278,25 @@ jobs:
             echo "ok=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Log in to GHCR
+        if: steps.gate.outputs.ok == 'true'
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve the published digest
+        if: steps.gate.outputs.ok == 'true'
+        id: resolve
+        run: |
+          # Resolve from the registry rather than a job output: the image job's
+          # digest output does not propagate reliably across jobs. This is the
+          # index digest cosign signed and what infra cosign-verifies on deploy.
+          digest=$(docker buildx imagetools inspect ghcr.io/iedora/frontend:latest --format '{{.Manifest.Digest}}')
+          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::bad digest '$digest'"; exit 1; }
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
       - name: Dispatch image-published to iedora/infra
         if: steps.gate.outputs.ok == 'true'
         uses: peter-evans/repository-dispatch@ff45666b9427631e3450c54a1bcbee4d9ff4d7c0 # v3.0.0
@@ -287,4 +305,4 @@ jobs:
           repository: iedora/infra
           event-type: image-published
           client-payload: |
-            {"repo": "${{ github.repository }}", "sha": "${{ github.sha }}", "bumps": [{"role": "frontend", "key": "frontend", "digest": "${{ needs.image.outputs.digest }}"}]}
+            {"repo": "${{ github.repository }}", "sha": "${{ github.sha }}", "bumps": [{"role": "frontend", "key": "frontend", "digest": "${{ steps.resolve.outputs.digest }}"}]}
