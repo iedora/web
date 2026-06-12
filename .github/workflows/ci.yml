@@ -1,4 +1,4 @@
-# Pipeline — 6 jobs with path-based change detection.
+# Pipeline — 5 jobs with path-based change detection.
 #
 #   changes      → detects what changed (code / docker)
 #   correctness  → typecheck + lint + test (only if code changed)
@@ -11,8 +11,6 @@
 #   ci-ok        → fan-in gate; the ONLY job to mark as a required status check
 #                  (it always runs, tolerates legitimately skipped legs, fails
 #                  on any failure/cancellation).
-#   notify-infra → on a main publish, dispatch image-published to iedora/infra
-#                  so it bumps the pinned digest and redeploys (event-driven CD).
 #
 # The weekly cron runs only `security` (changes/correctness/image skip via `if:`)
 # — catches new CVEs without needing a push. workflow_dispatch force-publishes
