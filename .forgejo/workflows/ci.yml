@@ -1,0 +1,107 @@
+# Forgejo Actions CI — the secret-free verification legs of .github/workflows/ci.yml,
+# run on the homelab's self-hosted Forgejo runner (git.733113.xyz) via pull-mirror sync.
+#
+# Phase 1 of migrating iedora CI off GitHub Actions: change detection + correctness
+# (typecheck/lint/test) + security (gitleaks/hadolint/osv-scanner) + the ci-ok fan-in
+# gate. The image build / cosign-sign / GHCR push / notify-infra legs stay on GitHub
+# for now — GitHub keeps running .github/ unchanged; Forgejo runs THIS (.forgejo takes
+# precedence over .github on Forgejo only). runs-on: ubuntu-latest maps to the runner's
+# catthehacker image; `uses:` pins resolve from github.com (DEFAULT_ACTIONS_URL=github).
+name: ci
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.f.outputs.code }}
+      docker: ${{ steps.f.outputs.docker }}
+    steps:
+      - uses: actions/checkout@9f698171ed81b15d1823a05fc7211befd50c8ae0 # v6.0.3
+        with:
+          fetch-depth: 2
+      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+        id: f
+        with:
+          filters: |
+            code:
+              - '**/*.ts'
+              - '**/*.tsx'
+              - '**/*.js'
+              - '**/*.mjs'
+              - '**/*.cjs'
+              - '**/package.json'
+              - 'bun.lock'
+              - '**/tsconfig*.json'
+              - '**/vitest.config.*'
+              - '**/eslint.config.*'
+            docker:
+              - '**/Dockerfile'
+
+  correctness:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9f698171ed81b15d1823a05fc7211befd50c8ae0 # v6.0.3
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: '1.3.14'
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun run lint
+      - run: bun run test
+
+  security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GITLEAKS_VERSION: 8.30.1
+      OSV_VERSION: 2.3.8
+    steps:
+      - uses: actions/checkout@9f698171ed81b15d1823a05fc7211befd50c8ae0 # v6.0.3
+        with:
+          fetch-depth: 0  # gitleaks scans the whole history
+
+      - name: gitleaks
+        run: |
+          curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            | tar -xz gitleaks
+          ./gitleaks detect \
+            --baseline-path .gitleaks-baseline.json \
+            --redact --verbose --no-banner --exit-code 1
+
+      - name: hadolint
+        uses: hadolint/hadolint-action@2332a7b74a6de0dda2e2221d575162eba76ba5e5 # v3.3.0
+        with:
+          dockerfile: apps/web/Dockerfile
+          failure-threshold: error
+
+      - name: osv-scanner
+        run: |
+          curl -fsSL -o osv-scanner \
+            "https://github.com/google/osv-scanner/releases/download/v${OSV_VERSION}/osv-scanner_linux_amd64"
+          chmod +x osv-scanner
+          ./osv-scanner --lockfile=bun.lock --format gh-annotations
+
+  # Fan-in gate: always runs, treats path-skipped legs as legitimate, fails on any
+  # real failure/cancellation. The single status check to require on the mirror.
+  ci-ok:
+    needs: [changes, correctness, security]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: All jobs green or legitimately skipped
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          echo "$RESULTS" | jq -e 'all(.[]; .result == "success" or .result == "skipped")'
