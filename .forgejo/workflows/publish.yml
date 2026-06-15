@@ -1,0 +1,73 @@
+# Forgejo Actions publish — build the web image, push it to the homelab Forgejo
+# OCI registry, and cosign-sign it (on-prem key-pair). Phase 2 of migrating iedora
+# CI/CD off GitHub Actions; the matching public key lives in the homelab forgejo-cicd
+# role (files/cosign.pub) and infra verifies with `cosign verify --key` (fail-closed).
+#
+# The GitHub .github pipeline still publishes to GHCR until that path is retired.
+# Signing uses a cosign KEY-PAIR (public Fulcio doesn't trust Forgejo's OIDC).
+name: publish
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: git.733113.xyz/iedora/frontend
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@9f698171ed81b15d1823a05fc7211befd50c8ae0 # v6.0.3
+      - uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+
+      - name: Log in to the Forgejo registry
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        with:
+          registry: git.733113.xyz
+          username: breakglass            # the package-scoped token's owner
+          password: ${{ secrets.REGISTRY_TOKEN }}
+
+      - name: Image metadata (tags + labels)
+        id: meta
+        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6.1.0
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=sha,format=long
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            DEPLOYMENT_VERSION=${{ github.sha }}
+          provenance: false   # no type=gha cache / keyless provenance on this runner
+
+      # cosign by curl (the runner image lacks envsubst for sigstore/cosign-installer).
+      - name: Install cosign
+        env:
+          # renovate: datasource=github-releases depName=sigstore/cosign
+          COSIGN_VERSION: v3.1.1
+        run: |
+          curl -fsSL -o /usr/local/bin/cosign \
+            "https://github.com/sigstore/cosign/releases/download/${COSIGN_VERSION}/cosign-linux-amd64"
+          chmod +x /usr/local/bin/cosign
+
+      - name: Sign image (cosign key-pair)
+        env:
+          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: cosign sign --yes --key env://COSIGN_PRIVATE_KEY "${IMAGE}@${DIGEST}"
